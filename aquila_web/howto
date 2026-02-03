@@ -1,0 +1,13 @@
+uvicorn main:app --reload --host 127.0.0.1
+
+
+#sudo apt-get install uvicorn
+sudo apt-get install python3-dev
+python3 -m pip install "uvicorn[standard]"
+python3 -m pip install fastapi 
+python3 -m pip install wsproto
+
+sudo cp neb_web.service /etc/systemd/system
+
+sudo systemctl enable neb_web.service
+sudo systemctl start neb_web.service

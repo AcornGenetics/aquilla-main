@@ -1,0 +1,79 @@
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: #888888;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.screen {
+  height: 1024px;
+  width: 768px;
+  background-color: #556B2F;
+  color: white;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  border-radius: 10px;
+}
+
+.content {
+  text-align: left;
+  padding-left: 65px;
+}
+
+h1 {
+  font-size: 50px;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 3px;
+}
+
+p {
+  font-size: 40px;
+  font-weight: 300;
+  margin: 0;
+  color: #CCCCCC;
+}
+
+button{
+    background: #3498db;
+    color: white;
+    padding: 30px 40px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+}
+
+.transparent-btn{
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+	
+    background: transparent;
+    color: transparent; /* make transparent when ready */
+    padding: 30px 40px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+}
+
+select{
+    padding: 8px 12px;
+    font-size: 16px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+#results-table{
+    border-collapse: collapse;
+    margin-top: 12px;
+}
+
+#results-table th,
+#results-table td {
+    border: 1px solid #ccc;
+    padding: 4px 8px;
+    text-align: center;
+}
+

@@ -1,0 +1,74 @@
+
+{
+    "-4":{
+        "title"  :"EXIT",
+        "text"   :"Exit button pressed 3x in a row, closing gui",
+        "screen" :"init" 
+    },
+    "-3":{
+        "title"  :"KEYBOARD INTERRUPT",
+        "text"   :"Restart run when ready",
+        "screen" :"init" 
+    },
+    "-2":{
+        "title"  :"STATE ERRROR",
+        "text"   :"Invalid state requested, change state",
+        "screen" :"init" 
+    },
+    "-1":{
+        "title"  :"INSTRUMENT ERROR",
+        "text"   :"Power cycle the instrument, if error persists contact Arete Biosciences ",
+        "screen" :"init" 
+    }, 
+    "0":{
+        "title"  :"INITIALIZING",
+        "text"   :"Please wait for instrument to complete initialization",
+        "screen" :"init" 
+    }, 
+    "1":{
+        "title"  :"READY TO RUN",
+        "text"   :"Select profile then select \"Run\" to start",
+        "screen" :"ready" 
+    },     
+    "2":{
+        "title"  :"TEST IN PROGRESS",
+        "text"   :"Please wait for instrument to complete",
+        "screen" :"running" 
+    }, 
+    "3":{
+        "title"  :"TEST COMPLETE",
+        "text"   :"Remove samples. Select \"Next Run\" to run again.",
+        "screen" :"complete" 
+    }, 
+    "4":{
+        "title"  :"READY TO RUN",
+        "text"   :"No profile selected. Try again then press \"Run\" to start",
+        "screen" :"ready" 
+    },     
+    "5":{
+        "title"  :"Run_assay.py not configured to loop back yet",
+        "text"   :"to rerun use cmdline to run run_assay.py",
+        "screen" :"init" 
+    },     
+    "6":{
+        "title"  :"READY TO RUN",
+        "text"   :"Drawer Open selected.",
+        "screen" :"ready" 
+    },     
+    "7":{
+        "title"  :"READY TO RUN",
+        "text"   :"Drawer Close selected.",
+        "screen" :"ready" 
+    }, 
+    "8":{
+        "title"  :"TEST COMPLETE",
+        "text"   :"Drawer Open Selected",
+        "screen" :"complete" 
+    }, 
+    "9":{
+        "title"  :"TEST COMPLETE",
+        "text"   :"Drawer close Selected",
+        "screen" :"complete" 
+    } 
+
+}

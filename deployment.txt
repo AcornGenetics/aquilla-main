@@ -1,0 +1,85 @@
+A.2. Create ssh
+        mkdir .ssh
+        copy ssh from other pi ( id_rsa, id_rsa.pub and authorized_keys )
+    In this example we copy from 192.168.244.94
+                >get id_rsa.pub from 250 then go
+                > pi@rasp5:~/.ssh $ scp 192.168.244.94:.ssh/id* .
+                > The authenticity of host '192.168.244.94 (192.168.244.94)' can't be established.
+                > ED25519 key fingerprint is SHA.56:7Zr+Yyy3YE+BolnVi0t37Zc3kvmfO14/VPVGw3BmHxw.
+                > This key is not known by any other names.
+                > Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+                > Warning: Permanently added '192.168.244.94' (ED25519) to the list of known hosts.
+                > pi@192.168.244.94's password:
+                > id_rsa                                        100% 2602    72.2KB/s   00:00
+                > id_rsa.pub                                    100%  568    19.7KB/s   00:00
+                > pi@rasp5:~/.ssh $ scp 192.168.244.94:.ssh/auth* .
+                > authorized_keys                               100%  568    35.1KB/s   00:00
+                > pi@rasp5:~/.ssh $ scp 192.168.244.94:.ssh/config .
+
+A.2b. Upgrade
+
+    a. sudo apt-get update
+    b. sudo apt-get upgrade
+
+A.2b. Install git
+
+    a. sudo apt install git
+
+A.3. Clone repo
+    a. Go to home directory /home/pi
+    b. git clone git@github.com-aquila:ENGLab1/aquila.git
+    c. if git refuses the key try generating the public key and verifying they match
+    c.1. ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub
+    c.2. ssh-keygen -E sha256 -lf ~/.ssh/id_ed25519.pub
+    c.3. compare the public key to that on github
+    c.4. if they match try the following
+    c.5  ssh -T git@github.com
+    c.6. Hi <username>! Youve successfully authenticated .... should appear if works
+    c.7. If does not work cry.
+
+
+A.4. Install developer tools
+        a. sudo apt-get install screen vim pylint python3-dev
+
+A.5 Setup env
+
+    go into Nebula_WP2 directory, e.g. cd Nebula_WP2
+        python -m venv venv
+    sudo ln -s venv/bin .
+        source bin/activate
+
+A.6 Install pip requirements
+
+    python3 -m pip install update  [optional]
+        vi requirments.txt
+    python3 -m pip install -r requirements.txt
+
+A.7 Install x-server and browser
+   sudo apt install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit openbox xterm unclutter
+   sudo apt install -y python3 python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
+   cp ~/aquila/server_web/kiosk.py ~/
+   --NOTE: THE AUTOSTART FILE FOR ACORN GUI PROVIDED BY AQUILA IS IN autostart_4b --
+   --MAY NEED TO ADJUST TO WORK WITH GUI MADE BY ARETE--
+   sudo cp ~/aquila/server_web/autostart /etc/xdg/openbox/
+   sudo cp ~/aquila/server_web/environment /etc/xdg/openbox/
+   cp ~/aquila/server_web/.bash_profile ~/
+   --NOTE:app IS ONLY USED FOR GUI PROVIDED BY AQUILA--
+   cp -r ~/aquila/server_web/app ~/
+
+   to check errors tail -n 100 ~/.xsession-errors 
+  
+   --NOTE: THE FOLLOWING IS FOR GUI PROVIDED BY AQUILA -- 
+   sudo apt install -y nodejs npm
+   sudo npm install -g serve
+   
+   sudo cp ~/aquila/server_web/serve.service /etc/systemd/system/
+   sudo systemctl enable serve.service
+   sudo systemctl start serve.service
+
+   sudo reboot now
+
+A.8 Quiet login
+   /boot/cmdline.txt change console=tty1 to tty3
+
+
+TODO add auto login and quiet boot

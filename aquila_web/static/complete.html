@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=800, height=400" />
+  <title>Ready Screen</title>
+  <link rel="stylesheet" href="static/styles.css" />
+</head>
+<body>
+  <div class="screen">
+    <div class="content" id="panel" >
+      <h1>MyTitle</h1>
+      <p>MyText</p>
+      <h2>Results</h2>
+      <table id="results-table"></table>
+      <button onclick= "notifyRun()">Next Run</button>
+      <button onclick= "notifyDrawerOpen()">Open Drawer</button>
+      <button onclick= "notifyDrawerClose()">Close Drawer</button>
+      <button class="transparent-btn" onclick="notifyExit()">Exit GUI</button>
+    </div>
+  </div>
+  <script src="static/script.js"></script>
+</body>
+</html>

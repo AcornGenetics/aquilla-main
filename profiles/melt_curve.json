@@ -1,0 +1,45 @@
+{
+"output_dir": "pcr_data",
+"steps": [
+    {
+        "disable": 0,
+        "duration": 1,
+        "description": "Record equilabrion without power."
+    },
+    {
+        "ramp_rate": 1.5
+    },
+    {  
+        "pcr_fanon" : 1
+    },
+    {
+        "enable": 0, 
+        "duration": 1,
+        "description": "Turn on and record temperature for a little bit"
+    },
+    {
+        "setpoint": 25,
+        "duration": 1,
+        "description": "Presetting temperature"
+    },
+    { "ramp_rate": 1.5 },
+    { "setpoint": 95, "duration": 60, "description": "Denaturation" },
+
+    { "ramp_rate": 0.5 },
+    { "setpoint": 60, "duration": 30, "description": "Anneal" },
+    { "setpoint": 90, "duration": 30, "description": "Melt ramp" },
+    { "setpoint": 60, "duration":  5, "description": "Anneal ramp" },
+
+    { "ramp_rate": 0.5 },
+    { "setpoint": 25, "duration":  5, "description": "Anneal ramp" },
+
+    {
+        "disable": 0,
+        "duration": 5,
+        "description": "Turn off and record temperature for a little bit"
+    },
+    { 
+        "pcr_fanoff" : 0
+    }
+]
+}

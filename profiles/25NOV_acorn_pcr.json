@@ -1,0 +1,86 @@
+{
+"output_dir": "pcr_data",
+"post_in_gui": "True",
+"title": "Acorn Profile",
+"steps": [
+    {
+        "disable": 0,
+        "duration": 1,
+        "description": "Record equilabrion without power."
+    },
+    {
+        "ramp_rate": 1.6
+    },
+    {  
+        "pcr_fanon" : 1
+    },
+    {
+        "enable": 0, 
+        "duration": 1,
+        "description": "Turn on and record temperature for a little bit"
+    },
+    {
+	"optics":""
+    },
+    {
+        "setpoint": 25,
+        "duration": 1,
+        "description": "Presetting temperature"
+    },
+    {
+        "setpoint": 37,
+        "duration": 240,
+        "description": "37C for 4 minutes"
+    },
+    {
+        "setpoint": 92.5,
+        "duration": 300,
+        "description": "Activation temperature for 5 minutes"
+    },
+    {
+        "repeat": [
+            {
+                "setpoint": 92,
+                "duration": 10,
+                "description": "Melt"
+            },
+	    {
+                "setpoint": 59.5,
+                "duration": 20,
+                "description": "Annealing"
+            },
+	    {
+		"optics":""
+	    },
+	    {
+                "setpoint": 59.5,
+                "duration": 10,
+                "description": "Annealing"
+            }
+        ],
+        "cycles": 32
+    },
+    {
+        "ramp_rate": 1
+    },
+    {
+        "setpoint": 40,
+        "duration": 20,
+        "description": "Initial cooling"
+    },
+    {
+        "setpoint": 25,
+        "duration": 10,
+        "description": "Restoring setpoint to RT"
+    },
+    {
+        "disable": 0,
+        "duration": 5,
+        "description": "Turn off and record temperature for a little bit"
+    },
+
+    { 
+        "pcr_fanoff" : 0
+    }
+]
+}
