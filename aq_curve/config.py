@@ -2,8 +2,7 @@ import json
 import os
 from pathlib import Path
 
-# DEFAULT_SRC_BASEDIR = "/home/pi/aquila/"
-DEFAULT_SRC_BASEDIR = "Users/nicolecornell/Acorn/Arete_device/aquila-main"
+DEFAULT_SRC_BASEDIR = "/home/pi/aquila/"
 CONFIG_PATH = Path(__file__).with_name("config.json")
 
 
