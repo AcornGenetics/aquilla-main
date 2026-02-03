@@ -1,13 +1,11 @@
 import os
 import numpy as np
-from pcr_curve_tests import config
+from aq_curve import pcr_curve_config as config
 
 
 DEFAULT_LOG = os.path.abspath(
     os.path.join(
         os.path.dirname(__file__),
-        "..",
-        "aq_curve",
         "tests",
         "fixtures",
         "sample_test.dat",

@@ -1,4 +1,4 @@
-from pcr_curve_tests.evaluator import check_baseline_length
+from aq_curve.evaluator import check_baseline_length
 
 
 def test_baseline_length(curve_data, curve):

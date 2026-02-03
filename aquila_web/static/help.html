@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=800, height=400" />
+  <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Help</title>
-  <link rel="stylesheet" href="/static/styles.css?v=37" />
+  <link rel="stylesheet" href="/static/styles.css?v=97" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -25,9 +25,12 @@
         </nav>
       </header>
       <div class="run-divider"></div>
-      <section class="help-layout">
-        <aside class="help-sidebar">
-          <h2>Help Topics</h2>
+      <section class="help-layout" id="help-layout">
+        <aside class="help-sidebar" id="help-sidebar">
+          <div class="help-sidebar__header">
+            <h2>Help Topics</h2>
+            <button class="help-topics-toggle" type="button" data-state="shown">Hide</button>
+          </div>
           <nav>
             <a href="#help-run">Run</a>
             <a href="#help-history">History</a>
@@ -36,6 +39,7 @@
           </nav>
         </aside>
         <div class="help-content">
+          <button class="help-topics-toggle help-topics-toggle--inline" type="button" data-state="hidden">Show Topics</button>
           <section id="help-run">
             <h2>Run</h2>
             <p>The <strong>Run</strong> screen is where you start a test after loading your samples.</p>
@@ -103,5 +107,25 @@
       </section>
     </main>
   </div>
+  <script>
+    const sidebar = document.getElementById("help-sidebar");
+    const layout = document.getElementById("help-layout");
+    const toggles = document.querySelectorAll(".help-topics-toggle");
+    const setState = (hidden) => {
+      sidebar.classList.toggle("is-hidden", hidden);
+      layout.classList.toggle("help-layout--collapsed", hidden);
+      toggles.forEach((toggle) => {
+        toggle.dataset.state = hidden ? "hidden" : "shown";
+        toggle.textContent = hidden ? "Show Topics" : "Hide";
+        toggle.classList.toggle("help-topics-toggle--inline", hidden);
+      });
+    };
+    toggles.forEach((toggle) => {
+      toggle.addEventListener("click", () => {
+        setState(!sidebar.classList.contains("is-hidden"));
+      });
+    });
+    setState(false);
+  </script>
 </body>
 </html>

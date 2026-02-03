@@ -3,7 +3,8 @@ import numpy
 import os
 import json
 import logging
-from pcr_curve_tests.evaluator import evaluate_curve
+from pathlib import Path
+from aq_curve.evaluator import evaluate_curve
 from aq_curve.config import get_src_basedir
 
 logger = logging.getLogger("aquila")
@@ -207,6 +208,10 @@ class Curve:
             }
         }
 
-        fp = os.path.join(self.src_basedir, results_logfile)
-        with open(fp, "w") as f:
+        base_dir = Path(self.src_basedir).resolve()
+        target_path = (base_dir / results_logfile).resolve()
+        if base_dir != target_path and base_dir not in target_path.parents:
+            raise ValueError("results_logfile must stay within src_basedir")
+
+        with open(target_path, "w") as f:
             json.dump(result, f)

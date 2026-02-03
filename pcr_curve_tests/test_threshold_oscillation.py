@@ -1,4 +1,4 @@
-from pcr_curve_tests.evaluator import check_threshold_oscillation
+from aq_curve.evaluator import check_threshold_oscillation
 
 
 def test_threshold_oscillation(curve_data, curve):

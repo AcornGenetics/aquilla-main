@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 import re
+from aq_curve.curve import Curve
 
 logger = logging.getLogger( __name__ )
 logger.setLevel("WARNING")
@@ -281,7 +282,8 @@ async def _simulate_run(profile_name: str) -> None:
         state_change_event.set()
         state_change_event.clear()
         return
-    results_to_json(str(optics_path), str(results_file))
+    curve_runner = Curve(src_basedir=str(RESULTS_DIR))
+    curve_runner.results_to_json(str(optics_path), results_file.name)
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
     generate_optics_plot(str(optics_path), str(plot_path))
     detected_summary = _summarize_results_from_file(results_file)

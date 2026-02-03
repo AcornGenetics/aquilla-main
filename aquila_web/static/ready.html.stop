@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=800, height=400" />
+  <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Ready Screen</title>
   <link rel="stylesheet" href="static/styles.css?v=3" />
 </head>

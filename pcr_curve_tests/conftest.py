@@ -2,8 +2,8 @@ import os
 import re
 import pytest
 from aq_curve.curve import Curve
-from pcr_curve_tests import config
-from pcr_curve_tests.helpers import get_curve_data, resolve_log_path
+from aq_curve import pcr_curve_config as config
+from aq_curve.pcr_curve_helpers import get_curve_data, resolve_log_path
 
 
 CURVE_RESULTS = {}
