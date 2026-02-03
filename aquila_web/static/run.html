@@ -3,17 +3,100 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=800, height=400" />
-  <title>Ready Screen</title>
-  <link rel="stylesheet" href="static/styles.css" />
+  <title>Run</title>
+  <link rel="stylesheet" href="static/styles.css?v=40" />
 </head>
-<body>
-  <div class="screen">
-    <div class="content" id="panel" >
-      <h1>MyTitle</h1>
-      <p>MyText</p>
-      <p>Elapsed Time - <span id="timer" style="margin-left: 0px;"> 00:00</span> <span>min</span></p>
-    </div>
+<body class="app-body">
+  <div class="app-shell">
+    <main class="main run-main">
+      <header class="run-header">
+        <h1 class="run-header__title">Run</h1>
+        <div class="run-optics-tab" id="run-optics-tab">
+          <span>Optics:</span>
+          <input id="dev-optics-path" type="text" placeholder="/path/to/optics.log" />
+        </div>
+        <nav class="run-header__nav">
+          <a class="run-nav-link" href="/run">Run</a>
+          <a class="run-nav-link" href="/history">History</a>
+          <a class="run-nav-link" href="/profiles-page?v=2">Profiles</a>
+          <a class="help-link" href="/help">
+            <span>?</span>
+            <span class="help-tooltip">How to run a test</span>
+          </a>
+        </nav>
+      </header>
+      <div class="run-divider"></div>
+      <section class="run-section run-controls" id="ready-section">
+        <div class="run-meta">
+          <div class="run-meta-item">
+            <span class="run-meta-label">Profile</span>
+            <select id="mySelect" class="run-profile-select"></select>
+          </div>
+          <div class="run-meta-divider"></div>
+          <div class="run-meta-item">
+            <span class="run-meta-label">Run Name</span>
+            <input id="run-name-input" class="run-name-input" type="text" />
+          </div>
+        </div>
+        <div class="run-secondary-actions">
+          <button class="run-secondary-btn" onclick="notifyDrawerOpen()" type="button">Open Drawer</button>
+          <button class="run-secondary-btn" onclick="notifyDrawerClose()" type="button">Close Drawer</button>
+        </div>
+      </section>
+      <div class="run-cta-wrapper">
+        <button class="run-cta" id="run-cta" onclick="notifyRun()" type="button" aria-label="Run">
+          <img class="run-cta-icon" src="/static/acornlogo.svg?v=5" alt="Acorn" />
+          <span class="run-cta-label">Run</span>
+        </button>
+      </div>
+      <p class="run-warning is-hidden" id="run-warning"></p>
+      <p class="run-warning is-hidden" id="drawer-warning"></p>
+      <div class="run-status-footer">
+        <span class="run-meta-label">Status</span>
+        <div class="run-status">
+          <span class="run-status-dot" id="ready-status-dot"></span>
+          <span id="ready-status">Ready</span>
+        </div>
+      </div>
+      <section class="run-section run-status-section is-hidden" id="running-section">
+        <div class="run-timer">
+          <span class="run-timer__label">Elapsed Time</span>
+          <span class="run-timer__value" id="timer">00:00</span>
+        </div>
+      </section>
+      <section class="run-section run-results" id="complete-section">
+        <h2>Results</h2>
+        <div class="results-panel">
+          <div class="results-card results-summary" id="results-summary">Run for results!</div>
+          <div class="results-card results-tubes" id="results-tubes">
+            <div class="results-tube" data-tube="1">
+              <div class="results-dot"></div>
+              <span>Tube 1</span>
+            </div>
+            <div class="results-tube" data-tube="2">
+              <div class="results-dot"></div>
+              <span>Tube 2</span>
+            </div>
+            <div class="results-tube" data-tube="3">
+              <div class="results-dot"></div>
+              <span>Tube 3</span>
+            </div>
+            <div class="results-tube" data-tube="4">
+              <div class="results-dot"></div>
+              <span>Tube 4</span>
+            </div>
+          </div>
+        </div>
+        <button class="transparent-btn" onclick="notifyExit()">Exit GUI</button>
+      </section>
+      <div class="run-modal is-hidden" id="run-complete-modal">
+        <div class="run-modal__card">
+          <button class="run-modal__close" type="button" aria-label="Close">×</button>
+          <p>Done!</p>
+        </div>
+      </div>
+    </main>
   </div>
-  <script src="static/script.js"></script>
+  <script src="static/script.js?v=34"></script>
 </body>
 </html>

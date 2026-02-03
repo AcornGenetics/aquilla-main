@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Run Profiles</title>
+  <link rel="stylesheet" href="/static/styles.css?v=37" />
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <main class="main run-main">
+      <header class="run-header">
+        <h1 class="run-header__title">Saved Profiles</h1>
+        <nav class="run-header__nav">
+          <a class="run-nav-link" href="/run">Run</a>
+          <a class="run-nav-link" href="/history">History</a>
+          <a class="run-nav-link" href="/profiles-page">Profiles</a>
+          <a class="help-link" href="/help">
+            <span>?</span>
+            <span class="help-tooltip">How to run a test</span>
+          </a>
+        </nav>
+      </header>
+      <div class="run-divider"></div>
+      <div class="profiles-shell">
+        <div class="profiles-toolbar profiles-toolbar--minimal">
+          <div class="profiles-actions">
+            <a class="run-secondary-btn" href="/profiles/edit-form">New profile</a>
+            <button class="run-secondary-btn" id="profiles-delete-button" type="button">Delete</button>
+          </div>
+        </div>
+        <div class="profiles-table-wrapper">
+          <table class="profiles-table">
+            <thead>
+              <tr>
+                <th class="checkbox-cell">
+                  <input id="profiles-select-all" type="checkbox" />
+                </th>
+                <th>Name</th>
+                <th>Created</th>
+                <th>Cycles</th>
+                <th>Duration</th>
+              <th>Volume (uL)</th>
+              <th>Run</th>
+              <th>Edit</th>
+            </tr>
+          </thead>
+          <tbody id="profiles-table-body">
+            <tr>
+              <td class="profiles-loading" colspan="8">Loading profiles...</td>
+            </tr>
+          </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/static/profiles/profiles.js?v=3"></script>
+</body>
+</html>

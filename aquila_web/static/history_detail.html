@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=800, height=400" />
+  <title>Run Detail</title>
+  <link rel="stylesheet" href="/static/styles.css?v=37" />
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <main class="main run-main">
+      <header class="run-header">
+        <h1 class="run-header__title">
+          <a class="back-icon back-icon--inline" href="/history" aria-label="Back">&#x2039;</a>
+          Run Detail
+        </h1>
+        <nav class="run-header__nav">
+          <a class="run-nav-link" href="/run">Run</a>
+          <a class="run-nav-link" href="/history">History</a>
+          <a class="run-nav-link" href="/profiles-page">Profiles</a>
+          <a class="help-link" href="/help">
+            <span>?</span>
+            <span class="help-tooltip">How to run a test</span>
+          </a>
+        </nav>
+      </header>
+      <div class="run-divider"></div>
+      <section class="run-detail" id="run-detail"></section>
+    </main>
+  </div>
+  <script src="/static/history_detail.js?v=2"></script>
+</body>
+</html>

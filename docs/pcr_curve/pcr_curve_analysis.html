@@ -1,0 +1,114 @@
+<h1 id="pcr-curve-analysis-mathematical-approach">PCR Curve Analysis:
+Mathematical Approach</h1>
+<p>This document summarizes the math used by the PCR curve evaluator to
+classify FAM/ROX curves as detected, inconclusive, or undetected.</p>
+<h2 id="data-preparation">Data preparation</h2>
+<ul>
+<li><strong>Input</strong>: Optics log rows are filtered by dye and well
+position.</li>
+<li><strong>Signal extraction</strong>: For each cycle, the fluorescence
+signal is averaged after outlier rejection using a
+median-absolute-deviation filter (<code>m=2</code>).</li>
+<li><strong>Baseline correction</strong>:
+<ol type="1">
+<li>Fit a line over the baseline window (<code>baseline_slice</code>,
+default cycles 5–15) using least-squares.</li>
+<li>Compute residuals across the full curve and keep baseline points
+within <code>2 * std(residuals)</code>.</li>
+<li>Refit the baseline line using the filtered baseline points.</li>
+<li>Subtract the fitted baseline line from the raw signal to obtain the
+corrected curve.</li>
+</ol></li>
+</ul>
+<h2 id="threshold-definition">Threshold definition</h2>
+<p>Threshold is computed on the <strong>baseline-corrected</strong>
+signal:</p>
+<pre><code>threshold = mean(baseline_window) + PCR_THRESHOLD_DELTA</code></pre>
+<ul>
+<li><code>PCR_THRESHOLD</code> can override the absolute threshold
+directly.</li>
+<li><code>PCR_THRESHOLD_DELTA</code> defaults to the config value in
+<code>pcr_curve_tests/config.py</code>.</li>
+</ul>
+<h2 id="key-helper-calculations">Key helper calculations</h2>
+<ul>
+<li><strong>Sustained rise index</strong>: first index where
+<code>min_consecutive</code> points are above the threshold.</li>
+<li><strong>Cq estimate</strong>: the cycle index at sustained
+rise.</li>
+<li><strong>Threshold crossings</strong>: number of transitions from
+below → above threshold.</li>
+<li><strong>Log-phase linearity</strong>: <code>R²</code> for a linear
+fit to <code>log(y)</code> across the log-phase segment.</li>
+</ul>
+<h3 id="log-phase-end-detection">Log-phase end detection</h3>
+<p>The log phase ends when the derivative falls below:</p>
+<pre><code>max_slope * PCR_LOG_PHASE_SLOPE_FLATTEN_FRACTION</code></pre>
+<p>with a minimum number of points
+(<code>PCR_LOG_PHASE_SLOPE_MIN_POINTS</code>).</p>
+<h2 id="curve-quality-checks">Curve quality checks</h2>
+<p>Each check is evaluated on the baseline-corrected curve unless
+noted.</p>
+<h3 id="threshold-checks">Threshold checks</h3>
+<ul>
+<li><strong>Threshold crossing</strong>: at least one crossing is
+required.</li>
+<li><strong>Threshold oscillation</strong>: no more than one
+crossing.</li>
+</ul>
+<h3 id="baseline-checks">Baseline checks</h3>
+<ul>
+<li><strong>Baseline length</strong>: sustained rise occurs after
+<code>PCR_MIN_BASELINE_CYCLES</code>.</li>
+<li><strong>Baseline stability</strong>: baseline standard deviation ≤
+<code>PCR_BASELINE_STD_MAX</code> and slope ≤
+<code>PCR_BASELINE_SLOPE_MAX</code>.</li>
+</ul>
+<h3 id="kinetics-checks">Kinetics checks</h3>
+<ul>
+<li><strong>Cycle location (Cq)</strong>:
+<code>PCR_CQ_MIN ≤ Cq ≤ PCR_CQ_MAX</code>.</li>
+<li><strong>Log-phase linearity</strong>:
+<code>R² ≥ PCR_LOG_PHASE_R2_MIN</code> on log-transformed data.</li>
+<li><strong>Stable slope</strong>: coefficient of variation of log-phase
+slopes ≤ <code>PCR_LOG_PHASE_SLOPE_CV_MAX</code>.</li>
+<li><strong>Monotonic rise</strong>: no post-threshold drop worse than
+<code>PCR_MAX_DROP</code>.</li>
+<li><strong>Sustained increase</strong>: enough positive deltas after
+rise (<code>PCR_MIN_RISE_CYCLES</code>).</li>
+<li><strong>Sigmoidal profile</strong>: amplitude fraction ≥
+<code>PCR_MIN_PEAK_FRACTION</code> and positive overall slope.</li>
+<li><strong>Single transition</strong>: number of strong derivative
+peaks ≤ <code>PCR_MAX_TRANSITIONS</code>.</li>
+<li><strong>Smooth features</strong>: max diff ≤
+<code>PCR_SPIKE_MULTIPLIER * median_diff</code> (or ≤
+<code>PCR_MAX_DIFF</code> if median is 0).</li>
+<li><strong>No late drift</strong>: slope of last
+<code>PCR_LATE_CYCLES</code> ≤ <code>PCR_LATE_DRIFT_MAX</code>.</li>
+<li><strong>Signal range (raw)</strong>: peak amplitude fraction ≥
+<code>PCR_SIGNAL_RANGE_PEAK_FRACTION</code> or fold-change ≥
+<code>PCR_MIN_FOLD</code>.</li>
+</ul>
+<h2 id="final-classification">Final classification</h2>
+<ul>
+<li><strong>Undetected</strong>: threshold crossing fails.</li>
+<li><strong>Inconclusive</strong>: threshold passes, but any other check
+fails.</li>
+<li><strong>Detected</strong>: threshold passes and all other checks
+pass.</li>
+</ul>
+<h2 id="implementation-references">Implementation references</h2>
+<ul>
+<li>Data preparation and baseline:
+<code>aquila-main/aq_curve/curve.py</code></li>
+<li>Thresholding and checks:
+<code>aquila-main/pcr_curve_tests/evaluator.py</code></li>
+<li>Helper math utilities:
+<code>aquila-main/pcr_curve_tests/helpers.py</code></li>
+<li>Config constants:
+<code>aquila-main/pcr_curve_tests/config.py</code></li>
+</ul>
+<h2 id="pdf-export">PDF export</h2>
+<p>Run <code>aquila-main/docs/pcr_curve/render_pcr_curve_pdf.sh</code>
+(requires <code>pandoc</code>). If no PDF engine is installed, it will
+write an HTML file you can Print to PDF.</p>

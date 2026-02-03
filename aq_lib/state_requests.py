@@ -42,6 +42,34 @@ def update_results_path( results_filename ):
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in path update. Intended path: %s", path )
 
+def log_history(profile, run_name, results_path, graph_path=None):
+    url = "http://127.0.0.1:8090/history/append"
+    payload = {
+        "profile": profile,
+        "run_name": run_name,
+        "results_path": results_path,
+        "graph_path": graph_path
+    }
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error logging history: %s", e)
+
+def update_drawer_state(is_open: bool, is_closed: bool) -> None:
+    url = "http://127.0.0.1:8090/drawer/state"
+    payload = {"open": bool(is_open), "closed": bool(is_closed)}
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error updating drawer state: %s", e)
+
+def advance_run_name():
+    url = "http://127.0.0.1:8090/run/name/advance"
+    try:
+        requests.post(url, timeout=5)
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error advancing run name: %s", e)
+
 def reset_exit():
     try:
         requests.post("http://127.0.0.1:8090/exit/reset", timeout=5)

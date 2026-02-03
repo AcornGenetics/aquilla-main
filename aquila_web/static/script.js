@@ -1,15 +1,37 @@
 const titleEl = document.querySelector("#panel h1");
 const textEl = document.querySelector("#panel p");
+const statusTitleEl = document.getElementById("status-title");
+const statusTextEl = document.getElementById("status-text");
 //const timerEl = document.querySelector("#timer");
 const timerEl = document.getElementById("timer");
+const runButton = document.getElementById("run-cta");
+const runCompleteModal = document.getElementById("run-complete-modal");
+const runModalClose = runCompleteModal
+  ? runCompleteModal.querySelector(".run-modal__close")
+  : null;
+const devOpticsPath = document.getElementById("dev-optics-path");
+const devOpticsWrapper = document.getElementById("run-optics-tab");
+const runNameInput = document.getElementById("run-name-input");
+const runWarning = document.getElementById("run-warning");
+const drawerWarning = document.getElementById("drawer-warning");
 
 let seconds = 0;
 let currentScreen = null;
+let runDoneAcknowledged = false;
+let lastDrawerState = { open: null, closed: null };
+let lastScreen = null;
 
 // Display a panel object { title: "...", text: "..." }
 function showPanel(panel) {
-  titleEl.textContent = panel.title;
-  textEl.textContent = panel.text;
+  if (isDashboard && statusTitleEl && statusTextEl) {
+    statusTitleEl.textContent = panel.title;
+    statusTextEl.textContent = panel.text;
+    return;
+  }
+  if (titleEl && textEl) {
+    titleEl.textContent = panel.title;
+    textEl.textContent = panel.text;
+  }
 }
 
 function formatElapsed(seconds) {
@@ -34,6 +56,149 @@ setInterval(() => {
 }, 1000);
 
 
+const readySection = document.getElementById("ready-section");
+const runningSection = document.getElementById("running-section");
+const completeSection = document.getElementById("complete-section");
+const normalizedPath = window.location.pathname.replace(/\/$/, "");
+const isDashboard = normalizedPath === "/run" || Boolean(readySection);
+
+function updateDashboardSections(screen) {
+  if (!isDashboard) {
+    return false;
+  }
+
+  if (!screen) {
+    return false;
+  }
+
+  if (screen === "init") {
+    screen = "ready";
+  }
+
+  const allowedScreens = new Set(["ready", "running", "complete"]);
+  if (!allowedScreens.has(screen)) {
+    return false;
+  }
+
+  currentScreen = screen;
+
+  const sections = [
+    { key: "ready", element: readySection },
+    { key: "running", element: runningSection }
+  ];
+
+  sections.forEach(({ key, element }) => {
+    if (!element) {
+      return;
+    }
+    if (key === screen) {
+      element.classList.remove("is-hidden");
+    } else {
+      element.classList.add("is-hidden");
+    }
+  });
+
+  return true;
+}
+
+function setRunButtonState(isRunning) {
+  if (!runButton) {
+    return;
+  }
+  runButton.disabled = isRunning;
+  if (isRunning) {
+    runButton.classList.add("run-cta--disabled");
+  } else {
+    runButton.classList.remove("run-cta--disabled");
+  }
+  if (runNameInput) {
+    runNameInput.disabled = isRunning;
+  }
+}
+
+function resetResultsUI(message = "Run for results!") {
+  const summaryEl = document.getElementById("results-summary");
+  const tubeEls = document.querySelectorAll(".results-tube");
+  if (summaryEl) {
+    summaryEl.textContent = message;
+    summaryEl.classList.toggle("is-error", message === "Results unavailable");
+  }
+  tubeEls.forEach((tubeEl) => {
+    const dot = tubeEl.querySelector(".results-dot");
+    if (dot) {
+      dot.classList.remove("is-detected");
+      dot.classList.remove("is-inconclusive");
+      dot.classList.remove("is-not-detected");
+    }
+  });
+}
+
+function setRunWarning(message) {
+  if (!runWarning) {
+    return;
+  }
+  if (message) {
+    runWarning.textContent = message;
+    runWarning.classList.remove("is-hidden");
+  } else {
+    runWarning.textContent = "";
+    runWarning.classList.add("is-hidden");
+  }
+}
+
+function setDrawerWarning(message) {
+  if (!drawerWarning) {
+    return;
+  }
+  if (message) {
+    drawerWarning.textContent = message;
+    drawerWarning.classList.remove("is-hidden");
+  } else {
+    drawerWarning.textContent = "";
+    drawerWarning.classList.add("is-hidden");
+  }
+}
+
+function setOpticsVisibility(isDev) {
+  if (!devOpticsWrapper) {
+    return;
+  }
+  devOpticsWrapper.classList.toggle("is-hidden", !isDev);
+}
+
+function updateDrawerWarningFromState(state) {
+  if (!state) {
+    return;
+  }
+  lastDrawerState = {
+    open: Boolean(state.open),
+    closed: Boolean(state.closed)
+  };
+  if (lastDrawerState.open && !lastDrawerState.closed) {
+    setDrawerWarning("Drawer is open");
+  } else {
+    setDrawerWarning("");
+  }
+}
+
+function showRunCompleteModal() {
+  if (!runCompleteModal) {
+    return;
+  }
+  if (runDoneAcknowledged) {
+    return;
+  }
+  runCompleteModal.classList.remove("is-hidden");
+}
+
+function hideRunCompleteModal() {
+  if (!runCompleteModal) {
+    return;
+  }
+  runDoneAcknowledged = true;
+  runCompleteModal.classList.add("is-hidden");
+}
+
 // Connect to WebSocket backend
 const host = window.location.host;
 const wsUrl = `ws://${host}/ws`;
@@ -49,7 +214,31 @@ socket.onmessage = function(event) {
     }
     if (panel.screen){
         const screen = panel.screen;
+        currentScreen = screen;
+        const previousScreen = lastScreen;
+        lastScreen = screen;
+        if (screen === "running") {
+          setRunButtonState(true);
+          resetResultsUI("Results pending");
+          setRunWarning("");
+          runDoneAcknowledged = false;
+        } else if (screen === "ready" || screen === "complete") {
+          setRunButtonState(false);
+          if (screen === "ready" && previousScreen === "running" && !runDoneAcknowledged) {
+            resetResultsUI("Results unavailable");
+          }
+        }
+        if (screen === "complete" && !runDoneAcknowledged) {
+          showRunCompleteModal();
+          loadRunName();
+          loadResults();
+        }
         let targetPath = window.location.pathname;
+
+        if (isDashboard) {
+            updateDashboardSections(screen);
+            return;
+        }
 
         if (screen === "init"){
             targetPath = "/";
@@ -72,6 +261,12 @@ socket.onmessage = function(event) {
             return;
         }
     }
+    if (panel.drawer_state_open !== undefined || panel.drawer_state_closed !== undefined) {
+      updateDrawerWarningFromState({
+        open: panel.drawer_state_open,
+        closed: panel.drawer_state_closed
+      });
+    }
   } catch (e) {
     console.error("Invalid panel data", e);
   }
@@ -90,21 +285,91 @@ socket.onclose = function() {
 };
 
 async function notifyRun(){
-    const select = document.getElementById("myselect");
+    if (runButton && runButton.disabled) {
+        return;
+    }
+    resetResultsUI();
+    const select = document.getElementById("mySelect");
     let profile = null;
 
     if (select && select.value){
         profile = select.value;
     }
 
+    if (!profile) {
+        setRunWarning("Select a profile before running.");
+        return;
+    }
+
+    if (runNameInput && !runNameInput.value.trim()) {
+        setRunWarning("Enter a run name before running.");
+        return;
+    }
+
+    if (lastDrawerState.open && !lastDrawerState.closed) {
+        setRunWarning("Close the drawer before running.");
+        return;
+    }
+
+    setRunWarning("");
+
     try {
         const ret = await fetch("/button/run", {
             method:"POST"
         });
+        if (ret.ok) {
+          const payload = await ret.json();
+          if (payload && payload.ok === false) {
+            setRunButtonState(false);
+            if (payload.message) {
+              setRunWarning(payload.message);
+            }
+          }
+        }
         console.log("Run button clicked", await ret.text());
     } catch (err) {
         console.error("Button failed", err);
     }
+}
+
+async function loadRunName() {
+  if (!runNameInput) {
+    return;
+  }
+  try {
+    const response = await fetch("/run/name");
+    if (!response.ok) {
+      return;
+    }
+    const data = await response.json();
+    if (data && data.name) {
+      runNameInput.value = data.name;
+    }
+  } catch (error) {
+    console.error("Failed to load run name", error);
+  }
+}
+
+async function saveRunName() {
+  if (!runNameInput) {
+    return;
+  }
+  const name = runNameInput.value.trim();
+  try {
+    const response = await fetch("/run/name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name })
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.name) {
+        runNameInput.value = data.name;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to save run name", error);
+  }
 }
 
 async function notifyDrawerOpen(){
@@ -140,19 +405,34 @@ async function notifyExit(){
     }
 }
 
-async function loadResultsTable(){
+async function loadResults(){
     const table = document.getElementById("results-table");
-    if(!table){
-        console.log("No table");
+    const summaryEl = document.getElementById("results-summary");
+    const tubeEls = document.querySelectorAll(".results-tube");
+    if(!table && !summaryEl && tubeEls.length === 0){
+        console.log("No results UI");
+        return;
+    }
+    if (normalizedPath === "/run" && currentScreen !== "complete") {
+        const pending = currentScreen === "running";
+        resetResultsUI(pending ? "Results pending" : "Run for results!");
         return;
     }
 
     let data = {};
+    let hasResultsPayload = false;
     try {
         const ret = await fetch("/results");
         if (ret.ok){
             data = await ret.json();
             console.log("results json raw", data)
+            if (data && typeof data === "object") {
+                if (data.path || data.results_path) {
+                    hasResultsPayload = Boolean(data.path || data.results_path);
+                } else if (!data.data) {
+                    hasResultsPayload = Object.keys(data).length > 0;
+                }
+            }
         } else {
             console.error("Failed to retrieve results" , ret.status);
         }
@@ -160,43 +440,125 @@ async function loadResultsTable(){
         console.error("Error fetching results" , err );
     }
 
-    table.innerHTML = "";
+    const hasErrorPayload = data && typeof data === "object" && data.data && data.data.failed;
+    const hasResults = hasResultsPayload && !hasErrorPayload;
 
-    const numRows = 3;
-    const numCols = 5;
-    const rowHeader = [ "","ROX", "FAM"];
-    const colHeader = [ "","Tube 1", "Tube 2", "Tube 3" , "Tube 4"];
+    if (table) {
+        table.innerHTML = "";
 
-    for(let r = 0; r < numRows; r++){
-        const tr = document.createElement("tr");
+        const numRows = 3;
+        const numCols = 5;
+        const rowHeader = [ "","ROX", "FAM"];
+        const colHeader = [ "","Tube 1", "Tube 2", "Tube 3" , "Tube 4"];
 
-        for(let c = 0; c < numCols; c++){
-            const isHeader = r === 0 || c === 0;
-            const cell = document.createElement(isHeader ? "th" : "td");
-            
-            if(r === 0 && c === 0){
-                cell.textContent = "";
-            } else if (r === 0) {
-                cell.textContent = colHeader[c] || "";
-            } else if (c === 0) {
-                cell.textContent = rowHeader[r] || "";
-            } else {
-                const rowKey = String(r);
-                const colKey = String(c);
+        for(let r = 0; r < numRows; r++){
+            const tr = document.createElement("tr");
 
-                const value = 
-                    data[rowKey] && data[rowKey][colKey]
-                    ? data[rowKey][colKey]
-                    : "Not Detected";
+            for(let c = 0; c < numCols; c++){
+                const isHeader = r === 0 || c === 0;
+                const cell = document.createElement(isHeader ? "th" : "td");
+                
+                if(r === 0 && c === 0){
+                    cell.textContent = "";
+                } else if (r === 0) {
+                    cell.textContent = colHeader[c] || "";
+                } else if (c === 0) {
+                    cell.textContent = rowHeader[r] || "";
+                } else {
+                    const rowKey = String(r);
+                    const colKey = String(c);
 
-                cell.textContent = value;
+                    const value = hasResults && data[rowKey] && data[rowKey][colKey]
+                        ? data[rowKey][colKey]
+                        : "";
+
+                    cell.textContent = value;
+                }
+
+                tr.appendChild(cell);
             }
-
-            tr.appendChild(cell);
+            table.appendChild(tr);
         }
-        table.appendChild(tr);
     }
 
+    if (summaryEl || tubeEls.length) {
+        if (!hasResults) {
+            if (summaryEl) {
+                const errorMessage = hasErrorPayload ? "Results unavailable" : "Run for results!";
+                summaryEl.textContent = errorMessage;
+                summaryEl.classList.toggle("is-error", errorMessage === "Results unavailable");
+            }
+            tubeEls.forEach((tubeEl) => {
+                const dot = tubeEl.querySelector(".results-dot");
+                if (!dot) {
+                    return;
+                }
+                dot.classList.remove("is-detected");
+                dot.classList.remove("is-inconclusive");
+                dot.classList.remove("is-not-detected");
+            });
+            return;
+        }
+        const tubeDetected = Array(4).fill(false);
+        const tubeInconclusive = Array(4).fill(false);
+        Object.values(data || {}).forEach((row) => {
+            if (!row || typeof row !== "object") {
+                return;
+            }
+            for (let col = 1; col <= 4; col += 1) {
+                const value = row[String(col)];
+                if (value === "Inconclusive") {
+                    tubeInconclusive[col - 1] = true;
+                    tubeDetected[col - 1] = false;
+                } else if (value && value !== "Not Detected") {
+                    if (!tubeInconclusive[col - 1]) {
+                        tubeDetected[col - 1] = true;
+                    }
+                }
+            }
+        });
+
+        if (summaryEl) {
+            const detectedLabels = tubeDetected
+              .map((detected, index) => (detected ? `Tube ${index + 1}` : null))
+              .filter(Boolean);
+            const inconclusiveLabels = tubeInconclusive
+              .map((flag, index) => (flag ? `Tube ${index + 1} inconclusive` : null))
+              .filter(Boolean);
+            if (!detectedLabels.length && !inconclusiveLabels.length) {
+                summaryEl.textContent = "No targets detected";
+            } else {
+                const parts = [];
+                if (detectedLabels.length) {
+                    parts.push(`Detected: ${detectedLabels.join(", ")}`);
+                }
+                if (inconclusiveLabels.length) {
+                    parts.push(inconclusiveLabels.join(", "));
+                }
+                summaryEl.textContent = parts.join(" · ");
+            }
+        }
+
+        tubeEls.forEach((tubeEl, index) => {
+            const dot = tubeEl.querySelector(".results-dot");
+            if (!dot) {
+                return;
+            }
+            if (tubeInconclusive[index]) {
+                dot.classList.add("is-inconclusive");
+                dot.classList.remove("is-detected");
+                dot.classList.remove("is-not-detected");
+            } else if (tubeDetected[index]) {
+                dot.classList.add("is-detected");
+                dot.classList.remove("is-inconclusive");
+                dot.classList.remove("is-not-detected");
+            } else {
+                dot.classList.remove("is-detected");
+                dot.classList.remove("is-inconclusive");
+                dot.classList.add("is-not-detected");
+            }
+        });
+    }
 }
 
 async function loadProfiles(){
@@ -221,7 +583,7 @@ async function loadProfiles(){
         if(profiles.length === 0){
             const opt = document.createElement("option");
             opt.value = "";
-            opt.textContent = "No profiles fouind";
+            opt.textContent = "No profiles found";
             select.appendChild(opt);
             return;
         }
@@ -236,14 +598,62 @@ async function loadProfiles(){
         profiles.forEach(p => {
             const opt = document.createElement("option");
             opt.value = p.id;
-            opt.textContent = p.label;
+            opt.textContent = p.name || p.label || p.id;
             select.appendChild(opt);
 
         });
 
+        const selectProfile = (profileValue) => {
+            const matchedOption = Array.from(select.options).find(option => (
+                option.value === profileValue || option.textContent === profileValue
+            ));
+            if (!matchedOption) {
+                return false;
+            }
+            select.value = matchedOption.value;
+            matchedOption.selected = true;
+            select.selectedIndex = Array.from(select.options).indexOf(matchedOption);
+            const placeholderOption = select.querySelector("option[disabled]");
+            if (placeholderOption) {
+                placeholderOption.selected = false;
+            }
+            return true;
+        };
+
+        const requestedProfile = new URLSearchParams(window.location.search).get("profile");
+        if (requestedProfile) {
+            const matched = selectProfile(requestedProfile);
+            if (matched) {
+                try {
+                    await fetch("/profile/select", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ profile: requestedProfile })
+                    });
+                } catch (err) {
+                    console.error("Failed to sync selected profile:" , err);
+                }
+            }
+        }
+
+        if (!requestedProfile) {
+            try {
+                const statusResp = await fetch("/button_status");
+                if (statusResp.ok) {
+                    const status = await statusResp.json();
+                    if (status.profile) {
+                        selectProfile(status.profile);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load selected profile:" , err);
+            }
+        }
+
         select.addEventListener("change", async () => {
             const profile = select.value;
             console.log("Dropdown changed, profile =", profile);
+            setRunWarning("");
             try {
                 await fetch("/profile/select",{
                     method: "POST",
@@ -262,11 +672,59 @@ async function loadProfiles(){
 
 
 document.addEventListener("DOMContentLoaded", () => {
+    if (isDashboard) {
+        fetch("/results/clear", { method: "POST" })
+          .catch(() => null)
+          .finally(() => {
+            resetResultsUI();
+          });
+    }
+    loadRunName();
+    if (runNameInput) {
+        runNameInput.addEventListener("blur", saveRunName);
+    }
+    fetch("/button_status")
+      .then((response) => response.ok ? response.json() : null)
+      .then((status) => {
+        const isDev = Boolean(status && status.dev_simulate);
+        setOpticsVisibility(isDev);
+        if (isDev && devOpticsPath) {
+            fetch("/dev/optics_path")
+              .then((response) => response.ok ? response.json() : null)
+              .then((data) => {
+                if (data && data.path) {
+                  devOpticsPath.value = data.path;
+                }
+              })
+              .catch(() => null);
+            devOpticsPath.addEventListener("blur", async () => {
+                const path = devOpticsPath.value.trim();
+                try {
+                    await fetch("/dev/optics_path", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ path })
+                    });
+                } catch (error) {
+                    console.error("Failed to save optics path", error);
+                }
+            });
+        }
+      })
+      .catch(() => {
+        setOpticsVisibility(false);
+      });
+    if (runModalClose) {
+        runModalClose.addEventListener("click", hideRunCompleteModal);
+    }
     if (typeof loadProfiles === "function") {
         loadProfiles();
     }
-    if (typeof loadResultsTable === "function") {
-        loadResultsTable();
+    if (typeof loadResults === "function") {
+        loadResults();
+    }
+    if (normalizedPath === "/run") {
+        updateDrawerWarningFromState(lastDrawerState);
     }
 });
 
