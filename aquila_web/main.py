@@ -24,7 +24,7 @@ state_change_event = asyncio.Event()
 start_time = None
 elapsed_time = 0
 timer_running = None
-#results_path = Path("/home/pi/aquila/aquila_web/results.json")
+#results_path = Path("/home/pi/aquilla-main/aquila_web/results.json")
 results_path = None
 DEV_SIMULATE = os.getenv("AQ_DEV_SIMULATE", "0") == "1"
 SIM_RUN_SECONDS = float(os.getenv("AQ_DEV_RUN_DURATION", "8"))
@@ -33,14 +33,18 @@ dev_optics_path = DEV_OPTICS_PATH
 DEV_DRAWER_OPEN_SECONDS = float(os.getenv("AQ_DEV_DRAWER_OPEN_SECONDS", "3"))
 DEV_DRAWER_CLOSE_SECONDS = float(os.getenv("AQ_DEV_DRAWER_CLOSE_SECONDS", "3"))
 run_in_progress = False
-BASE_DIR = Path(__file__).resolve().parents[1]
+MODULE_BASE_DIR = Path(__file__).resolve().parents[1]
+if str(MODULE_BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(MODULE_BASE_DIR))
+from config import get_src_basedir
+BASE_DIR = Path(get_src_basedir()).expanduser()
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 RESULTS_DIR = BASE_DIR / "logs" / "results"
 PLOTS_DIR = BASE_DIR / "logs" / "plots"
 HISTORY_PATH = BASE_DIR / "logs" / "history.json"
-DEFAULT_PROFILE_DIR = Path("/home/pi/aquila/profiles/")
-LOCAL_PROFILE_DIR = Path(__file__).resolve().parents[1] / "profiles"
+DEFAULT_PROFILE_DIR = BASE_DIR / "profiles"
+LOCAL_PROFILE_DIR = MODULE_BASE_DIR / "profiles"
 
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")

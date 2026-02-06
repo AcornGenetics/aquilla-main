@@ -3,11 +3,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from pathlib import Path
+from config import get_src_basedir
 
 from aq_curve.curve import Curve
 
-# root_dir = "/home/pi/aquila/logs/optics"
-root_dir ="/Users/nicolecornell/Acorn/Arete_device/aquila-main/logs/optics"
+# root_dir = Path("/home/pi/aquilla-main/logs/optics")
+root_dir = Path(get_src_basedir()) / "logs" / "optics"
 
 get_curve_dir = "logs/optics/"
 
@@ -61,4 +63,3 @@ if selected_logs is not None:
         st.write("Waiting on selection...")
 else: 
     st.write("Select a dock to proceed")
-

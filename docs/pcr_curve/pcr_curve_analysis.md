@@ -19,7 +19,7 @@ threshold = mean(baseline_window) + PCR_THRESHOLD_DELTA
 ```
 
 - `PCR_THRESHOLD` can override the absolute threshold directly.
-- `PCR_THRESHOLD_DELTA` defaults to the config value in `pcr_curve_tests/config.py`.
+- `PCR_THRESHOLD_DELTA` defaults to the config value in `aq_curve/pcr_curve_config.py`.
 
 ## Key helper calculations
 - **Sustained rise index**: first index where `min_consecutive` points are above the threshold.
@@ -66,7 +66,6 @@ Each check is evaluated on the baseline-corrected curve unless noted.
 
 ## Implementation references
 - Data preparation and baseline: `aquila-main/aq_curve/curve.py`
-- Thresholding and checks: `aquila-main/pcr_curve_tests/evaluator.py`
-- Helper math utilities: `aquila-main/pcr_curve_tests/helpers.py`
-- Config constants: `aquila-main/pcr_curve_tests/config.py`
-
+- Thresholding and checks: `aquila-main/aq_curve/evaluator.py`
+- Helper math utilities: `aquila-main/aq_curve/pcr_curve_helpers.py`
+- Config constants: `aquila-main/aq_curve/pcr_curve_config.py`

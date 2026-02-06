@@ -5,7 +5,7 @@ import json
 import logging
 from pathlib import Path
 from aq_curve.evaluator import evaluate_curve
-from aq_curve.config import get_src_basedir
+from config import get_src_basedir
 
 logger = logging.getLogger("aquila")
 

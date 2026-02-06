@@ -1,7 +1,7 @@
 # PCR Curve Evaluator
 
 ## Overview
-`pcr_curve_tests/evaluator.py` centralizes the curve checks into reusable functions. The pytest tests now call these functions, and the runtime detection pipeline can reuse the same logic without invoking pytest.
+`aq_curve/evaluator.py` centralizes the curve checks into reusable functions. The pytest tests now call these functions, and the runtime detection pipeline can reuse the same logic without invoking pytest.
 
 ## Key Functions
 - `evaluate_curve(curve, log_name, dye, well)` returns a status (`detected`, `undetected`, or `inconclusive`) plus per-check results.

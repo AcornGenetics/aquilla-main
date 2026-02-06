@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pydantic
+requests
+numpy
+pandas
+matplotlib
+streamlit
+pyserial
+RPi.GPIO
+spidev
+smbus2
+simple-rpc
+pytest

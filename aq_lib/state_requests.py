@@ -1,7 +1,8 @@
-import os
 import time
+from pathlib import Path
 import requests
 import logging
+from config import get_src_basedir
 from .config_module import Config
 
 config = Config()
@@ -36,9 +37,12 @@ def change_screen( state ):
 
 def update_results_path( results_filename ):
     url =  "http://127.0.0.1:8090/results/path"
-    path = os.path.join("/home/pi/aquila", results_filename)
+    base_dir = Path(get_src_basedir())
+    path = Path(results_filename)
+    if not path.is_absolute():
+        path = base_dir / path
     try:
-        response = requests.post(url, json={"path":path})
+        response = requests.post(url, json={"path":str(path)})
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in path update. Intended path: %s", path )
 

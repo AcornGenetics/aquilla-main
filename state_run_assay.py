@@ -8,6 +8,9 @@ import RPi.GPIO as GPIO
 import sys
 import time
 import subprocess
+import re
+import os
+from pathlib import Path
 
 from aq_lib.meerstetter import MeerStetter
 from aq_lib.meerstetter import set_time, get_time
@@ -17,7 +20,9 @@ from aq_lib.config_module import Config
 from aq_lib.utils import load_json
 from aq_lib.utils import LogFileName
 from aq_lib.utils import LOGGING_CONFIG
+from aq_lib.plot_utils import generate_optics_plot
 from aq_lib.regulate import lid_heater_worker
+from config import get_src_basedir
 import aq_lib.state_requests as sr
 from aq_lib.motor_class import Axis, Drawer
 
@@ -53,6 +58,7 @@ class AssayInterface():
         self.drawer.home()
         sr.change_screen("0")
         self.drawer.open()
+        sr.update_drawer_state(is_open=True, is_closed=False)
 
     def configure_thermal_control(self):
         device_type = int (config.pcr["device_type"] )
@@ -144,15 +150,17 @@ class AssayInterface():
     def ready( self ):
         #Ready Screen
         sr.change_screen("1")
-        ret = self.button_logic( state = "ready" ) 
+        ret = self.button_logic( state = "ready" )
         if ret == None:
-            ret = self.button_logic( state = "ready" ) 
+            ret = self.button_logic( state = "ready" )
             if ret == None:
                 logger.error("Profile is returning none when it should not. %s" % (ret))
                 sr.change_screen("-1")
                 raise Exception ("Profile is returning none when it should not. %s" % (ret))
-        logger.info("Profile selected: %s" % (ret))
-        self.thermal_profile = ("profiles/" + ret)
+        profile, run_name = ret
+        logger.info("Profile selected: %s" % (profile))
+        self.run_name = run_name
+        self.thermal_profile = ("profiles/" + profile)
         
     
     def run( self ):
@@ -163,10 +171,13 @@ class AssayInterface():
 
         self.drawer.read()
         lfn = LogFileName()
-        
-        pcr_log = lfn.get_pcr_log_filename()
-        optics_log = lfn.get_optics_log_filename()
-        results_json = lfn.get_results_json_filename()
+        run_prefix = self._safe_name(self.run_name)
+
+        pcr_log = lfn.get_pcr_log_filename(prefix=f"{run_prefix}_")
+        optics_log = lfn.get_optics_log_filename(prefix=f"{run_prefix}_")
+        results_json = lfn.get_results_json_filename(prefix=f"{run_prefix}_")
+        plot_filename = f"{run_prefix}_{lfn.id}.png"
+        plot_path = os.path.join("logs/plots", plot_filename)
         sr.update_results_path( results_json )
 
         logger.info( "PCR log: %s", pcr_log )
@@ -212,6 +223,15 @@ class AssayInterface():
             self.hw_deinitialize()
             self.drawer.open()
             results_to_json( optics_log, results_json )
+            graph_path = None
+            try:
+                os.makedirs("logs/plots", exist_ok=True)
+                generate_optics_plot(optics_log, plot_path)
+                graph_path = f"/plots/{plot_filename}"
+            except Exception as e:
+                logger.error("Failed to generate plot: %s", e)
+            sr.log_history(self.thermal_profile.replace("profiles/", ""), self.run_name, results_json, graph_path)
+            sr.advance_run_name()
 
 
     def hw_deinitialize(self):
@@ -249,6 +269,7 @@ class AssayInterface():
         while True:
             run = ret.get("run_requested")
             profile = ret.get("profile")
+            run_name = ret.get("run_name")
             drawer_open = ret.get("drawer_open_status")
             drawer_close = ret.get("drawer_close_status")
             exit_status = ret.get("exit_button_status")
@@ -258,12 +279,14 @@ class AssayInterface():
             elif( drawer_open is True and drawer_close is False ):
                 sr.change_screen( screens[0] )
                 self.drawer.open()
+                sr.update_drawer_state(is_open=True, is_closed=False)
                 #time.sleep(5) #simulate drawer opening
                 sr.change_screen( screens[1] ) 
                 ret = sr.wait_for_button()
             elif( drawer_open is False and drawer_close is True ): 
                 sr.change_screen( screens[2] )
                 self.drawer.read()
+                sr.update_drawer_state(is_open=False, is_closed=True)
                 #time.sleep(5) #simulate drawer close
                 sr.change_screen( screens[1] ) 
                 ret = sr.wait_for_button()
@@ -280,8 +303,10 @@ class AssayInterface():
                     if(ret.get("exit_button_status")):
                         sr.change_screen("-4")
                         time.sleep(3)
+                        base_dir = Path(get_src_basedir())
+                        exit_script = base_dir / "exit_kiosk.sh"
                         subprocess.run(
-                                ["/home/pi/aquila/exit_kiosk.sh"], 
+                                [str(exit_script)], 
                                 check=False
                                 )
                         time.sleep(3)
@@ -292,4 +317,9 @@ class AssayInterface():
                 else:
                     pass
 
-        return profile
+        return profile, run_name
+
+    def _safe_name(self, value: str | None) -> str:
+        if not value:
+            return "run"
+        return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "run"
