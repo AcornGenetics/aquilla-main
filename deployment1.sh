@@ -50,6 +50,11 @@ if [[ -f "${BASE_DIR}/server_web/serve.service" ]]; then
   sudo systemctl start serve.service
 fi
 
+if [[ -f "${BASE_DIR}/aquila_app.service" ]]; then
+  sudo cp "${BASE_DIR}/aquila_app.service" /etc/systemd/system/
+  sudo systemctl enable --now aquila_app.service
+fi
+
 if [[ -f "${BASE_DIR}/aquila_web/aquila_web.service" ]]; then
   sudo cp "${BASE_DIR}/aquila_web/aquila_web.service" /etc/systemd/system/
   sudo systemctl enable --now aquila_web.service
@@ -60,3 +65,4 @@ if [[ -f "/boot/cmdline.txt" ]]; then
 fi
 
 echo "Setup complete. Reboot if needed: sudo reboot now"
+echo "Deployment done. Run: python3 ${BASE_DIR}/scripts/check_service_paths.py"

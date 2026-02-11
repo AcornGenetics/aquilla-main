@@ -182,6 +182,7 @@ class AssayInterface():
 
         logger.info( "PCR log: %s", pcr_log )
         logger.info( "Optics log: %s", optics_log )
+        logger.info("Optics log absolute: %s", Path(optics_log).resolve())
 
         steps = load_json( self.thermal_profile )["steps"]
         execution_thread = Thread( target = self.executor )
