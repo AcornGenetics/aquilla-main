@@ -416,6 +416,16 @@ async def clear_results():
     results_path = None
     return {"ok": True}
 
+@app.post("/run/complete/ack")
+async def acknowledge_run_complete():
+    global results_path, current_item
+    results_path = None
+    if current_item.screen != "ready":
+        current_item.screen = "ready"
+        state_change_event.set()
+        state_change_event.clear()
+    return {"ok": True}
+
 @app.get("/results/get_path")
 async def get_path():
     return {"path":results_path}

@@ -20,6 +20,8 @@ let currentScreen = null;
 let runDoneAcknowledged = false;
 let lastDrawerState = { open: null, closed: null };
 let lastScreen = null;
+let holdCompleteScreen = false;
+let completedRunSeen = false;
 
 // Display a panel object { title: "...", text: "..." }
 function showPanel(panel) {
@@ -197,6 +199,10 @@ function hideRunCompleteModal() {
   }
   runDoneAcknowledged = true;
   runCompleteModal.classList.add("is-hidden");
+  if (isDashboard) {
+    holdCompleteScreen = true;
+    setRunWarning("");
+  }
 }
 
 // Connect to WebSocket backend
@@ -214,9 +220,12 @@ socket.onmessage = function(event) {
     }
     if (panel.screen){
         const screen = panel.screen;
-        currentScreen = screen;
         const previousScreen = lastScreen;
         lastScreen = screen;
+        if (screen === "running") {
+          holdCompleteScreen = false;
+          completedRunSeen = false;
+        }
         if (screen === "running") {
           setRunButtonState(true);
           resetResultsUI("Results pending");
@@ -232,11 +241,18 @@ socket.onmessage = function(event) {
           showRunCompleteModal();
           loadRunName();
           loadResults();
+          completedRunSeen = true;
         }
         let targetPath = window.location.pathname;
 
+        let uiScreen = screen;
+        if (isDashboard && holdCompleteScreen && completedRunSeen && screen === "ready") {
+            uiScreen = "complete";
+        }
+        currentScreen = uiScreen;
+
         if (isDashboard) {
-            updateDashboardSections(screen);
+            updateDashboardSections(uiScreen);
             return;
         }
 
@@ -672,6 +688,8 @@ async function loadProfiles(){
 
 
 document.addEventListener("DOMContentLoaded", () => {
+    holdCompleteScreen = false;
+    completedRunSeen = false;
     if (isDashboard) {
         fetch("/results/clear", { method: "POST" })
           .catch(() => null)
@@ -725,6 +743,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (normalizedPath === "/run") {
         updateDrawerWarningFromState(lastDrawerState);
+    }
+});
+
+window.addEventListener("beforeunload", () => {
+    if (!isDashboard) {
+        return;
+    }
+    try {
+        fetch("/run/complete/ack", { method: "POST", keepalive: true }).catch(() => null);
+    } catch (error) {
+        console.error("Failed to acknowledge run complete", error);
     }
 });
 
