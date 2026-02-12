@@ -53,6 +53,7 @@ class Curve:
         self.cross_talk_matrix = cross_talk_matrix if cross_talk_matrix is not None else self.DEFAULT_CROSS_TALK_MATRIX
         self.thresholds = thresholds if thresholds is not None else self.DEFAULT_THRESHOLDS
         self.baseline_slice = baseline_slice
+        self.test_run = False
 
     @staticmethod
     def _reject_outliers(data, m=2.0):
@@ -108,12 +109,14 @@ class Curve:
         ydata = numpy.array(ydata)
 
         if len(xdata) < 2:
+            self.test_run = True
             return numpy.array([0.0, float(ydata[0]) if len(ydata) else 0.0])
 
         start, end = self.baseline_slice
         start = max(0, min(start, len(xdata) - 1))
         end = max(start + 1, min(end, len(xdata)))
         if end - start < 2:
+            self.test_run = True
             start = 0
             end = min(2, len(xdata))
         # Linear fit on baseline window
@@ -150,7 +153,7 @@ class Curve:
         xdata, y0, y1 = self.extract_data(run_id, dye, channel)
         xdata = numpy.array(xdata)
         if len(xdata) < 20:
-            raise Exception("PCR curve too short")
+            self.test_run = True
         coeffs = self.baseline(xdata, y1)
         y_baseline_corrected = y1 - coeffs[0] * xdata - coeffs[1]
 
@@ -178,6 +181,7 @@ class Curve:
             raise e
 
     def results_to_json(self, raw_logfile, results_logfile):
+        self.test_run = False
         src = raw_logfile
         # Previous endpoint-based detection (kept for reference):
         # detections = {well: self.is_detected(src, well) for well in range(1, 5)}
@@ -220,6 +224,9 @@ class Curve:
         target_path = (base_dir / results_logfile).resolve()
         if base_dir != target_path and base_dir not in target_path.parents:
             raise ValueError("results_logfile must stay within src_basedir")
+
+        if self.test_run:
+            result["test"] = True
 
         with open(target_path, "w") as f:
             json.dump(result, f)

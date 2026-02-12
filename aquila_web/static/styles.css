@@ -429,6 +429,8 @@ body {
   display: flex;
   gap: 12px;
   align-items: flex-end;
+  margin-left: auto;
+  align-self: flex-start;
 }
 
 .run-secondary-btn {

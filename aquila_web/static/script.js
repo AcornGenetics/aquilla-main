@@ -23,6 +23,8 @@ let lastDrawerState = { open: null, closed: null };
 let lastScreen = null;
 let holdCompleteScreen = false;
 let completedRunSeen = false;
+let awaitingDrawerReset = false;
+let drawerOpenedAfterComplete = false;
 
 // Display a panel object { title: "...", text: "..." }
 function showPanel(panel) {
@@ -94,7 +96,8 @@ function updateDashboardSections(screen) {
     if (!element) {
       return;
     }
-    if (key === screen) {
+    const shouldShow = key === "running" ? screen === "running" : screen !== "running";
+    if (shouldShow) {
       element.classList.remove("is-hidden");
     } else {
       element.classList.add("is-hidden");
@@ -189,6 +192,19 @@ function updateDrawerWarningFromState(state) {
   } else {
     setDrawerWarning("");
   }
+  if (awaitingDrawerReset) {
+    if (lastDrawerState.open) {
+      drawerOpenedAfterComplete = true;
+    }
+    if (drawerOpenedAfterComplete && lastDrawerState.closed && !lastDrawerState.open) {
+      holdCompleteScreen = false;
+      awaitingDrawerReset = false;
+      drawerOpenedAfterComplete = false;
+      if (isDashboard && currentScreen === "complete") {
+        updateDashboardSections("ready");
+      }
+    }
+  }
 }
 
 function showRunCompleteModal() {
@@ -209,8 +225,11 @@ function hideRunCompleteModal() {
   runCompleteModal.classList.add("is-hidden");
   if (isDashboard) {
     holdCompleteScreen = true;
+    awaitingDrawerReset = true;
+    drawerOpenedAfterComplete = false;
     setRunWarning("");
   }
+  acknowledgeRunComplete();
 }
 
 function acknowledgeRunComplete() {

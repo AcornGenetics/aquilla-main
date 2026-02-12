@@ -290,12 +290,18 @@ def evaluate_curve(curve, log_name, dye, well):
     }
     results.update(check_signal_basics(curve_data, curve))
     threshold_pass = results["check_threshold_crossing"]
+    baseline_fail = any(
+        not results.get(name, False)
+        for name in ("check_baseline_length", "check_baseline_stability")
+    )
     other_fail = any(
         not passed
         for name, passed in results.items()
         if name != "check_threshold_crossing"
     )
-    if not threshold_pass:
+    if curve.test_run or baseline_fail:
+        status = "inconclusive"
+    elif not threshold_pass:
         status = "undetected"
     elif other_fail:
         status = "inconclusive"
