@@ -107,7 +107,15 @@ class Curve:
         xdata = numpy.array(xdata)
         ydata = numpy.array(ydata)
 
+        if len(xdata) < 2:
+            return numpy.array([0.0, float(ydata[0]) if len(ydata) else 0.0])
+
         start, end = self.baseline_slice
+        start = max(0, min(start, len(xdata) - 1))
+        end = max(start + 1, min(end, len(xdata)))
+        if end - start < 2:
+            start = 0
+            end = min(2, len(xdata))
         # Linear fit on baseline window
         coeffs = numpy.polyfit(xdata[start:end], ydata[start:end], 1)
 

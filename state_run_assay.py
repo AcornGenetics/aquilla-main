@@ -223,7 +223,11 @@ class AssayInterface():
         finally:
             self.hw_deinitialize()
             self.drawer.open()
-            results_to_json( optics_log, results_json )
+            try:
+                os.makedirs("logs/results", exist_ok=True)
+                results_to_json( optics_log, results_json )
+            except Exception as e:
+                logger.error("Failed to generate results: %s", e)
             graph_path = None
             try:
                 os.makedirs("logs/plots", exist_ok=True)

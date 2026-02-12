@@ -29,14 +29,26 @@ def get_curve_data(curve, log_name, dye, well):
     return xdata, y_corrected, y1
 
 
-def get_baseline_values(ydata, baseline_slice):
+def _clamp_baseline_slice(baseline_slice, length):
+    if length <= 0:
+        return 0, 0
     start, end = baseline_slice
+    start = max(0, min(start, length - 1))
+    end = max(start + 1, min(end, length))
+    return start, end
+
+
+def get_baseline_values(ydata, baseline_slice):
+    start, end = _clamp_baseline_slice(baseline_slice, len(ydata))
     return ydata[start:end]
 
 
 def get_threshold(ydata, baseline_slice):
     baseline_values = get_baseline_values(ydata, baseline_slice)
-    baseline_mean = float(np.mean(baseline_values))
+    if len(baseline_values) == 0:
+        baseline_mean = 0.0
+    else:
+        baseline_mean = float(np.mean(baseline_values))
     threshold_value = os.getenv("PCR_THRESHOLD")
     if threshold_value is not None:
         threshold = float(threshold_value)
