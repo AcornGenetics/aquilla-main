@@ -9,6 +9,7 @@ const runCompleteModal = document.getElementById("run-complete-modal");
 const runModalClose = runCompleteModal
   ? runCompleteModal.querySelector(".run-modal__close")
   : null;
+const drawerActions = document.getElementById("drawer-actions");
 const devOpticsPath = document.getElementById("dev-optics-path");
 const devOpticsWrapper = document.getElementById("run-optics-tab");
 const runNameInput = document.getElementById("run-name-input");
@@ -161,6 +162,13 @@ function setDrawerWarning(message) {
   }
 }
 
+function setDrawerActionsVisibility(isVisible) {
+  if (!drawerActions) {
+    return;
+  }
+  drawerActions.classList.toggle("is-hidden", !isVisible);
+}
+
 function setOpticsVisibility(isDev) {
   if (!devOpticsWrapper) {
     return;
@@ -205,6 +213,13 @@ function hideRunCompleteModal() {
   }
 }
 
+function acknowledgeRunComplete() {
+  if (!isDashboard) {
+    return;
+  }
+  fetch("/run/complete/ack", { method: "POST" }).catch(() => null);
+}
+
 // Connect to WebSocket backend
 const host = window.location.host;
 const wsUrl = `ws://${host}/ws`;
@@ -242,6 +257,9 @@ socket.onmessage = function(event) {
           loadRunName();
           loadResults();
           completedRunSeen = true;
+        }
+        if (isDashboard) {
+          setDrawerActionsVisibility(screen !== "running");
         }
         let targetPath = window.location.pathname;
 
@@ -740,6 +758,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (typeof loadResults === "function") {
         loadResults();
+    }
+    if (isDashboard) {
+        setDrawerActionsVisibility(currentScreen !== "running");
     }
     if (normalizedPath === "/run") {
         updateDrawerWarningFromState(lastDrawerState);

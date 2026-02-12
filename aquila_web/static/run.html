@@ -38,16 +38,16 @@
             <input id="run-name-input" class="run-name-input" type="text" />
           </div>
         </div>
-        <div class="run-secondary-actions">
-          <button class="run-secondary-btn" onclick="notifyDrawerOpen()" type="button">Open Drawer</button>
-          <button class="run-secondary-btn" onclick="notifyDrawerClose()" type="button">Close Drawer</button>
-        </div>
       </section>
       <div class="run-cta-wrapper">
         <button class="run-cta" id="run-cta" onclick="notifyRun()" type="button" aria-label="Run">
           <img class="run-cta-icon" src="/static/acornlogo.svg?v=5" alt="Acorn" />
           <span class="run-cta-label">Run</span>
         </button>
+      </div>
+      <div class="run-secondary-actions" id="drawer-actions">
+        <button class="run-secondary-btn" onclick="notifyDrawerOpen()" type="button">Open Drawer</button>
+        <button class="run-secondary-btn" onclick="notifyDrawerClose()" type="button">Close Drawer</button>
       </div>
       <p class="run-warning is-hidden" id="run-warning"></p>
       <p class="run-warning is-hidden" id="drawer-warning"></p>
@@ -85,10 +85,6 @@
               <span>Tube 4</span>
             </div>
           </div>
-        </div>
-        <div class="run-secondary-actions">
-          <button class="run-secondary-btn" onclick="notifyDrawerOpen()" type="button">Open Drawer</button>
-          <button class="run-secondary-btn" onclick="notifyDrawerClose()" type="button">Close Drawer</button>
         </div>
         <button class="transparent-btn" onclick="notifyExit()">Exit GUI</button>
       </section>
