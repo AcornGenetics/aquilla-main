@@ -237,6 +237,7 @@ class AssayInterface():
                 logger.error("Failed to generate plot: %s", e)
             sr.log_history(self.thermal_profile.replace("profiles/", ""), self.run_name, results_json, graph_path)
             sr.advance_run_name()
+            sr.change_screen("3")
 
 
     def hw_deinitialize(self):

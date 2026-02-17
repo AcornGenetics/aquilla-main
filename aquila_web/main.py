@@ -148,6 +148,42 @@ def _save_history(entries: list[dict]) -> None:
     with HISTORY_PATH.open("w") as f:
         json.dump(entries, f, indent=2)
 
+def _latest_history_results_path() -> Path | None:
+    history = _load_history()
+    for entry in reversed(history):
+        if not isinstance(entry, dict):
+            continue
+        path_value = entry.get("results_path")
+        if not path_value:
+            continue
+        candidate = Path(path_value)
+        if not candidate.is_absolute():
+            candidate = BASE_DIR / path_value.lstrip("/")
+        return candidate
+    return None
+
+def _resolve_results_path() -> Path | None:
+    global results_path
+    candidates = []
+    if results_path:
+        candidates.append(Path(results_path))
+    history_path = _latest_history_results_path()
+    if history_path:
+        candidates.append(history_path)
+    for candidate in candidates:
+        if not candidate.is_absolute():
+            candidate = BASE_DIR / str(candidate).lstrip("/")
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            continue
+        if resolved.exists():
+            resolved_value = str(resolved)
+            if results_path != resolved_value:
+                results_path = resolved_value
+            return resolved
+    return None
+
 _init_run_name()
 
 def _next_run_index(profile_name: str) -> int:
@@ -398,13 +434,15 @@ async def timer(payload: TimerControl):
 @app.get("/results")
 async def get_results():
     try:    
-        path = Path(results_path)
+        path = _resolve_results_path()
+        if not path:
+            raise FileNotFoundError("No results path available")
         with path.open() as f:
             data = json.load(f)
     except Exception as e:
         return {
                 "path": str(results_path),
-                "data":{"failed"}
+                "data": {"failed": True}
                 }
     return data
 
@@ -492,6 +530,7 @@ async def advance_run_name():
 
 @app.post("/history/append")
 async def append_history(payload: dict):
+    global results_path, results_cleared
     path_value = payload.get("results_path")
     profile = payload.get("profile") or "--"
     run_label = payload.get("run_name") or "--"
@@ -513,6 +552,9 @@ async def append_history(payload: dict):
         "results_path": path_value
     })
     _save_history(history)
+    if result_path:
+        results_path = str(result_path.resolve())
+        results_cleared = False
     return {"ok": True}
 
 @app.get("/")

@@ -573,9 +573,9 @@ async function loadResults(){
     if (summaryEl || tubeEls.length) {
         if (!hasResults) {
             if (summaryEl) {
-                const errorMessage = hasErrorPayload ? "Results unavailable" : "Run for results!";
+                const errorMessage = hasErrorPayload ? "Error in results path" : "Run for results!";
                 summaryEl.textContent = errorMessage;
-                summaryEl.classList.toggle("is-error", errorMessage === "Results unavailable");
+                summaryEl.classList.toggle("is-error", hasErrorPayload);
             }
             tubeEls.forEach((tubeEl) => {
                 const dot = tubeEl.querySelector(".results-dot");
