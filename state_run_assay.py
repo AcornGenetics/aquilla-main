@@ -256,7 +256,8 @@ class AssayInterface():
         self.button_logic( state = "end" ) 
 
     def button_logic(self, state = "ready"):
-        ret = sr.wait_for_button()
+        include_run_complete_ack = state == "end"
+        ret = sr.wait_for_button(include_run_complete_ack)
         
         if(state == "end"):
             screens = ["8","3","9","1"]  
@@ -288,24 +289,24 @@ class AssayInterface():
                 sr.update_drawer_state(is_open=True, is_closed=False)
                 #time.sleep(5) #simulate drawer opening
                 sr.change_screen( screens[1] ) 
-                ret = sr.wait_for_button()
+                ret = sr.wait_for_button(include_run_complete_ack)
             elif( drawer_open is False and drawer_close is True ): 
                 sr.change_screen( screens[2] )
                 self.drawer.read()
                 sr.update_drawer_state(is_open=False, is_closed=True)
                 #time.sleep(5) #simulate drawer close
                 sr.change_screen( screens[1] ) 
-                ret = sr.wait_for_button()
+                ret = sr.wait_for_button(include_run_complete_ack)
             elif( run is True and profile is None ):
                 sr.change_screen( screens[3] )
                 if( state == "ready" ): 
-                    ret = sr.wait_for_button()
+                    ret = sr.wait_for_button(include_run_complete_ack)
                 elif( state == "end" ):
                     break
             elif( exit_status is True ):
-                ret = sr.wait_for_button()
+                ret = sr.wait_for_button(include_run_complete_ack)
                 if(ret.get("exit_button_status")):
-                    ret = sr.wait_for_button()
+                    ret = sr.wait_for_button(include_run_complete_ack)
                     if(ret.get("exit_button_status")):
                         sr.change_screen("-4")
                         time.sleep(3)
@@ -317,7 +318,7 @@ class AssayInterface():
                                 )
                         time.sleep(3)
                         sr.change_screen( screens[1] )
-                        ret = sr.wait_for_button() 
+                        ret = sr.wait_for_button(include_run_complete_ack) 
                     else:
                         pass
                 else:
@@ -325,7 +326,7 @@ class AssayInterface():
             elif run_complete_ack and state == "end":
                 sr.change_screen("1")
                 sr.reset_run_complete_ack()
-                ret = sr.wait_for_button()
+                ret = sr.wait_for_button(include_run_complete_ack)
 
         return profile, run_name
 

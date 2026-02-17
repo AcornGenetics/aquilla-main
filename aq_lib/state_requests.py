@@ -108,7 +108,7 @@ def reset_run_complete_ack() -> None:
         logger.exception("Error resetting run complete ack: %s", e)
 
 
-def wait_for_button():
+def wait_for_button(include_run_complete_ack: bool = False):
     url =  "http://127.0.0.1:8090/button_status/"
     while True:
         try:
@@ -161,7 +161,7 @@ def wait_for_button():
             except Exception as e:
                 logger.warning("Error resetting button", e)
             return data
-        elif data.get("run_complete_ack"):
+        elif include_run_complete_ack and data.get("run_complete_ack"):
             logger.info("Run complete acknowledged")
             return data
 
