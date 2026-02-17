@@ -26,6 +26,7 @@ elapsed_time = 0
 timer_running = None
 #results_path = Path("/home/pi/aquilla-main/aquila_web/results.json")
 results_path = None
+results_cleared = False
 DEV_SIMULATE = os.getenv("AQ_DEV_SIMULATE", "0") == "1"
 SIM_RUN_SECONDS = float(os.getenv("AQ_DEV_RUN_DURATION", "8"))
 DEV_OPTICS_PATH = os.getenv("AQ_DEV_OPTICS_PATH")
@@ -63,6 +64,7 @@ run_counter = 1
 drawer_open = False
 drawer_close = False
 exit_button = False
+run_complete_ack = False
 drawer_task = None
 drawer_state_open = False
 drawer_state_closed = False
@@ -256,9 +258,10 @@ def _delete_history_artifacts(entry: dict) -> None:
 
 async def _simulate_run(profile_name: str) -> None:
     global start_time, elapsed_time, timer_running, current_item
-    global results_path, run_requested, run_in_progress
+    global results_path, run_requested, run_in_progress, results_cleared, run_complete_ack
 
     run_in_progress = True
+    run_complete_ack = False
     start_time = datetime.now()
     elapsed_time = 0
     timer_running = True
@@ -293,6 +296,7 @@ async def _simulate_run(profile_name: str) -> None:
     detected_summary = _summarize_results_from_file(results_file)
 
     results_path = str(results_file.resolve())
+    results_cleared = False
 
     history = _load_history()
     history.append({
@@ -310,9 +314,10 @@ async def _simulate_run(profile_name: str) -> None:
     state_change_event.clear()
     run_requested = False
     run_in_progress = False
-
-    await asyncio.sleep(2)
     _advance_run_name()
+    while not run_complete_ack:
+        await asyncio.sleep(0.5)
+    run_complete_ack = False
     current_item.screen = "ready"
     state_change_event.set()
     state_change_event.clear()
@@ -405,30 +410,38 @@ async def get_results():
 
 @app.post("/results/path")
 async def set_path(payload: ResultPath):
-    global results_path
+    global results_path, results_cleared
     results_path = payload.path
+    results_cleared = False
     logger.info("Selected path:", results_path)
     return {"ok":True}
 
 @app.post("/results/clear")
 async def clear_results():
-    global results_path
+    global results_path, results_cleared
     results_path = None
+    results_cleared = True
     return {"ok": True}
 
 @app.post("/run/complete/ack")
 async def acknowledge_run_complete():
-    global results_path, current_item
-    results_path = None
-    if current_item.screen != "ready":
-        current_item.screen = "ready"
-        state_change_event.set()
-        state_change_event.clear()
+    global run_complete_ack
+    run_complete_ack = True
+    return {"ok": True}
+
+@app.post("/run/complete/ack/reset")
+async def reset_run_complete_ack():
+    global run_complete_ack
+    run_complete_ack = False
     return {"ok": True}
 
 @app.get("/results/get_path")
 async def get_path():
     return {"path":results_path}
+
+@app.get("/results/status")
+async def get_results_status():
+    return {"cleared": results_cleared}
 
 @app.get("/history/data")
 async def history_data():
@@ -483,7 +496,12 @@ async def append_history(payload: dict):
     profile = payload.get("profile") or "--"
     run_label = payload.get("run_name") or "--"
     graph_path = payload.get("graph_path")
-    result_path = Path(path_value) if path_value else None
+    result_path = None
+    if path_value:
+        candidate_path = Path(path_value)
+        if not candidate_path.is_absolute():
+            candidate_path = BASE_DIR / path_value.lstrip("/")
+        result_path = candidate_path
     result_text = _summarize_results_from_file(result_path) if result_path else "Results unavailable"
     history = _load_history()
     history.append({
@@ -631,6 +649,7 @@ async def button_status():
         "drawer_open_status":drawer_open,
         "drawer_close_status":drawer_close,
         "exit_button_status":exit_button,
+        "run_complete_ack": run_complete_ack,
         "dev_simulate": DEV_SIMULATE
         }
 

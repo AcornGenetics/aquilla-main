@@ -46,12 +46,33 @@ def update_results_path( results_filename ):
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in path update. Intended path: %s", path )
 
+def mark_results_ready(path: str | Path) -> None:
+    base_dir = Path(get_src_basedir())
+    resolved = Path(path)
+    if not resolved.is_absolute():
+        resolved = base_dir / resolved
+    try:
+        requests.post(
+            "http://127.0.0.1:8090/results/path",
+            json={"path": str(resolved)},
+            timeout=5,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error marking results ready: %s", e)
+
 def log_history(profile, run_name, results_path, graph_path=None):
     url = "http://127.0.0.1:8090/history/append"
+    resolved_results_path = None
+    if results_path:
+        base_dir = Path(get_src_basedir())
+        candidate_path = Path(results_path)
+        if not candidate_path.is_absolute():
+            candidate_path = base_dir / results_path
+        resolved_results_path = str(candidate_path)
     payload = {
         "profile": profile,
         "run_name": run_name,
-        "results_path": results_path,
+        "results_path": resolved_results_path or results_path,
         "graph_path": graph_path
     }
     try:
@@ -79,6 +100,12 @@ def reset_exit():
         requests.post("http://127.0.0.1:8090/exit/reset", timeout=5)
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in path update. Intended path: %s", path )
+
+def reset_run_complete_ack() -> None:
+    try:
+        requests.post("http://127.0.0.1:8090/run/complete/ack/reset", timeout=5)
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error resetting run complete ack: %s", e)
 
 
 def wait_for_button():
@@ -133,6 +160,9 @@ def wait_for_button():
                 requests.post("http://127.0.0.1:8090/exit/reset", timeout=5)
             except Exception as e:
                 logger.warning("Error resetting button", e)
+            return data
+        elif data.get("run_complete_ack"):
+            logger.info("Run complete acknowledged")
             return data
 
 

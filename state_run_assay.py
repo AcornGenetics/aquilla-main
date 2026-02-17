@@ -178,7 +178,6 @@ class AssayInterface():
         results_json = lfn.get_results_json_filename(prefix=f"{run_prefix}_")
         plot_filename = f"{run_prefix}_{lfn.id}.png"
         plot_path = os.path.join("logs/plots", plot_filename)
-        sr.update_results_path( results_json )
 
         logger.info( "PCR log: %s", pcr_log )
         logger.info( "Optics log: %s", optics_log )
@@ -226,6 +225,7 @@ class AssayInterface():
             try:
                 os.makedirs("logs/results", exist_ok=True)
                 results_to_json( optics_log, results_json )
+                sr.mark_results_ready(results_json)
             except Exception as e:
                 logger.error("Failed to generate results: %s", e)
             graph_path = None
@@ -278,6 +278,7 @@ class AssayInterface():
             drawer_open = ret.get("drawer_open_status")
             drawer_close = ret.get("drawer_close_status")
             exit_status = ret.get("exit_button_status")
+            run_complete_ack = ret.get("run_complete_ack")
 
             if( run is True and profile is not None ):
                 break
@@ -321,6 +322,10 @@ class AssayInterface():
                         pass
                 else:
                     pass
+            elif run_complete_ack and state == "end":
+                sr.change_screen("1")
+                sr.reset_run_complete_ack()
+                ret = sr.wait_for_button()
 
         return profile, run_name
 

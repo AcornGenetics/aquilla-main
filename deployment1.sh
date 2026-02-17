@@ -4,6 +4,9 @@ set -euo pipefail
 BASE_DIR="${AQ_SRC_BASEDIR:-/home/pi/aquilla-main}"
 VENV_DIR="${BASE_DIR}/venv"
 BIN_LINK="${BASE_DIR}/bin"
+AUTOLOGIN_USER="${AUTOLOGIN_USER:-${USER}}"
+ROTATE_OUTPUT="${ROTATE_OUTPUT:-HDMI-1}"
+ROTATE_DIR="${ROTATE_DIR:-right}"
 
 echo "Manual step: ensure SSH keys are installed if cloning private repos."
 echo "Using base directory: ${BASE_DIR}"
@@ -29,6 +32,13 @@ python3 -m pip install -r "${BASE_DIR}/requirements.txt"
 sudo apt-get install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit openbox xterm unclutter
 sudo apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
 
+sudo mkdir -p /etc/lightdm/lightdm.conf.d
+sudo tee /etc/lightdm/lightdm.conf.d/autologin.conf >/dev/null <<EOF
+[Seat:*]
+autologin-user=${AUTOLOGIN_USER}
+autologin-session=rpd-x
+EOF
+
 if [[ -d "${BASE_DIR}/server_web" ]]; then
   cp "${BASE_DIR}/server_web/kiosk.py" "${HOME}/"
   sudo cp "${BASE_DIR}/server_web/autostart" /etc/xdg/openbox/
@@ -38,6 +48,12 @@ if [[ -d "${BASE_DIR}/server_web" ]]; then
   fi
   if [[ -d "${BASE_DIR}/server_web/app" ]]; then
     cp -r "${BASE_DIR}/server_web/app" "${HOME}/"
+  fi
+fi
+
+if [[ -f "/etc/xdg/openbox/autostart" ]]; then
+  if ! grep -q "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" /etc/xdg/openbox/autostart; then
+    echo "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" | sudo tee -a /etc/xdg/openbox/autostart >/dev/null
   fi
 fi
 

@@ -9,6 +9,7 @@ const runCompleteModal = document.getElementById("run-complete-modal");
 const runModalClose = runCompleteModal
   ? runCompleteModal.querySelector(".run-modal__close")
   : null;
+const runResetButton = document.getElementById("run-reset-button");
 const drawerActions = document.getElementById("drawer-actions");
 const devOpticsPath = document.getElementById("dev-optics-path");
 const devOpticsWrapper = document.getElementById("run-optics-tab");
@@ -21,10 +22,9 @@ let currentScreen = null;
 let runDoneAcknowledged = false;
 let lastDrawerState = { open: null, closed: null };
 let lastScreen = null;
-let holdCompleteScreen = false;
 let completedRunSeen = false;
-let awaitingDrawerReset = false;
-let drawerOpenedAfterComplete = false;
+let resultsRequestId = 0;
+const RUN_ACK_KEY = "runCompleteAcknowledged";
 
 // Display a panel object { title: "...", text: "..." }
 function showPanel(panel) {
@@ -123,6 +123,7 @@ function setRunButtonState(isRunning) {
 }
 
 function resetResultsUI(message = "Run for results!") {
+  resultsRequestId += 1;
   const summaryEl = document.getElementById("results-summary");
   const tubeEls = document.querySelectorAll(".results-tube");
   if (summaryEl) {
@@ -192,19 +193,6 @@ function updateDrawerWarningFromState(state) {
   } else {
     setDrawerWarning("");
   }
-  if (awaitingDrawerReset) {
-    if (lastDrawerState.open) {
-      drawerOpenedAfterComplete = true;
-    }
-    if (drawerOpenedAfterComplete && lastDrawerState.closed && !lastDrawerState.open) {
-      holdCompleteScreen = false;
-      awaitingDrawerReset = false;
-      drawerOpenedAfterComplete = false;
-      if (isDashboard && currentScreen === "complete") {
-        updateDashboardSections("ready");
-      }
-    }
-  }
 }
 
 function showRunCompleteModal() {
@@ -222,13 +210,36 @@ function hideRunCompleteModal() {
     return;
   }
   runDoneAcknowledged = true;
+  try {
+    window.sessionStorage.setItem(RUN_ACK_KEY, "true");
+  } catch (error) {
+    console.warn("Failed to persist run ack", error);
+  }
   runCompleteModal.classList.add("is-hidden");
   if (isDashboard) {
-    holdCompleteScreen = true;
-    awaitingDrawerReset = true;
-    drawerOpenedAfterComplete = false;
     setRunWarning("");
   }
+}
+
+function resetRunScreen() {
+  if (runCompleteModal) {
+    runCompleteModal.classList.add("is-hidden");
+  }
+  runDoneAcknowledged = true;
+  completedRunSeen = false;
+  resultsRequestId += 1;
+  try {
+    window.sessionStorage.removeItem(RUN_ACK_KEY);
+  } catch (error) {
+    console.warn("Failed to clear run ack", error);
+  }
+  if (isDashboard) {
+    setRunWarning("");
+    setDrawerActionsVisibility(true);
+    updateDashboardSections("ready");
+    resetResultsUI();
+  }
+  fetch("/results/clear", { method: "POST" }).catch(() => null);
   acknowledgeRunComplete();
 }
 
@@ -257,8 +268,13 @@ socket.onmessage = function(event) {
         const previousScreen = lastScreen;
         lastScreen = screen;
         if (screen === "running") {
-          holdCompleteScreen = false;
           completedRunSeen = false;
+          runDoneAcknowledged = false;
+          try {
+            window.sessionStorage.removeItem(RUN_ACK_KEY);
+          } catch (error) {
+            console.warn("Failed to clear run ack", error);
+          }
         }
         if (screen === "running") {
           setRunButtonState(true);
@@ -282,14 +298,10 @@ socket.onmessage = function(event) {
         }
         let targetPath = window.location.pathname;
 
-        let uiScreen = screen;
-        if (isDashboard && holdCompleteScreen && completedRunSeen && screen === "ready") {
-            uiScreen = "complete";
-        }
-        currentScreen = uiScreen;
+        currentScreen = screen;
 
         if (isDashboard) {
-            updateDashboardSections(uiScreen);
+            updateDashboardSections(screen);
             return;
         }
 
@@ -459,6 +471,7 @@ async function notifyExit(){
 }
 
 async function loadResults(){
+    const requestId = ++resultsRequestId;
     const table = document.getElementById("results-table");
     const summaryEl = document.getElementById("results-summary");
     const tubeEls = document.querySelectorAll(".results-tube");
@@ -472,12 +485,28 @@ async function loadResults(){
         return;
     }
 
+    try {
+        const statusResponse = await fetch("/results/status");
+        if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            if (statusData && statusData.cleared) {
+                resetResultsUI("Run for results!");
+                return;
+            }
+        }
+    } catch (err) {
+        console.error("Error fetching results status", err);
+    }
+
     let data = {};
     let hasResultsPayload = false;
     try {
         const ret = await fetch("/results");
         if (ret.ok){
             data = await ret.json();
+            if (requestId !== resultsRequestId) {
+                return;
+            }
             console.log("results json raw", data)
             if (data && typeof data === "object") {
                 if (data.path || data.results_path) {
@@ -491,10 +520,17 @@ async function loadResults(){
         }
     } catch (err){
         console.error("Error fetching results" , err );
+        if (requestId !== resultsRequestId) {
+            return;
+        }
     }
 
     const hasErrorPayload = data && typeof data === "object" && data.data && data.data.failed;
     const hasResults = hasResultsPayload && !hasErrorPayload;
+
+    if (requestId !== resultsRequestId) {
+        return;
+    }
 
     if (table) {
         table.innerHTML = "";
@@ -725,15 +761,12 @@ async function loadProfiles(){
 
 
 document.addEventListener("DOMContentLoaded", () => {
-    holdCompleteScreen = false;
-    completedRunSeen = false;
-    if (isDashboard) {
-        fetch("/results/clear", { method: "POST" })
-          .catch(() => null)
-          .finally(() => {
-            resetResultsUI();
-          });
+    try {
+        runDoneAcknowledged = window.sessionStorage.getItem(RUN_ACK_KEY) === "true";
+    } catch (error) {
+        runDoneAcknowledged = false;
     }
+    completedRunSeen = false;
     loadRunName();
     if (runNameInput) {
         runNameInput.addEventListener("blur", saveRunName);
@@ -772,6 +805,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (runModalClose) {
         runModalClose.addEventListener("click", hideRunCompleteModal);
     }
+    if (runResetButton) {
+        runResetButton.addEventListener("click", resetRunScreen);
+    }
     if (typeof loadProfiles === "function") {
         loadProfiles();
     }
@@ -787,14 +823,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 window.addEventListener("beforeunload", () => {
-    if (!isDashboard) {
-        return;
-    }
-    try {
-        fetch("/run/complete/ack", { method: "POST", keepalive: true }).catch(() => null);
-    } catch (error) {
-        console.error("Failed to acknowledge run complete", error);
-    }
+    return;
 });
 
 

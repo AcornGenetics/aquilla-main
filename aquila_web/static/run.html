@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Run</title>
-  <link rel="stylesheet" href="static/styles.css?v=73" />
+  <link rel="stylesheet" href="static/styles.css?v=78" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -52,9 +52,15 @@
       <p class="run-warning is-hidden" id="run-warning"></p>
       <p class="run-warning is-hidden" id="drawer-warning"></p>
       <div class="run-status-footer">
-        <div class="run-status">
-          <span class="run-status-dot" id="ready-status-dot"></span>
-          <span id="ready-status">Ready</span>
+        <div class="run-status-wrapper">
+          <div class="run-status">
+            <span class="run-status-dot" id="ready-status-dot"></span>
+            <span id="ready-status">Ready</span>
+          </div>
+          <button class="run-reset-btn" id="run-reset-button" type="button">
+            <img class="run-reset-btn__icon" src="/static/reset-icon.svg" alt="" aria-hidden="true" />
+            Reset
+          </button>
         </div>
       </div>
       <section class="run-section run-status-section is-hidden" id="running-section">
@@ -96,6 +102,7 @@
       </div>
     </main>
   </div>
-  <script src="static/script.js?v=36"></script>
+  <script src="static/script.js?v=41"></script>
+  <script src="static/keyboard.js?v=2"></script>
 </body>
 </html>
