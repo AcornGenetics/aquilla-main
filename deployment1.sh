@@ -5,8 +5,8 @@ BASE_DIR="${AQ_SRC_BASEDIR:-/home/pi/aquilla-main}"
 VENV_DIR="${BASE_DIR}/venv"
 BIN_LINK="${BASE_DIR}/bin"
 AUTOLOGIN_USER="${AUTOLOGIN_USER:-${USER}}"
-ROTATE_OUTPUT="${ROTATE_OUTPUT:-HDMI-1}"
-ROTATE_DIR="${ROTATE_DIR:-right}"
+ROTATE_OUTPUT="${ROTATE_OUTPUT:-HDMI-2}"
+ROTATE_DIR="${ROTATE_DIR:-left}"
 
 echo "Manual step: ensure SSH keys are installed if cloning private repos."
 echo "Using base directory: ${BASE_DIR}"
@@ -52,7 +52,9 @@ if [[ -d "${BASE_DIR}/server_web" ]]; then
 fi
 
 if [[ -f "/etc/xdg/openbox/autostart" ]]; then
-  if ! grep -q "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" /etc/xdg/openbox/autostart; then
+  if grep -q "xrandr --output .* --rotate" /etc/xdg/openbox/autostart; then
+    sudo sed -i "s/xrandr --output .* --rotate .*/xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}/" /etc/xdg/openbox/autostart
+  else
     echo "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" | sudo tee -a /etc/xdg/openbox/autostart >/dev/null
   fi
 fi

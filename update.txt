@@ -13,5 +13,5 @@ Update flow (no full rebuild needed unless dependencies change):
 Notes
 - If you add/remove Python packages, re-run the venv install steps from deployment.
 - If you update systemd service files, ensure they are copied into /etc/systemd/system and reload.
-- `update.sh` also enforces LightDM autologin (`rpd-x`) and adds the X11 rotation line to Openbox autostart.
-- Override display rotation with env vars, e.g. `ROTATE_OUTPUT=HDMI-1 ROTATE_DIR=left ./update.sh`.
+- `update.sh` also enforces LightDM autologin (`rpd-x`) and sets the X11 rotation line in Openbox autostart.
+- Override display rotation with env vars, e.g. `ROTATE_OUTPUT=HDMI-2 ROTATE_DIR=right ./update.sh` (default is `left`).

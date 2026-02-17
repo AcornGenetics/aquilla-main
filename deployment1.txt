@@ -87,8 +87,8 @@ A.7 Install x-server and browser
    --ROTATE DISPLAY (X11) --
    xrandr --query
    sudo nano /etc/xdg/openbox/autostart
-   Add line: xrandr --output HDMI-1 --rotate right
-   (Use the output name from xrandr --query, e.g. HDMI-1)
+   Add line: xrandr --output HDMI-2 --rotate left
+   (Use the output name from xrandr --query, e.g. HDMI-2)
 
    sudo reboot now
 

@@ -3,8 +3,8 @@ set -euo pipefail
 
 BASE_DIR="${AQ_SRC_BASEDIR:-/home/pi/aquilla-main}"
 AUTOLOGIN_USER="${AUTOLOGIN_USER:-${USER}}"
-ROTATE_OUTPUT="${ROTATE_OUTPUT:-HDMI-1}"
-ROTATE_DIR="${ROTATE_DIR:-right}"
+ROTATE_OUTPUT="${ROTATE_OUTPUT:-HDMI-2}"
+ROTATE_DIR="${ROTATE_DIR:-left}"
 
 echo "Using base directory: ${BASE_DIR}"
 
@@ -40,10 +40,12 @@ for service in aquila_app.service aquila_web.service serve.service; do
 done
 
 if [[ -f "/etc/xdg/openbox/autostart" ]]; then
-  if ! grep -q "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" /etc/xdg/openbox/autostart; then
+  if grep -q "xrandr --output .* --rotate" /etc/xdg/openbox/autostart; then
+    sudo sed -i "s/xrandr --output .* --rotate .*/xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}/" /etc/xdg/openbox/autostart
+  else
     echo "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" | sudo tee -a /etc/xdg/openbox/autostart >/dev/null
   fi
 fi
 
-echo "Update complete. Reboot if needed: sudo reboot now"
-echo "After reboot, verify paths with: python3 ${BASE_DIR}/scripts/check_service_paths.py"
+echo "Update complete. Rebooting now..."
+sudo reboot now
