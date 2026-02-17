@@ -285,18 +285,20 @@ class AssayInterface():
             if( run is True and profile is not None ):
                 break
             elif( drawer_open is True and drawer_close is False ):
-                sr.change_screen( screens[0] )
                 self.drawer.open()
                 sr.update_drawer_state(is_open=True, is_closed=False)
-                #time.sleep(5) #simulate drawer opening
-                sr.change_screen( screens[1] ) 
+                if state != "end":
+                    sr.change_screen( screens[0] )
+                    #time.sleep(5) #simulate drawer opening
+                    sr.change_screen( screens[1] ) 
                 ret = sr.wait_for_button(include_run_complete_ack)
             elif( drawer_open is False and drawer_close is True ): 
-                sr.change_screen( screens[2] )
                 self.drawer.read()
                 sr.update_drawer_state(is_open=False, is_closed=True)
-                #time.sleep(5) #simulate drawer close
-                sr.change_screen( screens[1] ) 
+                if state != "end":
+                    sr.change_screen( screens[2] )
+                    #time.sleep(5) #simulate drawer close
+                    sr.change_screen( screens[1] ) 
                 ret = sr.wait_for_button(include_run_complete_ack)
             elif( run is True and profile is None ):
                 sr.change_screen( screens[3] )

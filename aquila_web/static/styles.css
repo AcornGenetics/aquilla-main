@@ -593,6 +593,11 @@ body {
   background-color: #f1f5f9;
 }
 
+.run-modal__reset {
+  margin-top: 20px;
+  justify-content: center;
+}
+
 .run-status-footer {
   display: flex;
   flex-direction: column;

@@ -9,6 +9,9 @@ const runCompleteModal = document.getElementById("run-complete-modal");
 const runModalClose = runCompleteModal
   ? runCompleteModal.querySelector(".run-modal__close")
   : null;
+const runModalReset = runCompleteModal
+  ? runCompleteModal.querySelector("#run-modal-reset")
+  : null;
 const runResetButton = document.getElementById("run-reset-button");
 const drawerActions = document.getElementById("drawer-actions");
 const devOpticsPath = document.getElementById("dev-optics-path");
@@ -219,6 +222,7 @@ function hideRunCompleteModal() {
   if (isDashboard) {
     setRunWarning("");
   }
+  acknowledgeRunComplete();
 }
 
 function resetRunScreen() {
@@ -804,6 +808,9 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     if (runModalClose) {
         runModalClose.addEventListener("click", hideRunCompleteModal);
+    }
+    if (runModalReset) {
+        runModalReset.addEventListener("click", resetRunScreen);
     }
     if (runResetButton) {
         runResetButton.addEventListener("click", resetRunScreen);
