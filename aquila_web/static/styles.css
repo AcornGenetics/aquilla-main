@@ -492,6 +492,12 @@ body {
   border-color: var(--icon-light-blue);
 }
 
+.run-reset-btn--nav {
+  padding: 8px 16px;
+  font-size: 16px;
+  box-shadow: none;
+}
+
 .run-cta-wrapper {
   display: flex;
   justify-content: center;

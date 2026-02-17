@@ -107,6 +107,8 @@ function updateDashboardSections(screen) {
     }
   });
 
+  setRunResetVisibility(true);
+
   return true;
 }
 
@@ -174,6 +176,13 @@ function setDrawerActionsVisibility(isVisible) {
     return;
   }
   drawerActions.classList.toggle("is-hidden", !isVisible);
+}
+
+function setRunResetVisibility(isVisible) {
+  if (!runResetButton) {
+    return;
+  }
+  runResetButton.classList.toggle("is-hidden", !isVisible);
 }
 
 function setOpticsVisibility(isDev) {
@@ -826,6 +835,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (normalizedPath === "/run") {
         updateDrawerWarningFromState(lastDrawerState);
+    }
+    if (isDashboard) {
+        setRunResetVisibility(true);
     }
 });
 
