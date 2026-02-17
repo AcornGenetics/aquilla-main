@@ -39,12 +39,16 @@ for service in aquila_app.service aquila_web.service serve.service; do
   fi
 done
 
+sudo mkdir -p /etc/xdg/openbox
+
 if [[ -f "/etc/xdg/openbox/autostart" ]]; then
   if grep -q "xrandr --output .* --rotate" /etc/xdg/openbox/autostart; then
     sudo sed -i "s/xrandr --output .* --rotate .*/xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}/" /etc/xdg/openbox/autostart
   else
     echo "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" | sudo tee -a /etc/xdg/openbox/autostart >/dev/null
   fi
+else
+  echo "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" | sudo tee /etc/xdg/openbox/autostart >/dev/null
 fi
 
 echo "Update complete. Rebooting now..."
