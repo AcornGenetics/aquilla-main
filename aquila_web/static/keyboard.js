@@ -1,5 +1,6 @@
 const KEYBOARD_SELECTOR = ".onscreen-keyboard";
 const INPUT_SELECTOR = "input[type='text'], input[type='password'], input[type='number'], input[type='search'], input[type='tel'], input[type='url'], textarea";
+const KEY_DEBOUNCE_MS = 50;
 
 const KEY_ROWS = [
   ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
@@ -10,6 +11,8 @@ const KEY_ROWS = [
 
 let activeInput = null;
 let keyboardPadding = 0;
+let lastPhysicalKey = null;
+let lastPhysicalKeyTime = 0;
 
 function updateKeyboardSpacing(keyboard, isVisible) {
   if (!keyboard) {
@@ -201,6 +204,30 @@ function hideKeyboard() {
 
 document.addEventListener("DOMContentLoaded", () => {
   buildKeyboard();
+
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    if (!target.matches(INPUT_SELECTOR) || target.classList.contains("keyboard-ignore")) {
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
+    if (event.repeat) {
+      event.preventDefault();
+      return;
+    }
+    const now = performance.now();
+    if (event.key === lastPhysicalKey && now - lastPhysicalKeyTime < KEY_DEBOUNCE_MS) {
+      event.preventDefault();
+      return;
+    }
+    lastPhysicalKey = event.key;
+    lastPhysicalKeyTime = now;
+  });
 
   document.addEventListener("focusin", (event) => {
     const target = event.target;

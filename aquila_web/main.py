@@ -454,6 +454,16 @@ async def timer(payload: TimerControl):
         raise HTTPException(status_code=400, detail="Invalid action")
 
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+
+@app.get("/version")
+async def version_check():
+    return {"version": os.getenv("AQ_APP_VERSION", "unknown")}
+
+
 @app.get("/results")
 async def get_results():
     try:    
