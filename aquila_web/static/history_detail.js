@@ -1,3 +1,36 @@
+const TUBE_NAME_KEY = "aqTubeNames";
+const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
+
+const getTubeNames = () => {
+  try {
+    const stored = localStorage.getItem(TUBE_NAME_KEY);
+    if (!stored) {
+      return DEFAULT_TUBE_NAMES.slice();
+    }
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      return DEFAULT_TUBE_NAMES.slice();
+    }
+    return DEFAULT_TUBE_NAMES.map((fallback, index) => {
+      const value = parsed[index];
+      return typeof value === "string" && value.trim() ? value.trim() : fallback;
+    });
+  } catch (error) {
+    return DEFAULT_TUBE_NAMES.slice();
+  }
+};
+
+const formatResultLabels = (result) => {
+  if (typeof result !== "string") {
+    return result;
+  }
+  const tubeNames = getTubeNames();
+  return tubeNames.reduce((updated, name, index) => {
+    const pattern = new RegExp(`\\bTube ${index + 1}\\b`, "g");
+    return updated.replace(pattern, name);
+  }, result);
+};
+
 async function loadRunDetail() {
   const container = document.getElementById("run-detail");
   if (!container) {
@@ -31,7 +64,7 @@ async function loadRunDetail() {
       <div><strong>Date</strong><span>${entry.timestamp || "--"}</span></div>
       <div><strong>Profile</strong><span>${entry.profile || "--"}</span></div>
       <div><strong>Run Name</strong><span>${entry.run_name || "--"}</span></div>
-      <div><strong>Result</strong><span>${entry.result || "--"}</span></div>
+      <div><strong>Result</strong><span>${formatResultLabels(entry.result || "--")}</span></div>
     `;
     container.appendChild(meta);
 

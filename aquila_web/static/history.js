@@ -1,3 +1,36 @@
+const TUBE_NAME_KEY = "aqTubeNames";
+const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
+
+const getTubeNames = () => {
+  try {
+    const stored = localStorage.getItem(TUBE_NAME_KEY);
+    if (!stored) {
+      return DEFAULT_TUBE_NAMES.slice();
+    }
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      return DEFAULT_TUBE_NAMES.slice();
+    }
+    return DEFAULT_TUBE_NAMES.map((fallback, index) => {
+      const value = parsed[index];
+      return typeof value === "string" && value.trim() ? value.trim() : fallback;
+    });
+  } catch (error) {
+    return DEFAULT_TUBE_NAMES.slice();
+  }
+};
+
+const formatResultLabels = (result) => {
+  if (typeof result !== "string") {
+    return result;
+  }
+  const tubeNames = getTubeNames();
+  return tubeNames.reduce((updated, name, index) => {
+    const pattern = new RegExp(`\\bTube ${index + 1}\\b`, "g");
+    return updated.replace(pattern, name);
+  }, result);
+};
+
 async function loadHistory() {
   const tableBody = document.getElementById("history-table-body");
   if (!tableBody) {
@@ -47,7 +80,7 @@ async function loadHistory() {
       row.appendChild(profileCell);
 
       const resultCell = document.createElement("td");
-      resultCell.textContent = entry.result || "--";
+      resultCell.textContent = formatResultLabels(entry.result || "--");
       row.appendChild(resultCell);
 
       const graphCell = document.createElement("td");

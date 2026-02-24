@@ -6,6 +6,8 @@ const viewMode = params.get("mode") === "view" || params.get("view") === "1";
 const nameInput = document.getElementById("profile-name");
 const chemistryInput = document.getElementById("profile-chemistry");
 const volumeInput = document.getElementById("profile-volume");
+const famLabelInput = document.getElementById("profile-fam-label");
+const roxLabelInput = document.getElementById("profile-rox-label");
 const saveButton = document.getElementById("save-profile-button");
 const saveStatus = document.getElementById("save-status");
 const pageTitle = document.getElementById("profile-page-title");
@@ -13,6 +15,7 @@ const pageSubtitle = document.getElementById("profile-page-subtitle");
 
 const stageSelect = document.getElementById("stage-select");
 const stageNameInput = document.getElementById("stage-name");
+const stageCyclesInput = document.getElementById("stage-cycles");
 const stageStepsContainer = document.getElementById("stage-steps");
 const addStageButton = document.getElementById("add-stage");
 const deleteStageButton = document.getElementById("delete-stage");
@@ -23,6 +26,7 @@ const editSections = document.querySelectorAll(".profile-edit");
 const summarySection = document.getElementById("profile-summary");
 
 let isReadView = viewMode;
+const DEFAULT_DYE_LABELS = { fam: "FAM", rox: "ROX" };
 
 const parseDuration = (value) => {
   if (typeof value !== "string") return 0;
@@ -47,18 +51,36 @@ const generateId = (prefix) => {
   return `${prefix}-${Date.now()}-${idCounter}`;
 };
 
+const stepTypeOptions = [
+  { value: "setpoint", label: "Temperature Hold" },
+  { value: "ramp_rate", label: "Ramp Rate" },
+  { value: "enable", label: "Enable" },
+  { value: "disable", label: "Disable" },
+  { value: "pcr_fanon", label: "PCR Fan On" },
+  { value: "pcr_fanoff", label: "PCR Fan Off" }
+];
+
+const stepTypeLabel = (value) => {
+  const match = stepTypeOptions.find((option) => option.value === value);
+  return match ? match.label : "Step";
+};
+
 const createStep = (overrides = {}) => ({
   id: generateId("step"),
+  type: "setpoint",
   temperature: 20,
   duration: "00:00:30",
-  cycles: 1,
+  rampRate: 1,
+  description: "",
   ...overrides
 });
 
-const createStage = (name) => ({
+const createStage = (name, overrides = {}) => ({
   id: generateId("stage"),
   name,
-  steps: [createStep()]
+  cycles: 1,
+  steps: [createStep()],
+  ...overrides
 });
 
 let stages = [createStage("Stage 1")];
@@ -87,14 +109,32 @@ const renderSteps = () => {
   if (stageNameInput) {
     stageNameInput.value = stage.name;
   }
+  if (stageCyclesInput) {
+    stageCyclesInput.value = stage.cycles || 1;
+  }
 
   stage.steps.forEach((step, index) => {
     const row = document.createElement("div");
     row.className = "profile-step-row";
     row.dataset.stepId = step.id;
 
+    const typeField = document.createElement("div");
+    typeField.className = "field";
+    typeField.innerHTML = `
+      <label for="type-${step.id}">Step ${index + 1} Type</label>
+      <select id="type-${step.id}">
+        ${stepTypeOptions
+          .map(
+            (option) =>
+              `<option value="${option.value}">${option.label}</option>`
+          )
+          .join("")}
+      </select>
+    `;
+
     const tempField = document.createElement("div");
     tempField.className = "field";
+    tempField.dataset.visibleFor = "setpoint";
     tempField.innerHTML = `
       <label for="temp-${step.id}">Step ${index + 1} Temperature (°C)</label>
       <input id="temp-${step.id}" type="number" value="${step.temperature}" />
@@ -102,16 +142,26 @@ const renderSteps = () => {
 
     const durationField = document.createElement("div");
     durationField.className = "field";
+    durationField.dataset.visibleFor = "setpoint,enable,disable";
     durationField.innerHTML = `
       <label for="duration-${step.id}">Step ${index + 1} Duration (HH:MM:SS)</label>
       <input id="duration-${step.id}" type="text" value="${step.duration}" />
     `;
 
-    const cyclesField = document.createElement("div");
-    cyclesField.className = "field";
-    cyclesField.innerHTML = `
-      <label for="cycles-${step.id}">Cycles</label>
-      <input id="cycles-${step.id}" type="number" value="${step.cycles}" />
+    const rampRateField = document.createElement("div");
+    rampRateField.className = "field";
+    rampRateField.dataset.visibleFor = "ramp_rate";
+    rampRateField.innerHTML = `
+      <label for="ramp-${step.id}">Ramp Rate (°C/s)</label>
+      <input id="ramp-${step.id}" type="number" value="${step.rampRate}" />
+    `;
+
+    const descriptionField = document.createElement("div");
+    descriptionField.className = "field";
+    descriptionField.dataset.visibleFor = "setpoint,ramp_rate,enable,disable,pcr_fanon,pcr_fanoff";
+    descriptionField.innerHTML = `
+      <label for="desc-${step.id}">Description</label>
+      <input id="desc-${step.id}" type="text" value="${step.description}" />
     `;
 
     const actions = document.createElement("div");
@@ -129,20 +179,40 @@ const renderSteps = () => {
     });
     actions.appendChild(deleteButton);
 
+    row.appendChild(typeField);
     row.appendChild(tempField);
     row.appendChild(durationField);
-    row.appendChild(cyclesField);
+    row.appendChild(rampRateField);
+    row.appendChild(descriptionField);
     row.appendChild(actions);
 
+    const updateStepVisibility = () => {
+      row.querySelectorAll("[data-visible-for]").forEach((field) => {
+        const types = field.dataset.visibleFor.split(",");
+        field.style.display = types.includes(step.type) ? "" : "none";
+      });
+    };
+
+    row.querySelector(`#type-${step.id}`).value = step.type;
+    row.querySelector(`#type-${step.id}`).addEventListener("change", (event) => {
+      step.type = event.target.value;
+      updateStepVisibility();
+      renderSummary();
+    });
     row.querySelector(`#temp-${step.id}`).addEventListener("input", (event) => {
       step.temperature = Number(event.target.value) || 0;
     });
     row.querySelector(`#duration-${step.id}`).addEventListener("input", (event) => {
       step.duration = event.target.value;
     });
-    row.querySelector(`#cycles-${step.id}`).addEventListener("input", (event) => {
-      step.cycles = Math.max(1, Number(event.target.value) || 1);
+    row.querySelector(`#ramp-${step.id}`).addEventListener("input", (event) => {
+      step.rampRate = Number(event.target.value) || 0;
     });
+    row.querySelector(`#desc-${step.id}`).addEventListener("input", (event) => {
+      step.description = event.target.value;
+    });
+
+    updateStepVisibility();
 
     stageStepsContainer.appendChild(row);
   });
@@ -167,28 +237,56 @@ const renderSummary = () => {
     stage.steps.forEach((step, stepIndex) => {
       const row = document.createElement("div");
       row.className = "profile-summary-step";
-      row.innerHTML = `
+      const summaryItems = [
+        {
+          label: "Step",
+          value: stepIndex + 1
+        },
+        {
+          label: "Type",
+          value: stepTypeLabel(step.type)
+        }
+      ];
+
+      if (step.type === "setpoint") {
+        summaryItems.push(
+          { label: "Temp (°C)", value: step.temperature },
+          { label: "Duration", value: step.duration }
+        );
+      }
+
+      if (step.type === "ramp_rate") {
+        summaryItems.push({ label: "Ramp Rate", value: step.rampRate });
+      }
+
+      if (step.type === "enable" || step.type === "disable") {
+        summaryItems.push({ label: "Duration", value: step.duration });
+      }
+
+      if (step.description) {
+        summaryItems.push({ label: "Description", value: step.description });
+      }
+
+      row.innerHTML = summaryItems
+        .map(
+          (item) => `
         <div>
-          <span class="profile-summary-label">Step</span>
-          <span class="profile-summary-value">${stepIndex + 1}</span>
+          <span class="profile-summary-label">${item.label}</span>
+          <span class="profile-summary-value">${item.value}</span>
         </div>
-        <div>
-          <span class="profile-summary-label">Temp (°C)</span>
-          <span class="profile-summary-value">${step.temperature}</span>
-        </div>
-        <div>
-          <span class="profile-summary-label">Duration</span>
-          <span class="profile-summary-value">${step.duration}</span>
-        </div>
-        <div>
-          <span class="profile-summary-label">Cycles</span>
-          <span class="profile-summary-value">${step.cycles}</span>
-        </div>
-      `;
+      `
+        )
+        .join("");
       stepsGrid.appendChild(row);
     });
 
     stageCard.appendChild(stageHeader);
+    if (stage.cycles && stage.cycles > 1) {
+      const stageCycles = document.createElement("div");
+      stageCycles.className = "profile-summary-stage-header";
+      stageCycles.textContent = `Cycles: ${stage.cycles}`;
+      stageCard.appendChild(stageCycles);
+    }
     stageCard.appendChild(stepsGrid);
     summaryList.appendChild(stageCard);
   });
@@ -225,8 +323,11 @@ const applyViewMode = () => {
   const editableSelectors = [
     "#profile-name",
     "#profile-volume",
+    "#profile-fam-label",
+    "#profile-rox-label",
     "#stage-select",
     "#stage-name",
+    "#stage-cycles",
     "#add-stage",
     "#delete-stage",
     "#add-step",
@@ -244,7 +345,7 @@ const applyViewMode = () => {
         }
       });
     });
-    document.querySelectorAll(".profile-step-row input").forEach((input) => {
+    document.querySelectorAll(".profile-step-row input, .profile-step-row select").forEach((input) => {
       input.setAttribute("disabled", "disabled");
     });
   } else {
@@ -257,7 +358,7 @@ const applyViewMode = () => {
         }
       });
     });
-    document.querySelectorAll(".profile-step-row input").forEach((input) => {
+    document.querySelectorAll(".profile-step-row input, .profile-step-row select").forEach((input) => {
       input.removeAttribute("disabled");
     });
   }
@@ -284,20 +385,100 @@ const applyViewMode = () => {
 const buildStepsPayload = () => {
   const payload = [];
   stages.forEach((stage) => {
-    stage.steps.forEach((step) => {
-      const durationSeconds = parseDuration(step.duration);
-      const stepData = {
-        setpoint: Number(step.temperature) || 0,
-        duration: durationSeconds
-      };
-      if (step.cycles && Number(step.cycles) > 1) {
-        payload.push({ repeat: [stepData], cycles: Number(step.cycles) });
-      } else {
-        payload.push(stepData);
-      }
-    });
+    const stepsPayload = stage.steps
+      .map((step) => {
+        const durationSeconds = parseDuration(step.duration);
+        if (step.type === "setpoint") {
+          const stepData = {
+            setpoint: Number(step.temperature) || 0,
+            duration: durationSeconds
+          };
+          if (step.description) {
+            stepData.description = step.description;
+          }
+          return stepData;
+        }
+        if (step.type === "ramp_rate") {
+          const stepData = { ramp_rate: Number(step.rampRate) || 0 };
+          if (step.description) {
+            stepData.description = step.description;
+          }
+          return stepData;
+        }
+        if (step.type === "enable" || step.type === "disable") {
+          const stepData = {
+            [step.type]: 0,
+            duration: durationSeconds
+          };
+          if (step.description) {
+            stepData.description = step.description;
+          }
+          return stepData;
+        }
+        if (step.type === "pcr_fanon" || step.type === "pcr_fanoff") {
+          const stepData = { [step.type]: step.type === "pcr_fanon" ? 1 : 0 };
+          if (step.description) {
+            stepData.description = step.description;
+          }
+          return stepData;
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    const stageCycles = Math.max(1, Number(stage.cycles) || 1);
+    if (stageCycles > 1 && stepsPayload.length) {
+      payload.push({ repeat: stepsPayload, cycles: stageCycles });
+    } else {
+      payload.push(...stepsPayload);
+    }
   });
   return payload;
+};
+
+const parseProfileStep = (step) => {
+  if (step.setpoint !== undefined) {
+    return createStep({
+      type: "setpoint",
+      temperature: step.setpoint ?? 20,
+      duration: formatDuration(step.duration ?? 0),
+      description: step.description || ""
+    });
+  }
+  if (step.ramp_rate !== undefined) {
+    return createStep({
+      type: "ramp_rate",
+      rampRate: step.ramp_rate ?? 1,
+      description: step.description || ""
+    });
+  }
+  if (step.enable !== undefined) {
+    return createStep({
+      type: "enable",
+      duration: formatDuration(step.duration ?? 0),
+      description: step.description || ""
+    });
+  }
+  if (step.disable !== undefined) {
+    return createStep({
+      type: "disable",
+      duration: formatDuration(step.duration ?? 0),
+      description: step.description || ""
+    });
+  }
+  if (step.pcr_fanon !== undefined) {
+    return createStep({
+      type: "pcr_fanon",
+      description: step.description || ""
+    });
+  }
+  if (step.pcr_fanoff !== undefined) {
+    return createStep({
+      type: "pcr_fanoff",
+      description: step.description || ""
+    });
+  }
+  return null;
 };
 
 async function loadProfileDetails() {
@@ -323,35 +504,36 @@ async function loadProfileDetails() {
     if (data.chemistry && chemistryInput) {
       chemistryInput.value = data.chemistry;
     }
-    if (data.volume && volumeInput) {
-      volumeInput.value = data.volume;
-    }
+  if (data.volume && volumeInput) {
+    volumeInput.value = data.volume;
+  }
+  if (famLabelInput) {
+    famLabelInput.value = data.labels?.fam || DEFAULT_DYE_LABELS.fam;
+  }
+  if (roxLabelInput) {
+    roxLabelInput.value = data.labels?.rox || DEFAULT_DYE_LABELS.rox;
+  }
 
     const parsedStages = [];
     let stageIndex = 1;
     (data.steps || []).forEach((step) => {
       if (Array.isArray(step.repeat)) {
-        const stage = {
-          id: generateId("stage"),
-          name: `Stage ${stageIndex}`,
-          steps: step.repeat.map((repeatStep) => createStep({
-            temperature: repeatStep.setpoint ?? 20,
-            duration: formatDuration(repeatStep.duration ?? 0),
-            cycles: Number(step.cycles) || 1
-          }))
-        };
-        parsedStages.push(stage);
+        const stageSteps = step.repeat
+          .map((repeatStep) => parseProfileStep(repeatStep))
+          .filter(Boolean);
+        parsedStages.push(createStage(`Stage ${stageIndex}`, {
+          cycles: Math.max(1, Number(step.cycles) || 1),
+          steps: stageSteps.length ? stageSteps : [createStep()]
+        }));
         stageIndex += 1;
-      } else if (step.setpoint !== undefined) {
-        parsedStages.push({
-          id: generateId("stage"),
-          name: `Stage ${stageIndex}`,
-          steps: [createStep({
-            temperature: step.setpoint ?? 20,
-            duration: formatDuration(step.duration ?? 0),
-            cycles: 1
-          })]
-        });
+        return;
+      }
+      const parsedStep = parseProfileStep(step);
+      if (parsedStep) {
+        parsedStages.push(createStage(`Stage ${stageIndex}`, {
+          cycles: 1,
+          steps: [parsedStep]
+        }));
         stageIndex += 1;
       }
     });
@@ -378,7 +560,9 @@ async function saveProfile() {
     chemistry: chemistryInput ? chemistryInput.value : "",
     volume: volumeInput ? volumeInput.value : "",
     profile_id: profileId,
-    steps: buildStepsPayload()
+    steps: buildStepsPayload(),
+    fam_label: famLabelInput ? famLabelInput.value.trim() : DEFAULT_DYE_LABELS.fam,
+    rox_label: roxLabelInput ? roxLabelInput.value.trim() : DEFAULT_DYE_LABELS.rox
   };
 
   try {
@@ -415,6 +599,15 @@ if (stageNameInput) {
   });
 }
 
+if (stageCyclesInput) {
+  stageCyclesInput.addEventListener("input", (event) => {
+    const stage = getSelectedStage();
+    if (!stage) return;
+    stage.cycles = Math.max(1, Number(event.target.value) || 1);
+    renderSummary();
+  });
+}
+
 if (addStageButton) {
   addStageButton.addEventListener("click", addStage);
 }
@@ -433,6 +626,14 @@ if (saveButton) {
 
 if (profileName && nameInput) {
   nameInput.value = profileName;
+}
+
+if (famLabelInput) {
+  famLabelInput.value = DEFAULT_DYE_LABELS.fam;
+}
+
+if (roxLabelInput) {
+  roxLabelInput.value = DEFAULT_DYE_LABELS.rox;
 }
 
 if (pageTitle && !profileId && !profileName) {

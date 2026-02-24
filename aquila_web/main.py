@@ -56,6 +56,25 @@ def resolve_profile_dir() -> Path:
         return DEFAULT_PROFILE_DIR
     return LOCAL_PROFILE_DIR
 
+def _load_profile_labels(profile_name: str | None) -> dict:
+    if not profile_name:
+        return {}
+    profile_dir = resolve_profile_dir()
+    if not profile_dir.exists():
+        return {}
+    for path in profile_dir.glob("*.json"):
+        try:
+            with path.open() as f:
+                data = json.load(f)
+            title = data.get("title", path.stem)
+            profile_title = data.get("name", title)
+            if profile_title == profile_name or path.stem == profile_name or path.name == profile_name:
+                labels = data.get("labels")
+                return labels if isinstance(labels, dict) else {}
+        except Exception:
+            continue
+    return {}
+
 profile_dir = resolve_profile_dir()
 run_requested = False
 selected_profile = None
@@ -86,6 +105,8 @@ class ProfileSave(BaseModel):
     volume: Optional[str] = None
     profile_id: Optional[str] = None
     steps: Optional[list] = None
+    fam_label: Optional[str] = None
+    rox_label: Optional[str] = None
 
 class ProfileDelete(BaseModel):
     profiles: list[str]
@@ -328,7 +349,8 @@ async def _simulate_run(profile_name: str) -> None:
     curve_runner = Curve(src_basedir=str(RESULTS_DIR))
     curve_runner.results_to_json(str(optics_path), results_file.name)
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
-    generate_optics_plot(str(optics_path), str(plot_path))
+    labels = _load_profile_labels(profile_name)
+    generate_optics_plot(str(optics_path), str(plot_path), labels=labels)
     detected_summary = _summarize_results_from_file(results_file)
 
     results_path = str(results_file.resolve())
@@ -341,7 +363,8 @@ async def _simulate_run(profile_name: str) -> None:
         "run_name": run_name,
         "result": detected_summary,
         "graph_path": f"/plots/{plot_filename}",
-        "results_path": results_path
+        "results_path": results_path,
+        "labels": labels
     })
     _save_history(history)
 
@@ -910,6 +933,15 @@ async def save_profile(payload: ProfileSave):
         base_profile["volume"] = payload.volume
     if payload.steps is not None:
         base_profile["steps"] = payload.steps
+    labels = {}
+    if isinstance(base_profile.get("labels"), dict):
+        labels.update(base_profile.get("labels", {}))
+    if payload.fam_label is not None:
+        labels["fam"] = payload.fam_label
+    if payload.rox_label is not None:
+        labels["rox"] = payload.rox_label
+    if labels:
+        base_profile["labels"] = labels
 
     if not profile_path:
         file_name = sanitize_name(payload.name)
@@ -986,6 +1018,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
             "title": data.get("name"),
             "chemistry": data.get("configuration", {}).get("chemistry"),
             "volume": data.get("configuration", {}).get("volume"),
+            "labels": data.get("labels", {}),
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
         }
 
@@ -994,6 +1027,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         "title": data.get("title", profile_path.stem),
         "chemistry": data.get("chemistry"),
         "volume": data.get("volume"),
+        "labels": data.get("labels", {}),
         "steps": data.get("steps", [])
     }
 

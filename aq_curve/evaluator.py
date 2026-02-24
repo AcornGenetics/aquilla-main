@@ -299,11 +299,9 @@ def evaluate_curve(curve, log_name, dye, well):
         for name, passed in results.items()
         if name != "check_threshold_crossing"
     )
-    if curve.test_run or baseline_fail:
-        status = "inconclusive"
-    elif not threshold_pass:
+    if not threshold_pass:
         status = "undetected"
-    elif other_fail:
+    elif curve.test_run or baseline_fail or other_fail:
         status = "inconclusive"
     else:
         status = "detected"

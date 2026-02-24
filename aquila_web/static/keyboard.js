@@ -9,6 +9,23 @@ const KEY_ROWS = [
 ];
 
 let activeInput = null;
+let keyboardPadding = 0;
+
+function updateKeyboardSpacing(keyboard, isVisible) {
+  if (!keyboard) {
+    return;
+  }
+  if (isVisible) {
+    const rect = keyboard.getBoundingClientRect();
+    keyboardPadding = rect.height + 24;
+    document.body.style.paddingBottom = `${keyboardPadding}px`;
+    document.body.classList.add("keyboard-visible");
+    return;
+  }
+  document.body.style.paddingBottom = "";
+  document.body.classList.remove("keyboard-visible");
+  keyboardPadding = 0;
+}
 
 function buildKeyboard() {
   if (document.querySelector(KEYBOARD_SELECTOR)) {
@@ -164,6 +181,12 @@ function showKeyboard(target) {
   const keyboard = document.querySelector(KEYBOARD_SELECTOR);
   if (keyboard) {
     keyboard.classList.add("is-visible");
+    requestAnimationFrame(() => {
+      updateKeyboardSpacing(keyboard, true);
+      if (typeof activeInput.scrollIntoView === "function") {
+        activeInput.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
   }
 }
 
@@ -171,6 +194,7 @@ function hideKeyboard() {
   const keyboard = document.querySelector(KEYBOARD_SELECTOR);
   if (keyboard) {
     keyboard.classList.remove("is-visible");
+    updateKeyboardSpacing(keyboard, false);
   }
   activeInput = null;
 }

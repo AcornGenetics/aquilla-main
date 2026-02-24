@@ -3,7 +3,7 @@ import os
 DEFAULTS = {
     "PCR_BASELINE_SLOPE_MAX": 0.5,
     "PCR_BASELINE_STD_MAX": 5.0,
-    "PCR_CQ_MAX": 30,
+    "PCR_CQ_MAX": 38,
     "PCR_CQ_MIN": 5,
     "PCR_LATE_CYCLES": 3,
     "PCR_LATE_DRIFT_MAX": 0.85,

@@ -41,6 +41,16 @@
               <input id="profile-volume" type="text" value="" />
             </div>
           </div>
+          <div class="field-grid">
+            <div class="field">
+              <label for="profile-fam-label">FAM Label</label>
+              <input id="profile-fam-label" type="text" value="FAM" />
+            </div>
+            <div class="field">
+              <label for="profile-rox-label">ROX Label</label>
+              <input id="profile-rox-label" type="text" value="ROX" />
+            </div>
+          </div>
         </section>
         <section class="card profile-summary is-hidden" id="profile-summary">
           <header class="page-header">
@@ -52,7 +62,7 @@
         <section class="card profile-edit" id="profile-edit-steps">
           <header class="page-header">
             <h2>Profile Steps</h2>
-            <p>Define temperatures and durations for each step.</p>
+            <p>Define step types, temperatures, and durations.</p>
           </header>
           <div class="profile-steps">
             <div class="stage-controls">
@@ -60,14 +70,18 @@
                 <label for="stage-select">Stage</label>
                 <select id="stage-select"></select>
               </div>
-              <div class="field">
-                <label for="stage-name">Stage Name</label>
-                <input id="stage-name" type="text" value="" />
-              </div>
-              <div class="stage-actions">
-                <button id="add-stage" class="form-action-btn form-action-btn--primary" type="button">Add Stage</button>
-                <button id="delete-stage" class="form-action-btn" type="button">Delete Stage</button>
-              </div>
+            <div class="field">
+              <label for="stage-name">Stage Name</label>
+              <input id="stage-name" type="text" value="" />
+            </div>
+            <div class="field">
+              <label for="stage-cycles">Stage Cycles</label>
+              <input id="stage-cycles" type="number" value="1" min="1" />
+            </div>
+            <div class="stage-actions">
+              <button id="add-stage" class="form-action-btn form-action-btn--primary" type="button">Add Stage</button>
+              <button id="delete-stage" class="form-action-btn" type="button">Delete Stage</button>
+            </div>
             </div>
             <div id="stage-steps"></div>
             <div class="button-row">
@@ -83,7 +97,7 @@
       </div>
     </main>
   </div>
-  <script src="/static/profiles/edit.js?v=8"></script>
-  <script src="/static/keyboard.js?v=2"></script>
+  <script src="/static/profiles/edit.js?v=11"></script>
+  <script src="/static/keyboard.js?v=3"></script>
 </body>
 </html>

@@ -9,9 +9,12 @@ const runCompleteModal = document.getElementById("run-complete-modal");
 const runModalClose = runCompleteModal
   ? runCompleteModal.querySelector(".run-modal__close")
   : null;
-const runModalReset = runCompleteModal
-  ? runCompleteModal.querySelector("#run-modal-reset")
-  : null;
+if (runCompleteModal) {
+  const modalReset = runCompleteModal.querySelector(".run-modal__reset");
+  if (modalReset) {
+    modalReset.remove();
+  }
+}
 const runResetButton = document.getElementById("run-reset-button");
 const drawerActions = document.getElementById("drawer-actions");
 const devOpticsPath = document.getElementById("dev-optics-path");
@@ -28,6 +31,95 @@ let lastScreen = null;
 let completedRunSeen = false;
 let resultsRequestId = 0;
 const RUN_ACK_KEY = "runCompleteAcknowledged";
+const TUBE_NAME_KEY = "aqTubeNames";
+const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
+let tubeNames = DEFAULT_TUBE_NAMES.slice();
+const DEFAULT_DYE_LABELS = { fam: "FAM", rox: "ROX" };
+let dyeLabels = { ...DEFAULT_DYE_LABELS };
+
+const loadTubeNames = () => {
+  try {
+    const stored = localStorage.getItem(TUBE_NAME_KEY);
+    if (!stored) {
+      return DEFAULT_TUBE_NAMES.slice();
+    }
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      return DEFAULT_TUBE_NAMES.slice();
+    }
+    return DEFAULT_TUBE_NAMES.map((fallback, index) => {
+      const value = parsed[index];
+      return typeof value === "string" && value.trim() ? value.trim() : fallback;
+    });
+  } catch (error) {
+    return DEFAULT_TUBE_NAMES.slice();
+  }
+};
+
+const saveTubeNames = (names) => {
+  tubeNames = names.map((name, index) => {
+    const fallback = DEFAULT_TUBE_NAMES[index];
+    return typeof name === "string" && name.trim() ? name.trim() : fallback;
+  });
+  try {
+    localStorage.setItem(TUBE_NAME_KEY, JSON.stringify(tubeNames));
+  } catch (error) {
+    return;
+  }
+};
+
+const updateTubeLabels = () => {
+  const labelInputs = document.querySelectorAll(".results-tube__label-input");
+  labelInputs.forEach((input, index) => {
+    input.value = tubeNames[index] || DEFAULT_TUBE_NAMES[index];
+  });
+};
+
+const setupTubeNameInputs = () => {
+  const labelInputs = document.querySelectorAll(".results-tube__label-input");
+  if (!labelInputs.length) {
+    return;
+  }
+  labelInputs.forEach((input, index) => {
+    input.value = tubeNames[index] || DEFAULT_TUBE_NAMES[index];
+    input.addEventListener("input", (event) => {
+      const nextNames = tubeNames.slice();
+      nextNames[index] = event.target.value;
+      saveTubeNames(nextNames);
+      if (typeof loadResults === "function") {
+        loadResults();
+      }
+    });
+  });
+};
+
+const applyDyeLabels = (labels = {}) => {
+  dyeLabels = {
+    fam: labels.fam || DEFAULT_DYE_LABELS.fam,
+    rox: labels.rox || DEFAULT_DYE_LABELS.rox
+  };
+  if (typeof loadResults === "function") {
+    loadResults();
+  }
+};
+
+const loadProfileLabels = async (profileId) => {
+  if (!profileId) {
+    applyDyeLabels();
+    return;
+  }
+  try {
+    const response = await fetch(`/profiles/details?id=${encodeURIComponent(profileId)}`);
+    if (!response.ok) {
+      applyDyeLabels();
+      return;
+    }
+    const data = await response.json();
+    applyDyeLabels(data.labels || {});
+  } catch (error) {
+    applyDyeLabels();
+  }
+};
 
 // Display a panel object { title: "...", text: "..." }
 function showPanel(panel) {
@@ -550,8 +642,8 @@ async function loadResults(){
 
         const numRows = 3;
         const numCols = 5;
-        const rowHeader = [ "","ROX", "FAM"];
-        const colHeader = [ "","Tube 1", "Tube 2", "Tube 3" , "Tube 4"];
+        const rowHeader = ["", dyeLabels.rox, dyeLabels.fam];
+        const colHeader = ["", ...tubeNames];
 
         for(let r = 0; r < numRows; r++){
             const tr = document.createElement("tr");
@@ -622,10 +714,10 @@ async function loadResults(){
 
         if (summaryEl) {
             const detectedLabels = tubeDetected
-              .map((detected, index) => (detected ? `Tube ${index + 1}` : null))
+              .map((detected, index) => (detected ? tubeNames[index] : null))
               .filter(Boolean);
             const inconclusiveLabels = tubeInconclusive
-              .map((flag, index) => (flag ? `Tube ${index + 1} inconclusive` : null))
+              .map((flag, index) => (flag ? `${tubeNames[index]} inconclusive` : null))
               .filter(Boolean);
             if (!detectedLabels.length && !inconclusiveLabels.length) {
                 summaryEl.textContent = "No targets detected";
@@ -719,6 +811,7 @@ async function loadProfiles(){
             if (placeholderOption) {
                 placeholderOption.selected = false;
             }
+            loadProfileLabels(matchedOption.value);
             return true;
         };
 
@@ -762,6 +855,7 @@ async function loadProfiles(){
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({profile})
                 });
+                loadProfileLabels(profile);
             } catch (err) {
                 console.error("Failed to send selected profile:" , err);
             }
@@ -774,6 +868,10 @@ async function loadProfiles(){
 
 
 document.addEventListener("DOMContentLoaded", () => {
+    tubeNames = loadTubeNames();
+    updateTubeLabels();
+    setupTubeNameInputs();
+    applyDyeLabels();
     try {
         runDoneAcknowledged = window.sessionStorage.getItem(RUN_ACK_KEY) === "true";
     } catch (error) {
@@ -817,9 +915,6 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     if (runModalClose) {
         runModalClose.addEventListener("click", hideRunCompleteModal);
-    }
-    if (runModalReset) {
-        runModalReset.addEventListener("click", resetRunScreen);
     }
     if (runResetButton) {
         runResetButton.addEventListener("click", resetRunScreen);
