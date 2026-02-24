@@ -13,6 +13,7 @@ let activeInput = null;
 let keyboardPadding = 0;
 let lastPhysicalKey = null;
 let lastPhysicalKeyTime = 0;
+let suppressMouseEvents = false;
 
 function updateKeyboardSpacing(keyboard, isVisible) {
   if (!keyboard) {
@@ -37,22 +38,33 @@ function buildKeyboard() {
 
   const keyboard = document.createElement("div");
   keyboard.className = "onscreen-keyboard";
-  keyboard.addEventListener("mousedown", (event) => {
+  const handlePointerPress = (event) => {
     const key = event.target.closest(".keyboard-key");
     if (!key || !key.dataset.value) {
       return;
     }
-    event.preventDefault();
-    handleKeyPress(key.dataset.value);
-  });
-  keyboard.addEventListener("touchstart", (event) => {
-    const key = event.target.closest(".keyboard-key");
-    if (!key || !key.dataset.value) {
-      return;
+    if (event.cancelable) {
+      event.preventDefault();
     }
-    event.preventDefault();
     handleKeyPress(key.dataset.value);
-  });
+  };
+  if (window.PointerEvent) {
+    keyboard.addEventListener("pointerdown", handlePointerPress);
+  } else {
+    keyboard.addEventListener("mousedown", (event) => {
+      if (suppressMouseEvents) {
+        return;
+      }
+      handlePointerPress(event);
+    });
+    keyboard.addEventListener("touchstart", (event) => {
+      suppressMouseEvents = true;
+      handlePointerPress(event);
+      window.setTimeout(() => {
+        suppressMouseEvents = false;
+      }, 500);
+    });
+  }
 
   KEY_ROWS.forEach((row) => {
     const rowEl = document.createElement("div");
@@ -239,18 +251,4 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  document.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) {
-      return;
-    }
-    const keyboard = document.querySelector(KEYBOARD_SELECTOR);
-    if (keyboard && keyboard.contains(target)) {
-      const key = target.closest(".keyboard-key");
-      if (key && key.dataset.value) {
-        handleKeyPress(key.dataset.value);
-      }
-      return;
-    }
-  });
 });
