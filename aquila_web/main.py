@@ -800,6 +800,17 @@ async def list_profiles():
                     data.get("volume")
                 )
             })
+    name_counts = {}
+    for profile in profiles:
+        name = profile.get("name") or profile.get("label") or profile.get("id") or "profile"
+        name_counts[name] = name_counts.get(name, 0) + 1
+    for profile in profiles:
+        name = profile.get("name") or profile.get("label") or profile.get("id") or "profile"
+        profile_id = str(profile.get("id") or "").removesuffix(".json")
+        if name_counts.get(name, 0) > 1 and profile_id:
+            profile["display_name"] = f"{name} ({profile_id})"
+        else:
+            profile["display_name"] = name
     return profiles
 
 def _sanitize_profile_filename(name: str) -> str:
@@ -921,10 +932,12 @@ async def save_profile(payload: ProfileSave):
             profile_path = profile_path.with_suffix(".json")
 
     base_profile = None
+    original_title = None
     if profile_path and profile_path.exists():
         try:
             with profile_path.open() as f:
                 base_profile = json.load(f)
+            original_title = base_profile.get("title") or base_profile.get("name") or profile_path.stem
         except Exception:
             raise HTTPException(status_code=400, detail="Failed to read existing profile")
     else:
@@ -935,7 +948,11 @@ async def save_profile(payload: ProfileSave):
         else:
             base_profile = {"output_dir": "pcr_data", "steps": []}
 
-    base_profile["title"] = payload.name
+    requested_title = payload.name.strip() if payload.name else ""
+    if profile_path and requested_title and original_title and requested_title != original_title:
+        profile_path = None
+
+    base_profile["title"] = requested_title or payload.name
     base_profile["post_in_gui"] = "True"
     if payload.chemistry is not None:
         base_profile["chemistry"] = payload.chemistry

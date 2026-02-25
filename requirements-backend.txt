@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pydantic
+requests
+numpy
+pandas
+matplotlib
+pyserial
+RPi.GPIO
+spidev
+smbus2
+simple-rpc

@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Ready Screen</title>
-  <link rel="stylesheet" href="static/styles.css?v=3" />
+  <link rel="stylesheet" href="static/styles.css?v=10" />
 </head>
-<body>
+<body class="app-body">
   <div class="screen">
     <div class="content" id="panel" >
       <h1>MyTitle</h1>

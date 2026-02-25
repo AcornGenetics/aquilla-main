@@ -91,7 +91,7 @@
     checkboxCell.appendChild(checkbox);
     row.appendChild(checkboxCell);
 
-    row.appendChild(createCell(profile.name || profile.id || "Untitled"));
+    row.appendChild(createCell(profile.display_name || profile.name || profile.id || "Untitled"));
     row.appendChild(createCell(formatTimestamp(profile.createdAt)));
     const stagesCount = profile.configuration?.stages?.length || 0;
     const totalCycles = (profile.configuration?.stages || []).reduce(

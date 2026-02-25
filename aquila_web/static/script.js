@@ -792,7 +792,7 @@ async function loadProfiles(){
         profiles.forEach(p => {
             const opt = document.createElement("option");
             opt.value = p.id;
-            opt.textContent = p.name || p.label || p.id;
+            opt.textContent = p.display_name || p.name || p.label || p.id;
             select.appendChild(opt);
 
         });
