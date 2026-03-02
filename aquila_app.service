@@ -1,0 +1,14 @@
+[Unit]
+Description=Aquila backend (application.py, aquilla-main)
+After=network.target
+
+[Service]
+User=pi
+Environment=PYTHONPATH=/home/pi/aquilla-main
+Environment=AQ_SRC_BASEDIR=/home/pi/aquilla-main
+WorkingDirectory=/home/pi/aquilla-main
+ExecStart=/home/pi/aquilla-main/venv/bin/python3 /home/pi/aquilla-main/application.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

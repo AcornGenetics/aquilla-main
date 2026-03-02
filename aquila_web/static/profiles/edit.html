@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
+  <title>Edit Profile</title>
+  <link rel="stylesheet" href="/static/styles.css?v=202" />
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <main class="main">
+      <div class="profile-form">
+        <header class="page-header">
+          <h1 id="profile-page-title">Edit Run Profile</h1>
+          <p id="profile-page-subtitle">Update profile settings and steps.</p>
+        </header>
+        <section class="card">
+          <div class="field-grid">
+            <div class="field">
+              <label for="profile-name">Profile name</label>
+              <input id="profile-name" type="text" value="" />
+            </div>
+          </div>
+        </section>
+        <section class="card">
+          <header class="page-header">
+            <h2>Profile Steps</h2>
+            <p>Define temperatures and durations for each step.</p>
+          </header>
+          <div class="profile-steps">
+            <div class="profile-step-row">
+              <div class="field">
+                <label for="step-1-temp">Step 1 Temperature (°C)</label>
+                <input id="step-1-temp" type="number" value="95" />
+              </div>
+              <div class="field">
+                <label for="step-1-duration">Step 1 Duration (HH:MM:SS)</label>
+                <input id="step-1-duration" type="text" value="00:00:30" />
+              </div>
+              <div class="field">
+                <label for="step-1-cycles">Cycles</label>
+                <input id="step-1-cycles" type="number" value="1" />
+              </div>
+            </div>
+            <div class="profile-step-row">
+              <div class="field">
+                <label for="step-2-temp">Step 2 Temperature (°C)</label>
+                <input id="step-2-temp" type="number" value="55" />
+              </div>
+              <div class="field">
+                <label for="step-2-duration">Step 2 Duration (HH:MM:SS)</label>
+                <input id="step-2-duration" type="text" value="00:00:30" />
+              </div>
+              <div class="field">
+                <label for="step-2-cycles">Cycles</label>
+                <input id="step-2-cycles" type="number" value="32" />
+              </div>
+            </div>
+            <div class="button-row">
+              <button class="btn btn-secondary" type="button">Add step</button>
+            </div>
+          </div>
+        </section>
+        <div class="button-row">
+          <button id="save-profile-button" class="btn btn-primary" type="button">Save profile</button>
+          <a class="btn btn-secondary" href="/profiles-page">Cancel</a>
+        </div>
+        <p id="save-status" class="page-header"></p>
+      </div>
+    </main>
+  </div>
+  <script src="/static/profiles/edit.js?v=16"></script>
+  <script src="/static/keyboard.js?v=10"></script>
+</body>
+</html>

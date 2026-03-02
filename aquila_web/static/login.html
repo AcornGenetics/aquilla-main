@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
+  <title>Login</title>
+  <link rel="stylesheet" href="static/styles.css?v=202" />
+</head>
+<body class="app-body">
+  <div class="login-shell">
+    <div class="login-card">
+      <h1>Device Login</h1>
+      <p>Sign in to access the device dashboard.</p>
+      <form action="/run">
+        <div class="login-field">
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" placeholder="your.name" />
+        </div>
+        <div class="login-field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" placeholder="••••••••" />
+        </div>
+        <div class="button-row">
+          <button class="btn btn-primary" type="submit">Log in</button>
+          <button class="btn btn-secondary" type="button">Create account</button>
+        </div>
+        <div class="login-footer">
+          <span>Remember me</span>
+          <span>Forgot password?</span>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script src="static/keyboard.js?v=10"></script>
+</body>
+</html>

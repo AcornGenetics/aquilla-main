@@ -4,8 +4,9 @@ After=network.target
 
 [Service]
 User=pi
-WorkingDirectory=/home/pi/aquila/aquila_web
-ExecStart=/home/pi/aquila/bin/uvicorn main:app --host 0.0.0.0 --port 8090
+Environment=PYTHONPATH=/home/pi/aquilla-main
+WorkingDirectory=/home/pi/aquilla-main/aquila_web
+ExecStart=/home/pi/aquilla-main/bin/uvicorn main:app --host 0.0.0.0 --port 8090
 Restart=on-failure
 
 [Install]

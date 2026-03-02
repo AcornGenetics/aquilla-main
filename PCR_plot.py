@@ -3,12 +3,18 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from pathlib import Path
+from config import get_src_basedir
 
-from aq_curve.main import get_curve
+from aq_curve.curve import Curve
 
-root_dir = "/home/pi/aquila/logs/optics"
+# root_dir = Path("/home/pi/aquilla-main/logs/optics")
+root_dir = Path(get_src_basedir()) / "logs" / "optics"
 
 get_curve_dir = "logs/optics/"
+
+# Initialize Curve instance
+curve = Curve()
 
 selected_logs = None
 
@@ -29,8 +35,8 @@ if selected_logs is not None:
         rox_array = []
         new_dir = os.path.join(get_curve_dir, selected_logs)
         for i in range ( 4 ):
-            curve1 = get_curve( new_dir, "fam", i + 1 )
-            curve2 = get_curve( new_dir, "rox", i + 1 )
+            curve1 = curve.get_curve( new_dir, "fam", i + 1 )
+            curve2 = curve.get_curve( new_dir, "rox", i + 1 )
             fam_array.append(curve1)
             rox_array.append(curve2)
              
@@ -57,4 +63,3 @@ if selected_logs is not None:
         st.write("Waiting on selection...")
 else: 
     st.write("Select a dock to proceed")
-

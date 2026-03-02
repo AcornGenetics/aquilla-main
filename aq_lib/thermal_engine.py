@@ -3,12 +3,15 @@ import logging
 
 logger = logging.getLogger( "aquila" )
 
+class RunStopped(Exception):
+    pass
+
 def thermal_engine( actions, meer, callback, logfile, stop_event ):
 
     for args in actions:
         logger.info ( "Args %s", args.__str__() )
         if stop_event and stop_event.is_set():
-            raise Exception("Forced to exit")
+            raise RunStopped("Run stopped")
 
         if args[0] == "pcr_fanon":
             callback( args )
@@ -56,4 +59,3 @@ def thermal_engine( actions, meer, callback, logfile, stop_event ):
             logger.error ("Unknown command.")
             break
     return
-

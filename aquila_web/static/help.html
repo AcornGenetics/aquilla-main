@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
+  <title>Help</title>
+  <link rel="stylesheet" href="/static/styles.css?v=202" />
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <main class="main run-main">
+      <header class="run-header">
+        <h1 class="run-header__title">
+          <a class="back-icon back-icon--inline" href="/run" aria-label="Back">&#x2039;</a>
+          Help
+        </h1>
+        <nav class="run-header__nav">
+          <a class="run-nav-link" href="/run">Run</a>
+          <a class="run-nav-link" href="/history">History</a>
+          <a class="run-nav-link" href="/profiles-page">Profiles</a>
+          <a class="help-link" href="/help">
+            <span>?</span>
+            <span class="help-tooltip">How to run a test</span>
+          </a>
+        </nav>
+      </header>
+      <div class="run-divider"></div>
+      <section class="help-layout" id="help-layout">
+        <aside class="help-sidebar" id="help-sidebar">
+          <div class="help-sidebar__header">
+            <h2>Help Topics</h2>
+            <button class="help-topics-toggle" type="button" data-state="shown">Hide</button>
+          </div>
+          <nav>
+            <a href="#help-run">Run</a>
+            <a href="#help-history">History</a>
+            <a href="#help-profiles">Profiles</a>
+            <a href="#help-detail">Run Detail</a>
+          </nav>
+        </aside>
+        <div class="help-content">
+          <button class="help-topics-toggle help-topics-toggle--inline" type="button" data-state="hidden">Show Topics</button>
+          <section id="help-run">
+            <h2>Run</h2>
+            <p>The <strong>Run</strong> screen is where you start a test after loading your samples.</p>
+            <h3>Profile</h3>
+            <p>Select a <strong>profile</strong> that defines the temperature steps, number of cycles, and timing for the test.</p>
+            <h3>Run Name</h3>
+            <p>Enter a descriptive name for the run. If left unchanged, the system automatically assigns a name (e.g., <strong>Run 1</strong>, <strong>Run 2</strong>).</p>
+            <h3>Drawer Controls</h3>
+            <p>Use <strong>Open Drawer</strong> and <strong>Close Drawer</strong> to safely insert or remove samples. The drawer must be closed before a run can begin.</p>
+            <h3>Run Button</h3>
+            <p>Starts the test using the selected profile. Once a run begins, the <strong>Run</strong> button is locked until the test completes.</p>
+            <h3>Results Overview</h3>
+            <p>After a run finishes, results are summarized using clear status indicators:</p>
+            <ul>
+              <li><strong>Detected (green):</strong> Target signal was successfully amplified.</li>
+              <li><strong>Inconclusive (yellow):</strong> A signal was present but unstable or borderline.</li>
+              <li><strong>Not Detected:</strong> No amplification was observed.</li>
+            </ul>
+          </section>
+          <section id="help-history">
+            <h2>History</h2>
+            <p>The <strong>History</strong> screen lists completed runs so you can review results later.</p>
+            <h3>Run Name</h3>
+            <p>The name assigned to the run.</p>
+            <h3>Date</h3>
+            <p>The <strong>date</strong> and <strong>time</strong> the run completed.</p>
+            <h3>Settings</h3>
+            <p>The <strong>profile</strong> used for the run.</p>
+            <h3>Result</h3>
+            <p>A summary of <strong>detected</strong>, <strong>inconclusive</strong>, or <strong>not detected</strong> tubes.</p>
+            <h3>View</h3>
+            <p>Opens the detailed run view with <strong>amplification curves</strong>.</p>
+            <h3>Run Detail Metrics</h3>
+            <p>The run detail view now includes summary metrics:</p>
+            <ul>
+              <li><strong>Detected:</strong> Number of tubes with a detected signal.</li>
+              <li><strong>Inconclusive:</strong> Number of tubes with borderline results.</li>
+              <li><strong>Avg Ct Value:</strong> Average cycle threshold for detected targets.</li>
+              <li><strong>QC Status:</strong> Pass if no tubes are inconclusive, otherwise Review.</li>
+            </ul>
+            <h3>Delete</h3>
+            <p>Removes selected runs from history. Deleting a run permanently removes it from the device.</p>
+          </section>
+          <section id="help-profiles">
+            <h2>Profiles</h2>
+            <p><strong>Profiles</strong> define how the instrument performs a test.</p>
+            <h3>Name</h3>
+            <p>A recognizable label for the profile (e.g., <strong>Acorn PCR</strong>).</p>
+            <h3>Stages &amp; Steps</h3>
+            <p>Each stage includes a <strong>temperature</strong> and <strong>duration</strong>, defining how the instrument cycles during the run.</p>
+            <h3>Creating a Profile</h3>
+            <ol>
+              <li>Click <strong>New Profile</strong>.</li>
+              <li>Enter a <strong>name</strong>.</li>
+              <li>Add stages and steps (<strong>temperature</strong> + <strong>time</strong>).</li>
+              <li>Click <strong>Save</strong> to store the profile.</li>
+            </ol>
+            <p>Saved profiles appear in the <strong>Run</strong> screen for selection.</p>
+          </section>
+          <section id="help-detail">
+            <h2>Run Detail</h2>
+            <p>The <strong>Run Detail</strong> screen provides a deeper view of an individual run.</p>
+            <h3>Metadata</h3>
+            <p>Displays the <strong>run name</strong>, <strong>date</strong>, <strong>profile</strong> used, and <strong>result summary</strong>.</p>
+            <h3>Amplification Graph</h3>
+            <p>Shows <strong>FAM</strong> and <strong>ROX</strong> fluorescence curves across PCR cycles.</p>
+            <h3>Why This Matters</h3>
+            <p>The shape and consistency of the curves help indicate whether results are valid, noisy, or inconclusive.</p>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const sidebar = document.getElementById("help-sidebar");
+    const layout = document.getElementById("help-layout");
+    const toggles = document.querySelectorAll(".help-topics-toggle");
+    const setState = (hidden) => {
+      sidebar.classList.toggle("is-hidden", hidden);
+      layout.classList.toggle("help-layout--collapsed", hidden);
+      toggles.forEach((toggle) => {
+        toggle.dataset.state = hidden ? "hidden" : "shown";
+        toggle.textContent = hidden ? "Show Topics" : "Hide";
+        toggle.classList.toggle("help-topics-toggle--inline", hidden);
+      });
+    };
+    toggles.forEach((toggle) => {
+      toggle.addEventListener("click", () => {
+        setState(!sidebar.classList.contains("is-hidden"));
+      });
+    });
+    setState(false);
+  </script>
+  <script src="/static/nav.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
+  <title>Ready Screen</title>
+  <link rel="stylesheet" href="static/styles.css?v=160" />
+</head>
+<body>
+  <div class="screen">
+    <div class="content" id="panel" >
+      <h1>MyTitle</h1>
+      <p>MyText</p>
+      <p>Elapsed Time - <span id="timer" style="margin-left: 0px;"> 00:00</span> <span>min</span></p>
+    </div>
+  </div>
+  <script src="static/script.js"></script>
+</body>
+</html>

@@ -2,23 +2,89 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=800, height=400" />
+  <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Ready Screen</title>
-  <link rel="stylesheet" href="static/styles.css" />
+  <link rel="stylesheet" href="static/styles.css?v=202" />
 </head>
-<body>
-  <div class="screen">
-    <div class="content" id="panel" >
-      <h1>MyTitle</h1>
-      <p>MyText</p>
-      <select id="mySelect">
-      </select>
-      <button onclick="notifyRun()">Run</button>
-      <button onclick="notifyDrawerOpen()">Open Drawer</button>
-      <button onclick="notifyDrawerClose()">Close Drawer</button>
-      <button class="transparent-btn" onclick="notifyExit()">Exit GUI</button>
-    </div>
+<body class="app-body">
+  <div class="app-shell">
+    <main class="main run-main main--compact">
+      <header class="run-header">
+        <h1 class="run-header__title">Ready</h1>
+        <nav class="run-header__nav">
+          <a class="run-nav-link" href="/run">Run</a>
+          <a class="run-nav-link" href="/history">History</a>
+          <a class="run-nav-link" href="/profiles-page">Profiles</a>
+          <button class="run-reset-btn run-reset-btn--nav" id="run-reset-button" type="button">
+            <img class="run-reset-btn__icon" src="/static/reset-icon.svg" alt="" aria-hidden="true" />
+            Reset
+          </button>
+          <a class="help-link" href="/help">
+            <span>?</span>
+            <span class="help-tooltip">How to run a test</span>
+          </a>
+        </nav>
+      </header>
+      <div class="run-divider"></div>
+      <div class="screen">
+        <div class="content" id="panel" >
+          <h1>MyTitle</h1>
+          <p>MyText</p>
+          <select id="mySelect">
+          </select>
+          <button onclick="notifyRun()">Run</button>
+          <button onclick="notifyDrawerOpen()">Open Drawer</button>
+          <button onclick="notifyDrawerClose()">Close Drawer</button>
+          <h2>Results</h2>
+        <div class="results-panel">
+            <div class="results-card results-combined">
+              <div class="results-summary" id="results-summary">Run for results!</div>
+              <div class="results-tubes" id="results-tubes">
+              <div class="results-tube" data-tube="1">
+                <div class="results-dot">
+                  <span class="results-dot__half results-dot__half--fam"></span>
+                  <span class="results-dot__half results-dot__half--rox"></span>
+                </div>
+                <input class="results-tube__label-input" data-tube-label="1" type="text" value="Tube 1" />
+              </div>
+              <div class="results-tube" data-tube="2">
+                <div class="results-dot">
+                  <span class="results-dot__half results-dot__half--fam"></span>
+                  <span class="results-dot__half results-dot__half--rox"></span>
+                </div>
+                <input class="results-tube__label-input" data-tube-label="2" type="text" value="Tube 2" />
+              </div>
+              <div class="results-tube" data-tube="3">
+                <div class="results-dot">
+                  <span class="results-dot__half results-dot__half--fam"></span>
+                  <span class="results-dot__half results-dot__half--rox"></span>
+                </div>
+                <input class="results-tube__label-input" data-tube-label="3" type="text" value="Tube 3" />
+              </div>
+              <div class="results-tube" data-tube="4">
+                <div class="results-dot">
+                  <span class="results-dot__half results-dot__half--fam"></span>
+                  <span class="results-dot__half results-dot__half--rox"></span>
+                </div>
+                <input class="results-tube__label-input" data-tube-label="4" type="text" value="Tube 4" />
+              </div>
+              </div>
+            </div>
+            <div class="results-key results-key--overlay" aria-label="Results key">
+              <span class="results-key__label">Key</span>
+              <span class="results-key__tooltip">
+                Left = FAM · Right = ROX<br />
+                Detected: strong signal · Inconclusive: borderline/noisy · Not detected: no signal
+              </span>
+            </div>
+          </div>
+          <button class="transparent-btn" onclick="notifyExit()">Exit GUI</button>
+        </div>
+      </div>
+    </main>
   </div>
-  <script src="static/script.js"></script>
+  <script src="static/nav.js?v=1"></script>
+  <script src="static/script.js?v=62"></script>
+  <script src="static/keyboard.js?v=10"></script>
 </body>
 </html>

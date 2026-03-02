@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
+  <title>Run Profiles</title>
+  <link rel="stylesheet" href="static/styles.css?v=202" />
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <main class="main run-main">
+      <header class="run-header">
+        <h1 class="run-header__title">
+          <a class="back-icon back-icon--inline" href="/profiles-page" aria-label="Back">&#x2039;</a>
+          Run Profiles
+        </h1>
+        <nav class="run-header__nav">
+          <a class="run-nav-link" href="/run">Run</a>
+          <a class="run-nav-link" href="/history">History</a>
+          <a class="run-nav-link" href="/profiles-page">Profiles</a>
+          <a class="help-link" href="/help">
+            <span>?</span>
+            <span class="help-tooltip">How to run a test</span>
+          </a>
+        </nav>
+      </header>
+      <div class="run-divider"></div>
+      <header class="page-header">
+        <p>Manage assay templates and temperature profiles.</p>
+      </header>
+      <div class="button-row">
+        <button class="btn btn-primary" type="button">Create profile</button>
+        <button class="btn btn-secondary" type="button">Import JSON</button>
+      </div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Duration</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        </tbody>
+      </table>
+    </main>
+  </div>
+  <script src="static/nav.js?v=1"></script>
+</body>
+</html>

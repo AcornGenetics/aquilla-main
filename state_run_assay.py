@@ -8,16 +8,21 @@ import RPi.GPIO as GPIO
 import sys
 import time
 import subprocess
+import re
+import os
+from pathlib import Path
 
 from aq_lib.meerstetter import MeerStetter
 from aq_lib.meerstetter import set_time, get_time
-from aq_lib.thermal_engine import thermal_engine
+from aq_lib.thermal_engine import RunStopped, thermal_engine
 from aq_lib.thermal_parser import thermal_parser
 from aq_lib.config_module import Config
 from aq_lib.utils import load_json
 from aq_lib.utils import LogFileName
 from aq_lib.utils import LOGGING_CONFIG
+from aq_lib.plot_utils import generate_optics_plot
 from aq_lib.regulate import lid_heater_worker
+from config import get_src_basedir
 import aq_lib.state_requests as sr
 from aq_lib.motor_class import Axis, Drawer
 
@@ -46,6 +51,8 @@ class AssayInterface():
         self.optics = OpticalRead()
         self.optics.read_config()
 
+        self.run_aborted = False
+
         self.configure_thermal_control()
          
         self.axis.home()
@@ -53,6 +60,7 @@ class AssayInterface():
         self.drawer.home()
         sr.change_screen("0")
         self.drawer.open()
+        sr.update_drawer_state(is_open=True, is_closed=False)
 
     def configure_thermal_control(self):
         device_type = int (config.pcr["device_type"] )
@@ -144,15 +152,17 @@ class AssayInterface():
     def ready( self ):
         #Ready Screen
         sr.change_screen("1")
-        ret = self.button_logic( state = "ready" ) 
+        ret = self.button_logic( state = "ready" )
         if ret == None:
-            ret = self.button_logic( state = "ready" ) 
+            ret = self.button_logic( state = "ready" )
             if ret == None:
                 logger.error("Profile is returning none when it should not. %s" % (ret))
                 sr.change_screen("-1")
                 raise Exception ("Profile is returning none when it should not. %s" % (ret))
-        logger.info("Profile selected: %s" % (ret))
-        self.thermal_profile = ("profiles/" + ret)
+        profile, run_name = ret
+        logger.info("Profile selected: %s" % (profile))
+        self.run_name = run_name
+        self.thermal_profile = ("profiles/" + profile)
         
     
     def run( self ):
@@ -160,17 +170,31 @@ class AssayInterface():
         sr.change_screen("2")
         time.sleep(1)
         sr.timer_control( status = "start" )
+        self.run_aborted = False
+        sr.reset_stop_request()
+
+        stop_event = Event()
+        stop_monitor_event = Event()
+        stop_thread = Thread(
+            target=self._monitor_stop_request,
+            args=(stop_event, stop_monitor_event)
+        )
+        stop_thread.daemon = True
+        stop_thread.start()
 
         self.drawer.read()
         lfn = LogFileName()
-        
-        pcr_log = lfn.get_pcr_log_filename()
-        optics_log = lfn.get_optics_log_filename()
-        results_json = lfn.get_results_json_filename()
-        sr.update_results_path( results_json )
+        run_prefix = self._safe_name(self.run_name)
+
+        pcr_log = lfn.get_pcr_log_filename(prefix=f"{run_prefix}_")
+        optics_log = lfn.get_optics_log_filename(prefix=f"{run_prefix}_")
+        results_json = lfn.get_results_json_filename(prefix=f"{run_prefix}_")
+        plot_filename = f"{run_prefix}_{lfn.id}.png"
+        plot_path = os.path.join("logs/plots", plot_filename)
 
         logger.info( "PCR log: %s", pcr_log )
         logger.info( "Optics log: %s", optics_log )
+        logger.info("Optics log absolute: %s", Path(optics_log).resolve())
 
         steps = load_json( self.thermal_profile )["steps"]
         execution_thread = Thread( target = self.executor )
@@ -196,11 +220,14 @@ class AssayInterface():
                 t0_sync = set_time()
                 print ( "# Starting log t0 = %f"% t0_sync, file = pcr_fp )
                 actions = thermal_parser( steps )
-                thermal_engine( actions, self.meer, self.callback, pcr_fp, None )
+                thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
 
                 self.message_queue.put("quit")
                 execution_thread.join()
 
+        except RunStopped:
+            logger.info("Run stopped by user")
+            self.run_aborted = True
         except KeyboardInterrupt as ki:
             logger.error ( "Keyboard Interrupt. Turning off Meerstetter controller. " )
             sr.change_screen("-3")
@@ -209,9 +236,35 @@ class AssayInterface():
             sr.change_screen("-1")
             raise ( e )
         finally:
+            stop_monitor_event.set()
+            if stop_thread.is_alive():
+                stop_thread.join(timeout=2)
+            if execution_thread.is_alive():
+                self.message_queue.put("quit")
+                execution_thread.join(timeout=5)
             self.hw_deinitialize()
             self.drawer.open()
-            results_to_json( optics_log, results_json )
+            if self.run_aborted:
+                sr.timer_control( "stop" )
+                sr.timer_control( "reset" )
+                sr.change_screen("1")
+                return
+            try:
+                os.makedirs("logs/results", exist_ok=True)
+                results_to_json( optics_log, results_json )
+                sr.mark_results_ready(results_json)
+            except Exception as e:
+                logger.error("Failed to generate results: %s", e)
+            graph_path = None
+            try:
+                os.makedirs("logs/plots", exist_ok=True)
+                generate_optics_plot(optics_log, plot_path)
+                graph_path = f"/plots/{plot_filename}"
+            except Exception as e:
+                logger.error("Failed to generate plot: %s", e)
+            sr.log_history(self.thermal_profile.replace("profiles/", ""), self.run_name, results_json, graph_path)
+            sr.advance_run_name()
+            sr.change_screen("3")
 
 
     def hw_deinitialize(self):
@@ -224,14 +277,30 @@ class AssayInterface():
 
     def end( self ):
         #End of run
+        if self.run_aborted:
+            self.run_aborted = False
+            sr.timer_control( "stop" )
+            sr.timer_control( "reset" )
+            sr.change_screen("1")
+            return
         sr.timer_control( "stop" )
         time.sleep(2)
         sr.timer_control( "reset" )
         sr.change_screen("3")
         self.button_logic( state = "end" ) 
 
+    def _monitor_stop_request(self, stop_event: Event, stop_monitor_event: Event) -> None:
+        while not stop_monitor_event.is_set() and not stop_event.is_set():
+            if sr.check_stop_request():
+                logger.info("Stop request detected")
+                stop_event.set()
+                sr.reset_stop_request()
+                return
+            time.sleep(0.5)
+
     def button_logic(self, state = "ready"):
-        ret = sr.wait_for_button()
+        include_run_complete_ack = state == "end"
+        ret = sr.wait_for_button(include_run_complete_ack)
         
         if(state == "end"):
             screens = ["8","3","9","1"]  
@@ -249,47 +318,64 @@ class AssayInterface():
         while True:
             run = ret.get("run_requested")
             profile = ret.get("profile")
+            run_name = ret.get("run_name")
             drawer_open = ret.get("drawer_open_status")
             drawer_close = ret.get("drawer_close_status")
             exit_status = ret.get("exit_button_status")
+            run_complete_ack = ret.get("run_complete_ack")
 
             if( run is True and profile is not None ):
                 break
             elif( drawer_open is True and drawer_close is False ):
-                sr.change_screen( screens[0] )
                 self.drawer.open()
-                #time.sleep(5) #simulate drawer opening
-                sr.change_screen( screens[1] ) 
-                ret = sr.wait_for_button()
+                sr.update_drawer_state(is_open=True, is_closed=False)
+                if state != "end":
+                    sr.change_screen( screens[0] )
+                    #time.sleep(5) #simulate drawer opening
+                    sr.change_screen( screens[1] ) 
+                ret = sr.wait_for_button(include_run_complete_ack)
             elif( drawer_open is False and drawer_close is True ): 
-                sr.change_screen( screens[2] )
                 self.drawer.read()
-                #time.sleep(5) #simulate drawer close
-                sr.change_screen( screens[1] ) 
-                ret = sr.wait_for_button()
+                sr.update_drawer_state(is_open=False, is_closed=True)
+                if state != "end":
+                    sr.change_screen( screens[2] )
+                    #time.sleep(5) #simulate drawer close
+                    sr.change_screen( screens[1] ) 
+                ret = sr.wait_for_button(include_run_complete_ack)
             elif( run is True and profile is None ):
                 sr.change_screen( screens[3] )
                 if( state == "ready" ): 
-                    ret = sr.wait_for_button()
+                    ret = sr.wait_for_button(include_run_complete_ack)
                 elif( state == "end" ):
                     break
             elif( exit_status is True ):
-                ret = sr.wait_for_button()
+                ret = sr.wait_for_button(include_run_complete_ack)
                 if(ret.get("exit_button_status")):
-                    ret = sr.wait_for_button()
+                    ret = sr.wait_for_button(include_run_complete_ack)
                     if(ret.get("exit_button_status")):
                         sr.change_screen("-4")
                         time.sleep(3)
+                        base_dir = Path(get_src_basedir())
+                        exit_script = base_dir / "exit_kiosk.sh"
                         subprocess.run(
-                                ["/home/pi/aquila/exit_kiosk.sh"], 
+                                [str(exit_script)], 
                                 check=False
                                 )
                         time.sleep(3)
                         sr.change_screen( screens[1] )
-                        ret = sr.wait_for_button() 
+                        ret = sr.wait_for_button(include_run_complete_ack) 
                     else:
                         pass
                 else:
                     pass
+            elif run_complete_ack and state == "end":
+                sr.change_screen("1")
+                sr.reset_run_complete_ack()
+                ret = sr.wait_for_button(include_run_complete_ack)
 
-        return profile
+        return profile, run_name
+
+    def _safe_name(self, value: str | None) -> str:
+        if not value:
+            return "run"
+        return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "run"

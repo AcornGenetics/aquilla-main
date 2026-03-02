@@ -1,0 +1,17 @@
+Update flow (no full rebuild needed unless dependencies change):
+
+1. Optionally pull the latest repo changes
+   - cd /home/pi/aquilla-main
+   - git pull
+
+2. Restart services
+   - ./update.sh
+
+3. Verify running services point at the right repo
+   - python3 /home/pi/aquilla-main/scripts/check_service_paths.py
+
+Notes
+- If you add/remove Python packages, re-run the venv install steps from deployment.
+- If you update systemd service files, ensure they are copied into /etc/systemd/system and reload.
+- `update.sh` also enforces LightDM autologin (`rpd-x`) and sets the X11 rotation line in Openbox autostart.
+- Override display rotation with env vars, e.g. `ROTATE_OUTPUT=HDMI-2 ROTATE_DIR=right ./update.sh` (default is `left`).
