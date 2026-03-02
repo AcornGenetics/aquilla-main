@@ -1,5 +1,5 @@
 # Aquila device container layout
-
+this is a plan not implmented yet
 ## 1) What runs in each container
 
 ### Backend container (required)
@@ -38,7 +38,7 @@
 
 ## 3) Backend Dockerfile (template)
 
-Create `Dockerfile.backend` at repo root:
+Create `Dockerfile.api` at repo root:
 
 ```dockerfile
 FROM python:3.11-slim-bookworm
@@ -102,7 +102,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: Dockerfile.api
     ports:
       - "8090:8090"
     environment:
@@ -149,7 +149,7 @@ docker compose up
 ## 7) Publish images (example using GHCR)
 
 ```bash
-docker buildx build --platform linux/arm64 -f Dockerfile.backend -t ghcr.io/ORG/aquila-backend:v1.0.0 --push .
+docker buildx build --platform linux/arm64 -f Dockerfile.api -t ghcr.io/ORG/aquila-backend:v1.0.0 --push .
 docker buildx build --platform linux/arm64 -f Dockerfile.ui -t ghcr.io/ORG/aquila-ui:v1.0.0 --push .
 ```
 

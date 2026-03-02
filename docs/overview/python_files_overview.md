@@ -60,7 +60,7 @@
 - `melt_curve.py`: Coordinates axis motion, optics captures, fan control, and thermal actions to execute a melt curve profile and log the data.
 - `motor_disable.py`: Instantiates the Drawer motor class and immediately disables its enable pin; handy before servicing.
 - `motor_test/test_motor.py`: Direct GPIO stepping sequence that jogs the drawer motor forwards/backwards and reports the home switch for wiring checks.
-- `pcr_meer_off.py`: Safety routine that finds the Meerstetter, sets target temperature back to ambient, and disables the output stage.
+- `pcr_meer_off.py`: Safety routine that finds the Meerstetter, sets target temperature back to ambient, and disables the output stage. Safest for the Meerstetter is to stop heat output immediately, then let it drift to ambient.
 - `PCR_plot.py`: Streamlit UI that loads an optics log and plots each well’s FAM/ROX curve using `aq_curve.get_curve`.
 - `Raster.py`: Raster-scans the axis/drawer across a grid, capturing on/off LED readings to map excitation alignment.
 

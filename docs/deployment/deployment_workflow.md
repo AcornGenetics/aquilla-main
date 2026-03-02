@@ -1,5 +1,5 @@
 # Multi-device container deployment plan
-
+not inplemented yet (just a thought process)
 ## Goal
 Push updated containers from a laptop (or CI) and sync many devices worldwide.
 
@@ -23,7 +23,7 @@ Example image names:
 ### Manual (laptop)
 ```bash
 docker buildx build --platform linux/arm64 \
-  -f docker/Dockerfile.backend -t ghcr.io/ORG/aquila-backend:v1.0.0 --push .
+  -f docker/Dockerfile.api -t ghcr.io/ORG/aquila-backend:v1.0.0 --push .
 
 docker buildx build --platform linux/arm64 \
   -f docker/Dockerfile.ui -t ghcr.io/ORG/aquila-ui:v1.0.0 --push .
