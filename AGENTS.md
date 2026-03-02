@@ -58,3 +58,5 @@
 - Updated `aquila_web/static/keyboard.js` to avoid double input on kiosks by using pointer handling with touch/mouse suppression, and bumped keyboard cache keys to `?v=5` in login/run/profile pages.
 - Added global tap highlight suppression and focus-state overrides in `aquila_web/static/styles.css` with cache-key bumps across UI pages to reduce touch flashes.
 - Updated tap highlight suppression with nav-specific rules for kiosk links.
+- For kiosk-only navigation, a `pointerdown` handler that prevents default link behavior can be used to avoid tap flashes; note this disables keyboard navigation and long-press link actions, so it should stay kiosk-only.
+- Added a Run-only Stop Run button plus backend stop requests, safe abort handling, and force-stop tests in `unit_tests/test_force_stop.py`.
