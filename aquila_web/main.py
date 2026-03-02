@@ -84,6 +84,7 @@ drawer_open = False
 drawer_close = False
 exit_button = False
 run_complete_ack = False
+stop_requested = False
 drawer_task = None
 drawer_state_open = False
 drawer_state_closed = False
@@ -101,8 +102,6 @@ class ProfileSelect(BaseModel):
 
 class ProfileSave(BaseModel):
     name: str
-    chemistry: Optional[str] = None
-    volume: Optional[str] = None
     profile_id: Optional[str] = None
     steps: Optional[list] = None
     fam_label: Optional[str] = None
@@ -316,6 +315,7 @@ def _delete_history_artifacts(entry: dict) -> None:
 async def _simulate_run(profile_name: str) -> None:
     global start_time, elapsed_time, timer_running, current_item
     global results_path, run_requested, run_in_progress, results_cleared, run_complete_ack
+    global stop_requested
 
     run_in_progress = True
     run_complete_ack = False
@@ -326,7 +326,20 @@ async def _simulate_run(profile_name: str) -> None:
     state_change_event.set()
     state_change_event.clear()
 
-    await asyncio.sleep(SIM_RUN_SECONDS)
+    elapsed = 0.0
+    while elapsed < SIM_RUN_SECONDS:
+        if stop_requested:
+            timer_running = False
+            run_in_progress = False
+            run_requested = False
+            stop_requested = False
+            elapsed_time = int(elapsed)
+            current_item.screen = "ready"
+            state_change_event.set()
+            state_change_event.clear()
+            return
+        await asyncio.sleep(0.5)
+        elapsed += 0.5
 
     timer_running = False
     elapsed_time = SIM_RUN_SECONDS
@@ -679,8 +692,9 @@ async def button_open():
 
 @app.post("/button/run")
 async def button_run():
-    global run_requested
+    global run_requested, stop_requested
     run_requested = True
+    stop_requested = False
     logger.info("Run button pressed")
     if not selected_profile:
         run_requested = False
@@ -700,6 +714,20 @@ async def button_run():
             return {"ok": False, "message": "Optics log path required"}
         asyncio.create_task(_simulate_run(selected_profile))
     return{"ok":True}
+
+@app.post("/button/stop")
+async def button_stop():
+    global stop_requested
+    stop_requested = True
+    logger.info("Stop button pressed")
+    return {"ok": True}
+
+@app.post("/stop/reset")
+async def stop_button_reset():
+    global stop_requested
+    stop_requested = False
+    logger.info("Stop reset")
+    return {"ok": True}
 
 @app.post("/exit/reset")
 async def exit_button_reset():
@@ -725,6 +753,7 @@ async def button_status():
         "drawer_close_status":drawer_close,
         "exit_button_status":exit_button,
         "run_complete_ack": run_complete_ack,
+        "stop_requested": stop_requested,
         "dev_simulate": DEV_SIMULATE
         }
 
@@ -795,9 +824,7 @@ async def list_profiles():
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
                 "configuration": _convert_legacy_steps_to_run_config(
-                    data.get("steps", []),
-                    data.get("chemistry"),
-                    data.get("volume")
+                    data.get("steps", [])
                 )
             })
     name_counts = {}
@@ -840,7 +867,7 @@ def _duration_to_seconds(value: str | None) -> int:
         return 0
     return hrs * 3600 + mins * 60 + secs
 
-def _convert_legacy_steps_to_run_config(steps: list, chemistry: str | None, volume: str | None) -> dict:
+def _convert_legacy_steps_to_run_config(steps: list) -> dict:
     stages = []
     stage_index = 1
 
@@ -888,16 +915,7 @@ def _convert_legacy_steps_to_run_config(steps: list, chemistry: str | None, volu
             })
             stage_index += 1
 
-    volume_value = 0
-    if volume not in (None, ""):
-        try:
-            volume_value = float(volume)
-        except (TypeError, ValueError):
-            volume_value = 0
-
     return {
-        "chemistry": chemistry or "",
-        "volume": volume_value,
         "stages": stages
     }
 
@@ -926,18 +944,18 @@ async def save_profile(payload: ProfileSave):
         return sanitized or "profile"
 
     profile_path = None
+    original_profile_path = None
     if payload.profile_id:
         profile_path = profile_dir / payload.profile_id
         if not profile_path.name.endswith(".json"):
             profile_path = profile_path.with_suffix(".json")
 
     base_profile = None
-    original_title = None
     if profile_path and profile_path.exists():
         try:
             with profile_path.open() as f:
                 base_profile = json.load(f)
-            original_title = base_profile.get("title") or base_profile.get("name") or profile_path.stem
+            original_profile_path = profile_path
         except Exception:
             raise HTTPException(status_code=400, detail="Failed to read existing profile")
     else:
@@ -949,15 +967,8 @@ async def save_profile(payload: ProfileSave):
             base_profile = {"output_dir": "pcr_data", "steps": []}
 
     requested_title = payload.name.strip() if payload.name else ""
-    if profile_path and requested_title and original_title and requested_title != original_title:
-        profile_path = None
-
     base_profile["title"] = requested_title or payload.name
     base_profile["post_in_gui"] = "True"
-    if payload.chemistry is not None:
-        base_profile["chemistry"] = payload.chemistry
-    if payload.volume is not None:
-        base_profile["volume"] = payload.volume
     if payload.steps is not None:
         base_profile["steps"] = payload.steps
     labels = {}
@@ -975,12 +986,25 @@ async def save_profile(payload: ProfileSave):
         profile_path = profile_dir / f"{file_name}.json"
         if profile_path.exists():
             profile_path = profile_dir / f"{file_name}_{int(datetime.now().timestamp())}.json"
+    elif requested_title:
+        sanitized_title = sanitize_name(requested_title)
+        if sanitized_title and profile_path.stem != sanitized_title:
+            candidate_path = profile_dir / f"{sanitized_title}.json"
+            if candidate_path.exists() and candidate_path != profile_path:
+                candidate_path = profile_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
+            profile_path = candidate_path
 
     try:
         with profile_path.open("w") as f:
             json.dump(base_profile, f, indent=2)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to save profile")
+
+    if original_profile_path and original_profile_path != profile_path:
+        try:
+            original_profile_path.unlink(missing_ok=True)
+        except Exception:
+            logger.warning("Failed to remove old profile %s", original_profile_path)
 
     return {"ok": True, "id": profile_path.name}
 
@@ -1043,8 +1067,6 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         return {
             "id": data.get("id", profile_path.name),
             "title": data.get("name"),
-            "chemistry": data.get("configuration", {}).get("chemistry"),
-            "volume": data.get("configuration", {}).get("volume"),
             "labels": data.get("labels", {}),
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
         }
@@ -1052,8 +1074,6 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
     return {
         "id": profile_path.name,
         "title": data.get("title", profile_path.stem),
-        "chemistry": data.get("chemistry"),
-        "volume": data.get("volume"),
         "labels": data.get("labels", {}),
         "steps": data.get("steps", [])
     }

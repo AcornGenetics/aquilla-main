@@ -14,7 +14,7 @@ from pathlib import Path
 
 from aq_lib.meerstetter import MeerStetter
 from aq_lib.meerstetter import set_time, get_time
-from aq_lib.thermal_engine import thermal_engine
+from aq_lib.thermal_engine import RunStopped, thermal_engine
 from aq_lib.thermal_parser import thermal_parser
 from aq_lib.config_module import Config
 from aq_lib.utils import load_json
@@ -50,6 +50,8 @@ class AssayInterface():
 
         self.optics = OpticalRead()
         self.optics.read_config()
+
+        self.run_aborted = False
 
         self.configure_thermal_control()
          
@@ -168,6 +170,17 @@ class AssayInterface():
         sr.change_screen("2")
         time.sleep(1)
         sr.timer_control( status = "start" )
+        self.run_aborted = False
+        sr.reset_stop_request()
+
+        stop_event = Event()
+        stop_monitor_event = Event()
+        stop_thread = Thread(
+            target=self._monitor_stop_request,
+            args=(stop_event, stop_monitor_event)
+        )
+        stop_thread.daemon = True
+        stop_thread.start()
 
         self.drawer.read()
         lfn = LogFileName()
@@ -207,11 +220,14 @@ class AssayInterface():
                 t0_sync = set_time()
                 print ( "# Starting log t0 = %f"% t0_sync, file = pcr_fp )
                 actions = thermal_parser( steps )
-                thermal_engine( actions, self.meer, self.callback, pcr_fp, None )
+                thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
 
                 self.message_queue.put("quit")
                 execution_thread.join()
 
+        except RunStopped:
+            logger.info("Run stopped by user")
+            self.run_aborted = True
         except KeyboardInterrupt as ki:
             logger.error ( "Keyboard Interrupt. Turning off Meerstetter controller. " )
             sr.change_screen("-3")
@@ -220,8 +236,19 @@ class AssayInterface():
             sr.change_screen("-1")
             raise ( e )
         finally:
+            stop_monitor_event.set()
+            if stop_thread.is_alive():
+                stop_thread.join(timeout=2)
+            if execution_thread.is_alive():
+                self.message_queue.put("quit")
+                execution_thread.join(timeout=5)
             self.hw_deinitialize()
             self.drawer.open()
+            if self.run_aborted:
+                sr.timer_control( "stop" )
+                sr.timer_control( "reset" )
+                sr.change_screen("1")
+                return
             try:
                 os.makedirs("logs/results", exist_ok=True)
                 results_to_json( optics_log, results_json )
@@ -250,11 +277,26 @@ class AssayInterface():
 
     def end( self ):
         #End of run
+        if self.run_aborted:
+            self.run_aborted = False
+            sr.timer_control( "stop" )
+            sr.timer_control( "reset" )
+            sr.change_screen("1")
+            return
         sr.timer_control( "stop" )
         time.sleep(2)
         sr.timer_control( "reset" )
         sr.change_screen("3")
         self.button_logic( state = "end" ) 
+
+    def _monitor_stop_request(self, stop_event: Event, stop_monitor_event: Event) -> None:
+        while not stop_monitor_event.is_set() and not stop_event.is_set():
+            if sr.check_stop_request():
+                logger.info("Stop request detected")
+                stop_event.set()
+                sr.reset_stop_request()
+                return
+            time.sleep(0.5)
 
     def button_logic(self, state = "ready"):
         include_run_complete_ack = state == "end"

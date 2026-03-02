@@ -16,12 +16,14 @@ if (runCompleteModal) {
   }
 }
 const runResetButton = document.getElementById("run-reset-button");
+const runReadyPill = document.querySelector(".run-ready-pill");
 const drawerActions = document.getElementById("drawer-actions");
 const devOpticsPath = document.getElementById("dev-optics-path");
 const devOpticsWrapper = document.getElementById("run-optics-tab");
 const runNameInput = document.getElementById("run-name-input");
 const runWarning = document.getElementById("run-warning");
 const drawerWarning = document.getElementById("drawer-warning");
+const stopRunButton = document.getElementById("stop-run-button");
 
 let seconds = 0;
 let currentScreen = null;
@@ -36,6 +38,7 @@ const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
 let tubeNames = DEFAULT_TUBE_NAMES.slice();
 const DEFAULT_DYE_LABELS = { fam: "FAM", rox: "ROX" };
 let dyeLabels = { ...DEFAULT_DYE_LABELS };
+let stopWarningTimer = null;
 
 const loadTubeNames = () => {
   try {
@@ -233,6 +236,11 @@ function resetResultsUI(message = "Run for results!") {
       dot.classList.remove("is-detected");
       dot.classList.remove("is-inconclusive");
       dot.classList.remove("is-not-detected");
+      dot.querySelectorAll(".results-dot__half").forEach((half) => {
+        half.classList.remove("is-detected");
+        half.classList.remove("is-inconclusive");
+        half.classList.remove("is-not-detected");
+      });
     }
   });
 }
@@ -248,6 +256,19 @@ function setRunWarning(message) {
     runWarning.textContent = "";
     runWarning.classList.add("is-hidden");
   }
+}
+
+function clearRunWarningAfterDelay(delayMs = 3000) {
+  if (!runWarning || !isDashboard) {
+    return;
+  }
+  if (stopWarningTimer) {
+    clearTimeout(stopWarningTimer);
+  }
+  stopWarningTimer = setTimeout(() => {
+    setRunWarning("");
+    stopWarningTimer = null;
+  }, delayMs);
 }
 
 function setDrawerWarning(message) {
@@ -275,6 +296,21 @@ function setRunResetVisibility(isVisible) {
     return;
   }
   runResetButton.classList.toggle("is-hidden", !isVisible);
+}
+
+function setStopRunVisibility(isVisible) {
+  if (!stopRunButton) {
+    return;
+  }
+  stopRunButton.classList.toggle("is-hidden", !isVisible);
+}
+
+function setStopRunState(isEnabled) {
+  if (!stopRunButton) {
+    return;
+  }
+  stopRunButton.disabled = !isEnabled;
+  stopRunButton.classList.toggle("run-stop-btn--disabled", !isEnabled);
 }
 
 function setOpticsVisibility(isDev) {
@@ -368,6 +404,16 @@ socket.onmessage = function(event) {
     if("elapsed" in panel){
       formatElapsed(panel.elapsed);
     }
+    const shouldShowStop =
+      panel.screen === "running" &&
+      typeof panel.elapsed === "number";
+    setStopRunVisibility(shouldShowStop);
+    if (panel.screen !== "running") {
+      setStopRunState(true);
+      if (isDashboard && runWarning && runWarning.textContent === "Stopping run...") {
+        clearRunWarningAfterDelay();
+      }
+    }
     if (panel.screen){
         const screen = panel.screen;
         const previousScreen = lastScreen;
@@ -386,8 +432,17 @@ socket.onmessage = function(event) {
           resetResultsUI("Results pending");
           setRunWarning("");
           runDoneAcknowledged = false;
+          setStopRunState(true);
+          if (runReadyPill) {
+            runReadyPill.classList.add("is-running");
+          }
+          document.body.classList.add("is-running");
         } else if (screen === "ready" || screen === "complete") {
           setRunButtonState(false);
+          if (runReadyPill) {
+            runReadyPill.classList.remove("is-running");
+          }
+          document.body.classList.remove("is-running");
           if (screen === "ready" && previousScreen === "running" && !runDoneAcknowledged) {
             resetResultsUI("Results unavailable");
           }
@@ -499,6 +554,23 @@ async function notifyRun(){
         console.log("Run button clicked", await ret.text());
     } catch (err) {
         console.error("Button failed", err);
+    }
+}
+
+async function notifyStopRun(){
+    if (!stopRunButton || stopRunButton.disabled) {
+        return;
+    }
+    setStopRunState(false);
+    setRunWarning("Stopping run...");
+    try {
+        const ret = await fetch("/button/stop", {
+            method:"POST"
+        });
+        console.log("Stop button clicked", await ret.text());
+    } catch (err) {
+        console.error("Stop button failed", err);
+        setStopRunState(true);
     }
 }
 
@@ -675,27 +747,47 @@ async function loadResults(){
         }
     }
 
-    if (summaryEl || tubeEls.length) {
-        if (!hasResults) {
-            if (summaryEl) {
-                const errorMessage = hasErrorPayload ? "Error in results path" : "Run for results!";
-                summaryEl.textContent = errorMessage;
-                summaryEl.classList.toggle("is-error", hasErrorPayload);
+        const setHalfStatus = (halfEl, value) => {
+            if (!halfEl) {
+                return;
             }
-            tubeEls.forEach((tubeEl) => {
-                const dot = tubeEl.querySelector(".results-dot");
-                if (!dot) {
-                    return;
+            halfEl.classList.remove("is-detected", "is-inconclusive", "is-not-detected");
+            if (value === "Detected") {
+                halfEl.classList.add("is-detected");
+            } else if (value === "Inconclusive") {
+                halfEl.classList.add("is-inconclusive");
+            } else if (value) {
+                halfEl.classList.add("is-not-detected");
+            }
+        };
+
+        if (summaryEl || tubeEls.length) {
+            if (!hasResults) {
+                if (summaryEl) {
+                    const errorMessage = hasErrorPayload ? "Error in results path" : "Run for results!";
+                    summaryEl.textContent = errorMessage;
+                    summaryEl.classList.toggle("is-error", hasErrorPayload);
                 }
+                tubeEls.forEach((tubeEl) => {
+                    const dot = tubeEl.querySelector(".results-dot");
+                    if (!dot) {
+                        return;
+                    }
                 dot.classList.remove("is-detected");
                 dot.classList.remove("is-inconclusive");
                 dot.classList.remove("is-not-detected");
+                dot.querySelectorAll(".results-dot__half").forEach((half) => {
+                    half.classList.remove("is-detected");
+                    half.classList.remove("is-inconclusive");
+                    half.classList.remove("is-not-detected");
+                });
             });
             return;
         }
         const tubeDetected = Array(4).fill(false);
         const tubeInconclusive = Array(4).fill(false);
-        Object.values(data || {}).forEach((row) => {
+        ["1", "2"].forEach((rowKey) => {
+            const row = data?.[rowKey];
             if (!row || typeof row !== "object") {
                 return;
             }
@@ -713,24 +805,8 @@ async function loadResults(){
         });
 
         if (summaryEl) {
-            const detectedLabels = tubeDetected
-              .map((detected, index) => (detected ? tubeNames[index] : null))
-              .filter(Boolean);
-            const inconclusiveLabels = tubeInconclusive
-              .map((flag, index) => (flag ? `${tubeNames[index]} inconclusive` : null))
-              .filter(Boolean);
-            if (!detectedLabels.length && !inconclusiveLabels.length) {
-                summaryEl.textContent = "No targets detected";
-            } else {
-                const parts = [];
-                if (detectedLabels.length) {
-                    parts.push(`Detected: ${detectedLabels.join(", ")}`);
-                }
-                if (inconclusiveLabels.length) {
-                    parts.push(inconclusiveLabels.join(", "));
-                }
-                summaryEl.textContent = parts.join(" · ");
-            }
+            summaryEl.textContent = "Results!";
+            summaryEl.classList.remove("is-error");
         }
 
         tubeEls.forEach((tubeEl, index) => {
@@ -738,19 +814,12 @@ async function loadResults(){
             if (!dot) {
                 return;
             }
-            if (tubeInconclusive[index]) {
-                dot.classList.add("is-inconclusive");
-                dot.classList.remove("is-detected");
-                dot.classList.remove("is-not-detected");
-            } else if (tubeDetected[index]) {
-                dot.classList.add("is-detected");
-                dot.classList.remove("is-inconclusive");
-                dot.classList.remove("is-not-detected");
-            } else {
-                dot.classList.remove("is-detected");
-                dot.classList.remove("is-inconclusive");
-                dot.classList.add("is-not-detected");
-            }
+            const famStatus = data?.["1"]?.[String(index + 1)] || "Not Detected";
+            const roxStatus = data?.["2"]?.[String(index + 1)] || "Not Detected";
+            const famHalf = dot.querySelector(".results-dot__half--fam");
+            const roxHalf = dot.querySelector(".results-dot__half--rox");
+            setHalfStatus(famHalf, famStatus);
+            setHalfStatus(roxHalf, roxStatus);
         });
     }
 }
@@ -918,6 +987,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (runResetButton) {
         runResetButton.addEventListener("click", resetRunScreen);
+    }
+    if (stopRunButton) {
+        stopRunButton.addEventListener("click", notifyStopRun);
     }
     if (typeof loadProfiles === "function") {
         loadProfiles();

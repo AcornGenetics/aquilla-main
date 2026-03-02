@@ -93,18 +93,8 @@
 
     row.appendChild(createCell(profile.display_name || profile.name || profile.id || "Untitled"));
     row.appendChild(createCell(formatTimestamp(profile.createdAt)));
-    const stagesCount = profile.configuration?.stages?.length || 0;
-    const totalCycles = (profile.configuration?.stages || []).reduce(
-      (total, stage) => total + (Number(stage.multiplier) || 1),
-      0
-    );
-    const cyclesDisplay = stagesCount ? `${totalCycles}/${stagesCount}` : "--";
-    row.appendChild(createCell(cyclesDisplay));
-
     const totalDuration = sumConfigurationDuration(profile.configuration || {});
     row.appendChild(createCell(formatDuration(totalDuration)));
-    const volumeValue = profile.configuration?.volume;
-    row.appendChild(createCell(volumeValue || volumeValue === 0 ? String(volumeValue) : "--"));
 
     const runCell = document.createElement("td");
     runCell.appendChild(createActionButton("Start", async () => {
@@ -170,7 +160,7 @@
         const cell = document.createElement("td");
         cell.className = "profiles-loading";
         cell.textContent = "No profiles found";
-        cell.colSpan = 9;
+        cell.colSpan = 6;
         row.appendChild(cell);
         tableBody.appendChild(row);
         return;
@@ -184,7 +174,7 @@
       const cell = document.createElement("td");
       cell.className = "profiles-loading";
       cell.textContent = "Unable to load profiles";
-      cell.colSpan = 9;
+      cell.colSpan = 6;
       row.appendChild(cell);
       tableBody.appendChild(row);
       console.error(error);

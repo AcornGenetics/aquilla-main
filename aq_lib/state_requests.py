@@ -107,6 +107,23 @@ def reset_run_complete_ack() -> None:
     except requests.exceptions.RequestException as e:
         logger.exception("Error resetting run complete ack: %s", e)
 
+def reset_stop_request() -> None:
+    try:
+        requests.post("http://127.0.0.1:8090/stop/reset", timeout=5)
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error resetting stop request: %s", e)
+
+def check_stop_request() -> bool:
+    url = "http://127.0.0.1:8090/button_status/"
+    try:
+        ret = requests.get(url, timeout=5)
+        ret.raise_for_status()
+        data = ret.json()
+    except Exception as e:
+        logger.warning("Error polling stop request", e)
+        return False
+    return bool(data.get("stop_requested"))
+
 
 def wait_for_button(include_run_complete_ack: bool = False):
     url =  "http://127.0.0.1:8090/button_status/"

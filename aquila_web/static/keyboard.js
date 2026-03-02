@@ -15,6 +15,17 @@ let lastPhysicalKey = null;
 let lastPhysicalKeyTime = 0;
 let suppressMouseEvents = false;
 
+function safeSetSelectionRange(input, start, end) {
+  if (!input || typeof input.setSelectionRange !== "function") {
+    return;
+  }
+  try {
+    input.setSelectionRange(start, end);
+  } catch (error) {
+    return;
+  }
+}
+
 function updateKeyboardSpacing(keyboard, isVisible) {
   if (!keyboard) {
     return;
@@ -128,9 +139,7 @@ function updateInputValue(value, replace = false) {
     : current.slice(0, start) + value + current.slice(end);
   input.value = nextValue;
   const nextPos = replace ? nextValue.length : start + value.length;
-  if (input.setSelectionRange) {
-    input.setSelectionRange(nextPos, nextPos);
-  }
+  safeSetSelectionRange(input, nextPos, nextPos);
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
@@ -139,6 +148,18 @@ function handleKeyPress(value) {
     return;
   }
   activeInput.focus();
+
+  if (value !== "backspace" && value !== "clear" && value.length === 1) {
+    const inputType = (activeInput.getAttribute("type") || "").toLowerCase();
+    if (inputType === "number") {
+      const current = activeInput.value || "";
+      const candidate = value === " " ? current : current + value;
+      const validNumber = candidate === "" || candidate === "-" || candidate === "." || !Number.isNaN(Number(candidate));
+      if (!validNumber) {
+        return;
+      }
+    }
+  }
 
   switch (value) {
     case "space":
@@ -151,7 +172,7 @@ function handleKeyPress(value) {
       if (start !== end) {
         const current = input.value || "";
         input.value = current.slice(0, start) + current.slice(end);
-        input.setSelectionRange(start, start);
+        safeSetSelectionRange(input, start, start);
         input.dispatchEvent(new Event("input", { bubbles: true }));
         return;
       }
@@ -159,7 +180,7 @@ function handleKeyPress(value) {
         const current = input.value || "";
         input.value = current.slice(0, start - 1) + current.slice(end);
         const nextPos = Math.max(start - 1, 0);
-        input.setSelectionRange(nextPos, nextPos);
+        safeSetSelectionRange(input, nextPos, nextPos);
         input.dispatchEvent(new Event("input", { bubbles: true }));
       }
       return;
@@ -190,9 +211,7 @@ function showKeyboard(target) {
   activeInput = target;
   activeInput.focus();
   const length = activeInput.value?.length ?? 0;
-  if (activeInput.setSelectionRange) {
-    activeInput.setSelectionRange(length, length);
-  }
+  safeSetSelectionRange(activeInput, length, length);
   const keyboard = document.querySelector(KEYBOARD_SELECTOR);
   if (keyboard) {
     keyboard.classList.add("is-visible");
@@ -216,6 +235,24 @@ function hideKeyboard() {
 
 document.addEventListener("DOMContentLoaded", () => {
   buildKeyboard();
+
+  const handleInputActivate = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    if (target.closest(KEYBOARD_SELECTOR)) {
+      return;
+    }
+    if (target.matches(INPUT_SELECTOR) && !target.classList.contains("keyboard-ignore")) {
+      showKeyboard(target);
+    }
+  };
+
+  document.addEventListener("pointerdown", handleInputActivate);
+  document.addEventListener("touchstart", handleInputActivate);
+  document.addEventListener("mousedown", handleInputActivate);
+  document.addEventListener("click", handleInputActivate);
 
   document.addEventListener("keydown", (event) => {
     const target = event.target;

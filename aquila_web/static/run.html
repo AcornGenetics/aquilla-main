@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Run</title>
-  <link rel="stylesheet" href="static/styles.css?v=91" />
+  <link rel="stylesheet" href="static/styles.css?v=202" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -27,71 +27,115 @@
       </header>
       <div class="run-divider"></div>
       <section class="run-section run-controls" id="ready-section">
-        <div class="run-meta">
-          <div class="run-meta-item">
-            <span class="run-meta-label">Profile</span>
-            <select id="mySelect" class="run-profile-select"></select>
+        <div class="run-info-grid">
+          <div class="run-meta run-meta--info">
+            <div class="run-meta-item">
+              <span class="run-meta-label">Profile</span>
+              <select id="mySelect" class="run-profile-select"></select>
+            </div>
+            <div class="run-meta-item">
+              <span class="run-meta-label">Run Name</span>
+              <input id="run-name-input" class="run-name-input" type="text" />
+            </div>
+            <div class="run-secondary-actions" id="drawer-actions">
+              <button class="run-secondary-btn" onclick="notifyDrawerOpen()" type="button">Open Drawer</button>
+              <button class="run-secondary-btn" onclick="notifyDrawerClose()" type="button">Close Drawer</button>
+            </div>
           </div>
-          <div class="run-meta-divider"></div>
-          <div class="run-meta-item">
-            <span class="run-meta-label">Run Name</span>
-            <input id="run-name-input" class="run-name-input" type="text" />
-          </div>
-        </div>
-        <div class="run-secondary-actions" id="drawer-actions">
-          <button class="run-secondary-btn" onclick="notifyDrawerOpen()" type="button">Open Drawer</button>
-          <button class="run-secondary-btn" onclick="notifyDrawerClose()" type="button">Close Drawer</button>
         </div>
       </section>
-      <div class="run-cta-wrapper">
-        <button class="run-cta" id="run-cta" onclick="notifyRun()" type="button" aria-label="Run">
-          <img class="run-cta-icon" src="/static/acornlogo.svg?v=5" alt="Acorn" />
-          <span class="run-cta-label">Run</span>
-        </button>
-      </div>
-      <p class="run-warning is-hidden" id="run-warning"></p>
-      <p class="run-warning is-hidden" id="drawer-warning"></p>
-      <div class="run-status-footer">
-        <div class="run-status-wrapper">
-          <div class="run-status">
-            <span class="run-status-dot" id="ready-status-dot"></span>
-            <span id="ready-status">Ready</span>
+      <section class="run-section run-start-card">
+        <div class="run-start-header">
+          <h2>Start Run</h2>
+          <div class="run-start-status">
+            <div class="run-ready-pill">
+              <span class="run-status-dot" id="ready-status-dot"></span>
+              <span id="ready-status">Ready</span>
+            </div>
+            <button class="run-reset-btn" id="run-reset-button" type="button">
+              <img class="run-reset-btn__icon" src="/static/reset-icon.svg" alt="" aria-hidden="true" />
+              Reset
+            </button>
           </div>
-          <button class="run-reset-btn" id="run-reset-button" type="button">
-            <img class="run-reset-btn__icon" src="/static/reset-icon.svg" alt="" aria-hidden="true" />
-            Reset
+        </div>
+        <div class="run-cta-wrapper">
+          <button class="run-cta" id="run-cta" onclick="notifyRun()" type="button" aria-label="Run">
+            <img class="run-cta-icon" src="/static/acornlogo.svg?v=5" alt="Acorn" />
+            <span class="run-cta-label">Run</span>
           </button>
         </div>
-      </div>
+      </section>
+      <p class="run-warning is-hidden" id="run-warning"></p>
+      <p class="run-warning is-hidden" id="drawer-warning"></p>
       <section class="run-section run-status-section is-hidden" id="running-section">
         <div class="run-timer">
           <span class="run-timer__label">Elapsed Time</span>
           <span class="run-timer__value" id="timer">00:00</span>
         </div>
+        <button class="run-stop-btn is-hidden" id="stop-run-button" type="button">Stop Run</button>
       </section>
       <section class="run-section run-results" id="complete-section">
         <h2>Results</h2>
         <div class="results-panel">
-          <div class="results-card results-summary" id="results-summary">Run for results!</div>
-          <div class="results-card results-tubes" id="results-tubes">
+          <div class="results-card results-combined">
+            <div class="results-summary">
+              <div class="results-summary-row">
+                <div class="results-summary-title" id="results-summary">Run for results!</div>
+                <div class="results-key results-key--inline" aria-label="Results key">
+                  <span class="results-key__icon">i</span>
+                  <span class="results-key__label">Key</span>
+                  <span class="results-key__tooltip">
+                    Left = FAM · Right = ROX<br />
+                    Detected: strong signal · Inconclusive: borderline/noisy · Not detected: no signal
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="results-tubes" id="results-tubes">
             <div class="results-tube" data-tube="1">
-              <div class="results-dot"></div>
+              <div class="results-dot">
+                <span class="results-dot__half results-dot__half--fam"></span>
+                <span class="results-dot__half results-dot__half--rox"></span>
+              </div>
               <input class="results-tube__label-input" data-tube-label="1" type="text" value="Tube 1" />
             </div>
             <div class="results-tube" data-tube="2">
-              <div class="results-dot"></div>
+              <div class="results-dot">
+                <span class="results-dot__half results-dot__half--fam"></span>
+                <span class="results-dot__half results-dot__half--rox"></span>
+              </div>
               <input class="results-tube__label-input" data-tube-label="2" type="text" value="Tube 2" />
             </div>
             <div class="results-tube" data-tube="3">
-              <div class="results-dot"></div>
+              <div class="results-dot">
+                <span class="results-dot__half results-dot__half--fam"></span>
+                <span class="results-dot__half results-dot__half--rox"></span>
+              </div>
               <input class="results-tube__label-input" data-tube-label="3" type="text" value="Tube 3" />
             </div>
-            <div class="results-tube" data-tube="4">
-              <div class="results-dot"></div>
-              <input class="results-tube__label-input" data-tube-label="4" type="text" value="Tube 4" />
+              <div class="results-tube" data-tube="4">
+                <div class="results-dot">
+                  <span class="results-dot__half results-dot__half--fam"></span>
+                  <span class="results-dot__half results-dot__half--rox"></span>
+                </div>
+                <input class="results-tube__label-input" data-tube-label="4" type="text" value="Tube 4" />
+              </div>
             </div>
           </div>
-        </div>
+          <div class="results-legend">
+            <div class="results-legend-item">
+              <span class="results-legend-dot results-legend-dot--inconclusive"></span>
+              <span>Inconclusive</span>
+            </div>
+            <div class="results-legend-item">
+              <span class="results-legend-dot results-legend-dot--detected"></span>
+              <span>Detected</span>
+            </div>
+            <div class="results-legend-item">
+              <span class="results-legend-dot results-legend-dot--not-detected"></span>
+              <span>Not Detected</span>
+            </div>
+          </div>
         <button class="transparent-btn" onclick="notifyExit()">Exit GUI</button>
       </section>
       <div class="run-modal is-hidden" id="run-complete-modal">
@@ -102,7 +146,8 @@
       </div>
     </main>
   </div>
-  <script src="static/script.js?v=50"></script>
-  <script src="static/keyboard.js?v=5"></script>
+  <script src="static/nav.js?v=1"></script>
+  <script src="static/script.js?v=62"></script>
+  <script src="static/keyboard.js?v=10"></script>
 </body>
 </html>

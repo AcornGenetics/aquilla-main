@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Help</title>
-  <link rel="stylesheet" href="/static/styles.css?v=104" />
+  <link rel="stylesheet" href="/static/styles.css?v=202" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -72,6 +72,14 @@
             <p>A summary of <strong>detected</strong>, <strong>inconclusive</strong>, or <strong>not detected</strong> tubes.</p>
             <h3>View</h3>
             <p>Opens the detailed run view with <strong>amplification curves</strong>.</p>
+            <h3>Run Detail Metrics</h3>
+            <p>The run detail view now includes summary metrics:</p>
+            <ul>
+              <li><strong>Detected:</strong> Number of tubes with a detected signal.</li>
+              <li><strong>Inconclusive:</strong> Number of tubes with borderline results.</li>
+              <li><strong>Avg Ct Value:</strong> Average cycle threshold for detected targets.</li>
+              <li><strong>QC Status:</strong> Pass if no tubes are inconclusive, otherwise Review.</li>
+            </ul>
             <h3>Delete</h3>
             <p>Removes selected runs from history. Deleting a run permanently removes it from the device.</p>
           </section>
@@ -80,14 +88,12 @@
             <p><strong>Profiles</strong> define how the instrument performs a test.</p>
             <h3>Name</h3>
             <p>A recognizable label for the profile (e.g., <strong>Acorn PCR</strong>).</p>
-            <h3>Volume</h3>
-            <p>Sample volume used for the test (<strong>uL</strong>).</p>
             <h3>Stages &amp; Steps</h3>
             <p>Each stage includes a <strong>temperature</strong> and <strong>duration</strong>, defining how the instrument cycles during the run.</p>
             <h3>Creating a Profile</h3>
             <ol>
               <li>Click <strong>New Profile</strong>.</li>
-              <li>Enter a <strong>name</strong> and <strong>sample volume</strong>.</li>
+              <li>Enter a <strong>name</strong>.</li>
               <li>Add stages and steps (<strong>temperature</strong> + <strong>time</strong>).</li>
               <li>Click <strong>Save</strong> to store the profile.</li>
             </ol>
@@ -127,5 +133,6 @@
     });
     setState(false);
   </script>
+  <script src="/static/nav.js?v=1"></script>
 </body>
 </html>

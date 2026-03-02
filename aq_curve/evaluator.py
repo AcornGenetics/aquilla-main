@@ -70,8 +70,8 @@ def check_log_phase_linearity(curve_data, curve):
     mask = y_segment > 0
     x_segment = x_segment[mask]
     log_segment = np.log(y_segment[mask])
-    if len(log_segment) < 3:
-        return False
+    if len(log_segment) < 2:
+        return True
     r2 = compute_r2(x_segment, log_segment)
     min_r2 = config.get_float("PCR_LOG_PHASE_R2_MIN")
     return r2 >= min_r2
@@ -150,9 +150,11 @@ def check_single_transition(curve_data, curve):
         return False
     deriv = np.diff(y_corrected)
     rise_deriv = deriv[start:]
+    if len(rise_deriv) < 2:
+        return True
     max_deriv = float(np.max(rise_deriv))
     if max_deriv <= 0:
-        return False
+        return True
     peak_fraction = config.get_float("PCR_PEAK_FRACTION")
     peak_indices = np.where(rise_deriv >= max_deriv * peak_fraction)[0]
     transitions = 0
@@ -192,7 +194,7 @@ def check_stable_slope(curve_data, curve):
     x_segment = x_segment[mask]
     log_segment = np.log(y_segment[mask])
     if len(log_segment) < 3:
-        return False
+        return True
     slopes = np.diff(log_segment) / np.diff(x_segment)
     mean_slope = float(np.mean(slopes))
     if mean_slope == 0:

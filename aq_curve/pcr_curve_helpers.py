@@ -69,6 +69,8 @@ def sustained_rise_index(ydata, threshold, min_consecutive):
                 return idx - min_consecutive + 1
         else:
             count = 0
+    if count > 0:
+        return len(ydata) - count
     return None
 
 

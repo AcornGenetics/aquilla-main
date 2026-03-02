@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Ready Screen</title>
-  <link rel="stylesheet" href="static/styles.css?v=106" />
+  <link rel="stylesheet" href="static/styles.css?v=202" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -36,25 +36,46 @@
           <button onclick="notifyDrawerOpen()">Open Drawer</button>
           <button onclick="notifyDrawerClose()">Close Drawer</button>
           <h2>Results</h2>
-          <div class="results-panel">
-            <div class="results-card results-summary" id="results-summary">Run for results!</div>
-            <div class="results-card results-tubes" id="results-tubes">
+        <div class="results-panel">
+            <div class="results-card results-combined">
+              <div class="results-summary" id="results-summary">Run for results!</div>
+              <div class="results-tubes" id="results-tubes">
               <div class="results-tube" data-tube="1">
-                <div class="results-dot"></div>
+                <div class="results-dot">
+                  <span class="results-dot__half results-dot__half--fam"></span>
+                  <span class="results-dot__half results-dot__half--rox"></span>
+                </div>
                 <input class="results-tube__label-input" data-tube-label="1" type="text" value="Tube 1" />
               </div>
               <div class="results-tube" data-tube="2">
-                <div class="results-dot"></div>
+                <div class="results-dot">
+                  <span class="results-dot__half results-dot__half--fam"></span>
+                  <span class="results-dot__half results-dot__half--rox"></span>
+                </div>
                 <input class="results-tube__label-input" data-tube-label="2" type="text" value="Tube 2" />
               </div>
               <div class="results-tube" data-tube="3">
-                <div class="results-dot"></div>
+                <div class="results-dot">
+                  <span class="results-dot__half results-dot__half--fam"></span>
+                  <span class="results-dot__half results-dot__half--rox"></span>
+                </div>
                 <input class="results-tube__label-input" data-tube-label="3" type="text" value="Tube 3" />
               </div>
               <div class="results-tube" data-tube="4">
-                <div class="results-dot"></div>
+                <div class="results-dot">
+                  <span class="results-dot__half results-dot__half--fam"></span>
+                  <span class="results-dot__half results-dot__half--rox"></span>
+                </div>
                 <input class="results-tube__label-input" data-tube-label="4" type="text" value="Tube 4" />
               </div>
+              </div>
+            </div>
+            <div class="results-key results-key--overlay" aria-label="Results key">
+              <span class="results-key__label">Key</span>
+              <span class="results-key__tooltip">
+                Left = FAM · Right = ROX<br />
+                Detected: strong signal · Inconclusive: borderline/noisy · Not detected: no signal
+              </span>
             </div>
           </div>
           <button class="transparent-btn" onclick="notifyExit()">Exit GUI</button>
@@ -62,7 +83,8 @@
       </div>
     </main>
   </div>
-  <script src="static/script.js?v=50"></script>
-  <script src="static/keyboard.js?v=5"></script>
+  <script src="static/nav.js?v=1"></script>
+  <script src="static/script.js?v=62"></script>
+  <script src="static/keyboard.js?v=10"></script>
 </body>
 </html>

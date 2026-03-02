@@ -4,8 +4,6 @@ const profileName = params.get("name");
 const viewMode = params.get("mode") === "view" || params.get("view") === "1";
 
 const nameInput = document.getElementById("profile-name");
-const chemistryInput = document.getElementById("profile-chemistry");
-const volumeInput = document.getElementById("profile-volume");
 const famLabelInput = document.getElementById("profile-fam-label");
 const roxLabelInput = document.getElementById("profile-rox-label");
 const saveButton = document.getElementById("save-profile-button");
@@ -26,6 +24,9 @@ const editSections = document.querySelectorAll(".profile-edit");
 const summarySection = document.getElementById("profile-summary");
 
 let isReadView = viewMode;
+if (isReadView && toggleReadViewButton) {
+  isReadView = false;
+}
 const DEFAULT_DYE_LABELS = { fam: "FAM", rox: "ROX" };
 
 const parseDuration = (value) => {
@@ -153,7 +154,7 @@ const renderSteps = () => {
     rampRateField.dataset.visibleFor = "ramp_rate";
     rampRateField.innerHTML = `
       <label for="ramp-${step.id}">Ramp Rate (°C/s)</label>
-      <input id="ramp-${step.id}" type="number" value="${step.rampRate}" />
+      <input id="ramp-${step.id}" type="text" inputmode="decimal" value="${step.rampRate}" />
     `;
 
     const descriptionField = document.createElement("div");
@@ -322,7 +323,6 @@ const addStep = () => {
 const applyViewMode = () => {
   const editableSelectors = [
     "#profile-name",
-    "#profile-volume",
     "#profile-fam-label",
     "#profile-rox-label",
     "#stage-select",
@@ -501,12 +501,6 @@ async function loadProfileDetails() {
     if (data.title && nameInput) {
       nameInput.value = data.title;
     }
-    if (data.chemistry && chemistryInput) {
-      chemistryInput.value = data.chemistry;
-    }
-  if (data.volume && volumeInput) {
-    volumeInput.value = data.volume;
-  }
   if (famLabelInput) {
     famLabelInput.value = data.labels?.fam || DEFAULT_DYE_LABELS.fam;
   }
@@ -557,8 +551,6 @@ async function saveProfile() {
   saveStatus.textContent = "Saving...";
   const payload = {
     name: nameInput.value.trim(),
-    chemistry: chemistryInput ? chemistryInput.value : "",
-    volume: volumeInput ? volumeInput.value : "",
     profile_id: profileId,
     steps: buildStepsPayload(),
     fam_label: famLabelInput ? famLabelInput.value.trim() : DEFAULT_DYE_LABELS.fam,

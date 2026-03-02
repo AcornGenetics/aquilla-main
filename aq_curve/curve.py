@@ -5,6 +5,8 @@ import json
 import logging
 from pathlib import Path
 from aq_curve.evaluator import evaluate_curve
+from aq_curve import pcr_curve_config as config
+from aq_curve.pcr_curve_helpers import compute_cq, get_curve_data, get_threshold
 from config import get_src_basedir
 
 logger = logging.getLogger("aquila")
@@ -205,6 +207,15 @@ class Curve:
                 return "Not Detected"
             return "Inconclusive"
 
+        def resolve_cq(dye_name, well):
+            xdata, y_corrected, _ = get_curve_data(self, src, dye_name, well)
+            threshold, _ = get_threshold(y_corrected, self.baseline_slice)
+            min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
+            cq = compute_cq(xdata, y_corrected, threshold, min_consecutive)
+            if cq is None:
+                return None
+            return round(float(cq), 2)
+
         result = {
             "1": {
                 "1": resolve_status(0, "fam", 1),
@@ -217,6 +228,21 @@ class Curve:
                 "2": resolve_status(1, "rox", 2),
                 "3": resolve_status(1, "rox", 3),
                 "4": resolve_status(1, "rox", 4),
+            }
+        }
+
+        result["cq"] = {
+            "1": {
+                "1": resolve_cq("fam", 1),
+                "2": resolve_cq("fam", 2),
+                "3": resolve_cq("fam", 3),
+                "4": resolve_cq("fam", 4),
+            },
+            "2": {
+                "1": resolve_cq("rox", 1),
+                "2": resolve_cq("rox", 2),
+                "3": resolve_cq("rox", 3),
+                "4": resolve_cq("rox", 4),
             }
         }
 
