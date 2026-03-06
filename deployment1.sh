@@ -68,17 +68,20 @@ sudo npm install -g serve
 
 if [[ -f "${BASE_DIR}/server_web/serve.service" ]]; then
   sudo cp "${BASE_DIR}/server_web/serve.service" /etc/systemd/system/
+  sudo systemctl daemon-reload
   sudo systemctl enable serve.service
   sudo systemctl start serve.service
 fi
 
 if [[ -f "${BASE_DIR}/aquila_app.service" ]]; then
   sudo cp "${BASE_DIR}/aquila_app.service" /etc/systemd/system/
+  sudo systemctl daemon-reload
   sudo systemctl enable --now aquila_app.service
 fi
 
 if [[ -f "${BASE_DIR}/aquila_web/aquila_web.service" ]]; then
   sudo cp "${BASE_DIR}/aquila_web/aquila_web.service" /etc/systemd/system/
+  sudo systemctl daemon-reload
   sudo systemctl enable --now aquila_web.service
 fi
 
@@ -86,5 +89,10 @@ if [[ -f "/boot/cmdline.txt" ]]; then
   sudo sed -i 's/console=tty1/console=tty3/' /boot/cmdline.txt
 fi
 
-echo "Setup complete. Reboot if needed: sudo reboot now"
+if [[ -x "${BASE_DIR}/update.sh" ]]; then
+  "${BASE_DIR}/update.sh"
+else
+  echo "Setup complete. Reboot if needed: sudo reboot now"
+fi
+
 echo "Deployment done. Run: python3 ${BASE_DIR}/scripts/check_service_paths.py"
