@@ -43,6 +43,21 @@ if [[ -d "${BASE_DIR}/server_web" ]]; then
   cp "${BASE_DIR}/server_web/kiosk.py" "${HOME}/"
   sudo cp "${BASE_DIR}/server_web/autostart" /etc/xdg/openbox/
   sudo cp "${BASE_DIR}/server_web/environment" /etc/xdg/openbox/
+  if [[ -d "${HOME}/.config/chromium/Default/Cache" ]]; then
+    rm -rf "${HOME}/.config/chromium/Default/Cache"
+  fi
+  if [[ -d "${HOME}/.config/chromium/Default/Service Worker" ]]; then
+    rm -rf "${HOME}/.config/chromium/Default/Service Worker"
+  fi
+  if [[ -d "${HOME}/.config/chromium/Default/Code Cache" ]]; then
+    rm -rf "${HOME}/.config/chromium/Default/Code Cache"
+  fi
+  if [[ -d "${HOME}/.config/chromium/Default/GPUCache" ]]; then
+    rm -rf "${HOME}/.config/chromium/Default/GPUCache"
+  fi
+  if [[ -d "${HOME}/.cache/chromium" ]]; then
+    rm -rf "${HOME}/.cache/chromium"
+  fi
   if [[ -f "${BASE_DIR}/server_web/.bash_profile" ]]; then
     cp "${BASE_DIR}/server_web/.bash_profile" "${HOME}/"
   fi
@@ -92,7 +107,8 @@ fi
 if [[ -x "${BASE_DIR}/update.sh" ]]; then
   "${BASE_DIR}/update.sh"
 else
-  echo "Setup complete. Reboot if needed: sudo reboot now"
+  echo "Setup complete. Rebooting now."
+  sudo reboot now
 fi
 
 echo "Deployment done. Run: python3 ${BASE_DIR}/scripts/check_service_paths.py"
