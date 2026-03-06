@@ -18,6 +18,11 @@ if [[ -d "${BASE_DIR}/.git" ]]; then
   echo "Run 'git -C ${BASE_DIR} pull' if you want latest changes."
 fi
 
+if [[ -f "${BASE_DIR}/config_files/wifi.json" ]]; then
+  echo "Applying Wi-Fi config from config_files/wifi.json"
+  sudo python3 "${BASE_DIR}/scripts/apply_wifi.py" || true
+fi
+
 sudo mkdir -p /etc/lightdm/lightdm.conf.d
 sudo tee /etc/lightdm/lightdm.conf.d/autologin.conf >/dev/null <<EOF
 [Seat:*]
