@@ -109,7 +109,13 @@ def compute_r2(xdata, ydata):
     return 1 - ss_res / ss_tot
 
 
-def compute_cq(xdata, ydata, threshold, min_consecutive):
+def compute_cq(xdata, ydata, threshold, min_consecutive, skip_cycles=7):
+    if skip_cycles:
+        mask = xdata > skip_cycles
+        xdata = xdata[mask]
+        ydata = ydata[mask]
+        if len(xdata) == 0:
+            return None
     start = sustained_rise_index(ydata, threshold, min_consecutive)
     if start is None:
         return None

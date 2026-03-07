@@ -8,6 +8,16 @@ import numpy as np
 from aq_curve.curve import Curve
 
 
+def _smooth_curve(values: np.ndarray, window: int = 3) -> np.ndarray:
+    if window <= 1:
+        return values
+    window = min(window, len(values))
+    if window <= 1:
+        return values
+    kernel = np.ones(window) / float(window)
+    return np.convolve(values, kernel, mode="same")
+
+
 def generate_optics_plot(optics_path: str, output_path: str, labels: dict | None = None) -> None:
     curve = Curve()
     fig, ax = plt.subplots(figsize=(6, 3))
@@ -20,6 +30,8 @@ def generate_optics_plot(optics_path: str, output_path: str, labels: dict | None
         rox_curve = curve.get_curve(optics_path, "rox", index + 1)
         x_fam = np.arange(len(fam_curve))
         x_rox = np.arange(len(rox_curve))
+        fam_curve = _smooth_curve(fam_curve)
+        rox_curve = _smooth_curve(rox_curve)
         fam_curve = np.clip(fam_curve, 1e-2, None)
         rox_curve = np.clip(rox_curve, 1e-2, None)
         ax.plot(x_fam, fam_curve, label=f"{fam_label} {index + 1}")

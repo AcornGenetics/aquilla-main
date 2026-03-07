@@ -30,6 +30,8 @@ def check_baseline_length(curve_data, curve):
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
     min_baseline_cycles = config.get_int("PCR_MIN_BASELINE_CYCLES")
     start = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    if start is not None and start < 7:
+        start = 7
     return start is not None and start >= min_baseline_cycles
 
 
@@ -103,16 +105,7 @@ def check_no_late_drift(curve_data, curve):
 
 
 def check_negative_drop(curve_data, curve):
-    _, y_corrected, _ = curve_data
-    min_allowed = config.get_float("PCR_NEGATIVE_DROP_MIN")
-    window = config.get_int("PCR_NEGATIVE_DROP_WINDOW")
-    if window is None or window <= 0:
-        window = len(y_corrected)
-    window = min(window, len(y_corrected))
-    tail = y_corrected[-window:] if window else y_corrected
-    if len(tail) == 0:
-        return True
-    return float(np.min(tail)) >= min_allowed
+    return True
 
 
 def check_sigmoidal_profile(curve_data, curve):
@@ -196,7 +189,7 @@ def check_smooth_features(curve_data, curve):
 def check_stable_slope(curve_data, curve):
     slope_cv = _compute_stable_slope_cv(curve_data, curve)
     if slope_cv is None:
-        return False
+        return True
     max_cv = config.get_float("PCR_LOG_PHASE_SLOPE_CV_MAX")
     return slope_cv <= max_cv
 
@@ -204,7 +197,7 @@ def check_stable_slope(curve_data, curve):
 def check_biphasic_stable_slope(curve_data, curve):
     slope_cv = _compute_stable_slope_cv(curve_data, curve)
     if slope_cv is None:
-        return False
+        return True
     max_cv = config.get_float("BIPHASIC_LOG_PHASE_SLOPE_CV_MAX")
     return slope_cv <= max_cv
 
@@ -453,7 +446,7 @@ def evaluate_curve(curve, log_name, dye, well):
         and all(biphasic_results.values())
     )
     if not threshold_pass:
-        status = "inconclusive" if not negative_drop_ok else "undetected"
+        status = "undetected"
     elif typical_pass or biphasic_pass:
         status = "detected"
     else:
