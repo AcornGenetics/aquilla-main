@@ -30,6 +30,8 @@ def check_baseline_length(curve_data, curve):
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
     min_baseline_cycles = config.get_int("PCR_MIN_BASELINE_CYCLES")
     start = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    if start is not None and start < 7:
+        start = 7
     return start is not None and start >= min_baseline_cycles
 
 
@@ -100,6 +102,10 @@ def check_no_late_drift(curve_data, curve):
     )[0]
     max_drift = config.get_float("PCR_LATE_DRIFT_MAX")
     return float(slope) <= max_drift
+
+
+def check_negative_drop(curve_data, curve):
+    return True
 
 
 def check_sigmoidal_profile(curve_data, curve):
@@ -181,27 +187,92 @@ def check_smooth_features(curve_data, curve):
 
 
 def check_stable_slope(curve_data, curve):
-    xdata, y_corrected, _ = curve_data
+    slope_cv = _compute_stable_slope_cv(curve_data, curve)
+    if slope_cv is None:
+        return True
+    max_cv = config.get_float("PCR_LOG_PHASE_SLOPE_CV_MAX")
+    return slope_cv <= max_cv
+
+
+def check_biphasic_stable_slope(curve_data, curve):
+    slope_cv = _compute_stable_slope_cv(curve_data, curve)
+    if slope_cv is None:
+        return True
+    max_cv = config.get_float("BIPHASIC_LOG_PHASE_SLOPE_CV_MAX")
+    return slope_cv <= max_cv
+
+
+def check_biphasic_peaks(curve_data, curve):
+    _, y_corrected, _ = curve_data
     threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
     start = sustained_rise_index(y_corrected, threshold, min_consecutive)
     if start is None:
         return False
-    end = _find_log_phase_end(y_corrected, start)
-    x_segment = xdata[start:end + 1]
-    y_segment = y_corrected[start:end + 1]
-    mask = y_segment > 0
-    x_segment = x_segment[mask]
-    log_segment = np.log(y_segment[mask])
-    if len(log_segment) < 3:
-        return True
-    slopes = np.diff(log_segment) / np.diff(x_segment)
-    mean_slope = float(np.mean(slopes))
-    if mean_slope == 0:
+    min_total_cycles = config.get_int("BIPHASIC_MIN_TOTAL_CYCLES")
+    y_segment = y_corrected[start:]
+    if len(y_segment) < min_total_cycles:
         return False
-    slope_cv = float(np.std(slopes)) / abs(mean_slope)
-    max_cv = config.get_float("PCR_LOG_PHASE_SLOPE_CV_MAX")
-    return slope_cv <= max_cv
+    smooth_window = config.get_int("BIPHASIC_SMOOTH_WINDOW")
+    smoothed = _smooth_series(y_segment, smooth_window)
+    deriv = np.diff(smoothed)
+    if len(deriv) < 3:
+        return False
+    max_deriv = float(np.max(deriv))
+    if max_deriv <= 0:
+        return False
+    peak_fraction = config.get_float("BIPHASIC_PEAK_FRACTION")
+    peak_mask = deriv >= max_deriv * peak_fraction
+    groups = _group_true_indices(peak_mask)
+    peaks = []
+    for group_start, group_end in groups:
+        group_slice = deriv[group_start:group_end + 1]
+        peak_offset = int(np.argmax(group_slice))
+        peak_index = group_start + peak_offset
+        peaks.append((peak_index, float(group_slice[peak_offset]), group_start, group_end))
+    min_separation = config.get_int("BIPHASIC_MIN_PEAK_SEPARATION")
+    second_peak_fraction = config.get_float("BIPHASIC_SECOND_PEAK_FRACTION")
+    dip_fraction = config.get_float("BIPHASIC_DIP_FRACTION")
+    if len(peaks) >= 2:
+        peaks.sort(key=lambda item: item[0])
+        for idx in range(len(peaks) - 1):
+            first_peak = peaks[idx]
+            second_peak = peaks[idx + 1]
+            if second_peak[0] - first_peak[0] < min_separation:
+                continue
+            if second_peak[1] < max_deriv * second_peak_fraction:
+                continue
+            valley_start = first_peak[3] + 1
+            valley_end = second_peak[2]
+            if valley_end <= valley_start:
+                continue
+            valley_min = float(np.min(deriv[valley_start:valley_end]))
+            if valley_min <= max_deriv * dip_fraction:
+                return True
+    peak_index = int(np.argmax(deriv))
+    if peak_index >= len(deriv) - 2:
+        return False
+    dip_threshold = max_deriv * dip_fraction
+    rise_threshold = max_deriv * second_peak_fraction
+    min_rise_cycles = config.get_int("BIPHASIC_MIN_RISE_CYCLES")
+    dip_index = None
+    rise_count = 0
+    for idx, value in enumerate(deriv):
+        if idx <= peak_index:
+            continue
+        if dip_index is None:
+            if idx - peak_index < min_separation:
+                continue
+            if value <= dip_threshold:
+                dip_index = idx
+            continue
+        if value >= rise_threshold:
+            rise_count += 1
+            if rise_count >= min_rise_cycles:
+                return True
+        else:
+            rise_count = 0
+    return False
 
 
 def check_sustained_increase(curve_data, curve):
@@ -219,6 +290,52 @@ def check_sustained_increase(curve_data, curve):
         min_consecutive,
         min_rise_cycles,
     )
+
+
+def _compute_stable_slope_cv(curve_data, curve):
+    xdata, y_corrected, _ = curve_data
+    threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
+    min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
+    start = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    if start is None:
+        return None
+    end = _find_log_phase_end(y_corrected, start)
+    x_segment = xdata[start:end + 1]
+    y_segment = y_corrected[start:end + 1]
+    mask = y_segment > 0
+    x_segment = x_segment[mask]
+    log_segment = np.log(y_segment[mask])
+    if len(log_segment) < 3:
+        return None
+    slopes = np.diff(log_segment) / np.diff(x_segment)
+    mean_slope = float(np.mean(slopes))
+    if mean_slope == 0:
+        return None
+    return float(np.std(slopes)) / abs(mean_slope)
+
+
+def _smooth_series(ydata, window):
+    if window is None or window <= 1:
+        return ydata
+    window = min(window, len(ydata))
+    if window <= 1:
+        return ydata
+    kernel = np.ones(window) / float(window)
+    return np.convolve(ydata, kernel, mode="same")
+
+
+def _group_true_indices(mask):
+    groups = []
+    start = None
+    for idx, value in enumerate(mask):
+        if value and start is None:
+            start = idx
+        elif not value and start is not None:
+            groups.append((start, idx - 1))
+            start = None
+    if start is not None:
+        groups.append((start, len(mask) - 1))
+    return groups
 
 
 def _has_sustained_increase(y_corrected, threshold, min_consecutive, min_rise_cycles):
@@ -270,6 +387,7 @@ def check_signal_basics(curve_data, curve):
         check_log_phase_linearity,
         check_monotonic_rise,
         check_no_late_drift,
+        check_negative_drop,
         check_sigmoidal_profile,
         check_signal_range,
         check_single_transition,
@@ -281,6 +399,23 @@ def check_signal_basics(curve_data, curve):
     return {check.__name__: _run_check(check, curve_data, curve) for check in checks}
 
 
+def check_biphasic_basics(curve_data, curve):
+    checks = [
+        check_baseline_length,
+        check_baseline_stability,
+        check_signal_range,
+        check_smooth_features,
+        check_sustained_increase,
+        check_biphasic_peaks,
+        check_negative_drop,
+        check_biphasic_stable_slope,
+    ]
+    return {
+        f"biphasic_{check.__name__}": _run_check(check, curve_data, curve)
+        for check in checks
+    }
+
+
 def evaluate_curve(curve, log_name, dye, well):
     curve_data = get_curve_data(curve, log_name, dye, well)
     results = {
@@ -290,23 +425,32 @@ def evaluate_curve(curve, log_name, dye, well):
             curve,
         )
     }
-    results.update(check_signal_basics(curve_data, curve))
+    typical_results = check_signal_basics(curve_data, curve)
+    results.update(typical_results)
+    biphasic_results = check_biphasic_basics(curve_data, curve)
+    results.update(biphasic_results)
     threshold_pass = results["check_threshold_crossing"]
+    negative_drop_ok = results.get("check_negative_drop", True)
     baseline_fail = any(
-        not results.get(name, False)
+        not typical_results.get(name, False)
         for name in ("check_baseline_length", "check_baseline_stability")
     )
     other_fail = any(
         not passed
-        for name, passed in results.items()
-        if name != "check_threshold_crossing"
+        for name, passed in typical_results.items()
+    )
+    typical_pass = not curve.test_run and threshold_pass and not (baseline_fail or other_fail)
+    biphasic_pass = (
+        not curve.test_run
+        and threshold_pass
+        and all(biphasic_results.values())
     )
     if not threshold_pass:
         status = "undetected"
-    elif curve.test_run or baseline_fail or other_fail:
-        status = "inconclusive"
-    else:
+    elif typical_pass or biphasic_pass:
         status = "detected"
+    else:
+        status = "inconclusive"
     return {
         "status": status,
         "threshold_pass": threshold_pass,

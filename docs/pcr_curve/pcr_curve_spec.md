@@ -6,6 +6,7 @@ Define acceptance criteria for PCR amplification curves used in analysis and QC.
 ## Expected Shape
 - **Sigmoidal profile:** clear baseline, exponential rise, linear midsection, and plateau.
 - **Single transition:** one dominant rise (no secondary peaks or oscillations).
+- **Biphasic allowance:** some multiplex assays may show two distinct growth phases; these are evaluated with a separate biphasic detector.
 
 ## Baseline & Threshold
 - **Baseline stability:** baseline standard deviation and slope stay within configured limits.
@@ -23,6 +24,7 @@ Define acceptance criteria for PCR amplification curves used in analysis and QC.
 
 ## Late Stability
 - **No late drift:** last `PCR_LATE_CYCLES` slope ≤ `PCR_LATE_DRIFT_MAX`.
+- **Negative drop:** minimum corrected signal in the last `PCR_NEGATIVE_DROP_WINDOW` cycles ≥ `PCR_NEGATIVE_DROP_MIN`.
 
 ## Additional QC Checks
 - **Signal range:** raw peak meets `PCR_SIGNAL_RANGE_PEAK_FRACTION` or `PCR_MIN_FOLD`.
@@ -31,10 +33,19 @@ Define acceptance criteria for PCR amplification curves used in analysis and QC.
 - **Cycle location:** `PCR_CQ_MIN ≤ Cq ≤ PCR_CQ_MAX`.
 - **Threshold oscillation:** threshold crossings ≤ 1.
 
+## Biphasic Acceptance
+- **Two growth phases:** derivative shows two separated peaks or a peak–dip–rise pattern.
+- **Baseline stability:** same baseline requirements as typical curves.
+- **Signal range:** raw signal meets `PCR_SIGNAL_RANGE_PEAK_FRACTION` or `PCR_MIN_FOLD`.
+- **Smooth features:** spike limits remain enforced.
+- **Sustained increase:** rise persists for `PCR_MIN_RISE_CYCLES`.
+- **Stable slope (biphasic):** log-phase slope CV ≤ `BIPHASIC_LOG_PHASE_SLOPE_CV_MAX`.
+
 ## Result Classification
 - **Not detected:** sample never crosses the threshold.
-- **Detected:** sample crosses the threshold and meets all acceptance criteria.
-- **Inconclusive:** sample crosses the threshold but fails one or more criteria.
+- **Inconclusive:** threshold fails but the curve drops below `PCR_NEGATIVE_DROP_MIN` (default `-0.2`) in the last `PCR_NEGATIVE_DROP_WINDOW` cycles (default `20`).
+- **Detected:** sample crosses the threshold and meets typical or biphasic criteria.
+- **Inconclusive:** sample crosses the threshold but fails both check suites.
 
 ## Rejection Criteria
 - Multiple rises, erratic spikes, or oscillations.

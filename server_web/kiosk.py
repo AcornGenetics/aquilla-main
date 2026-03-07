@@ -8,7 +8,7 @@ from gi.repository import Gtk, WebKit2, Gdk
 # Change this if you serve via lighttpd instead:
 #URL = "file:///home/pi/app/dist/index.html"
 #URL="http://127.0.0.1:8090"
-URL = "http://localhost:3000"  # if using a local web server
+URL = "http://localhost:8090"  # Aquilla web UI
 
 class KioskWindow(Gtk.Window):
     def __init__(self):

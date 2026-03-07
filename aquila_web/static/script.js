@@ -39,6 +39,9 @@ let tubeNames = DEFAULT_TUBE_NAMES.slice();
 const DEFAULT_DYE_LABELS = { fam: "FAM", rox: "ROX" };
 let dyeLabels = { ...DEFAULT_DYE_LABELS };
 let stopWarningTimer = null;
+let lastElapsedSeconds = null;
+let isStoppingRun = false;
+const STOPPING_MESSAGE = "Stopping…";
 
 const loadTubeNames = () => {
   try {
@@ -143,6 +146,7 @@ function formatElapsed(seconds) {
     return;
   }
 
+  lastElapsedSeconds = seconds;
   const mins = Math.floor(seconds / 60);
   const secs = (seconds % 60);
   console.log(`Min:${mins}, sec: ${secs}`)
@@ -402,7 +406,11 @@ socket.onmessage = function(event) {
     console.log("Elapsed secs:", panel.elapsed);
     showPanel(panel);
     if("elapsed" in panel){
-      formatElapsed(panel.elapsed);
+      if (!isStoppingRun) {
+        formatElapsed(panel.elapsed);
+      } else if (typeof lastElapsedSeconds === "number") {
+        formatElapsed(lastElapsedSeconds);
+      }
     }
     const shouldShowStop =
       panel.screen === "running" &&
@@ -410,8 +418,10 @@ socket.onmessage = function(event) {
     setStopRunVisibility(shouldShowStop);
     if (panel.screen !== "running") {
       setStopRunState(true);
-      if (isDashboard && runWarning && runWarning.textContent === "Stopping run...") {
-        clearRunWarningAfterDelay();
+      isStoppingRun = false;
+      lastElapsedSeconds = null;
+      if (isDashboard && runWarning && runWarning.textContent === STOPPING_MESSAGE) {
+        setRunWarning("");
       }
     }
     if (panel.screen){
@@ -562,7 +572,11 @@ async function notifyStopRun(){
         return;
     }
     setStopRunState(false);
-    setRunWarning("Stopping run...");
+    isStoppingRun = true;
+    if (typeof lastElapsedSeconds === "number") {
+      formatElapsed(lastElapsedSeconds);
+    }
+    setRunWarning(STOPPING_MESSAGE);
     try {
         const ret = await fetch("/button/stop", {
             method:"POST"

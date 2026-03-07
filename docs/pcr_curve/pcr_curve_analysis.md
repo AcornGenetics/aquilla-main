@@ -58,11 +58,23 @@ Each check is evaluated on the baseline-corrected curve unless noted.
 - **Smooth features**: max diff ≤ `PCR_SPIKE_MULTIPLIER * median_diff` (or ≤ `PCR_MAX_DIFF` if median is 0).
 - **No late drift**: slope of last `PCR_LATE_CYCLES` ≤ `PCR_LATE_DRIFT_MAX`.
 - **Signal range (raw)**: peak amplitude fraction ≥ `PCR_SIGNAL_RANGE_PEAK_FRACTION` or fold-change ≥ `PCR_MIN_FOLD`.
+- **Negative drop**: minimum corrected signal in the last `PCR_NEGATIVE_DROP_WINDOW` cycles ≥ `PCR_NEGATIVE_DROP_MIN`.
+
+### Biphasic checks
+For multiplex assays, a curve may show two growth phases (double-sigmoid). The biphasic path uses a separate, conservative set of checks:
+
+- **Biphasic peaks**: the smoothed derivative has two strong, separated peaks or a peak–dip–rise pattern.
+- **Baseline stability**: same baseline length/stability checks as typical curves.
+- **Signal range**: raw signal meets the same minimum range requirements.
+- **Smooth features**: limits on abrupt spikes remain enforced.
+- **Sustained increase**: post-threshold rise persists for the minimum rise cycles.
+- **Stable slope (biphasic)**: log-phase slope CV ≤ `BIPHASIC_LOG_PHASE_SLOPE_CV_MAX`.
 
 ## Final classification
 - **Undetected**: threshold crossing fails.
-- **Inconclusive**: threshold passes, but any other check fails.
-- **Detected**: threshold passes and all other checks pass.
+- **Inconclusive**: threshold fails but the curve drops below `PCR_NEGATIVE_DROP_MIN` (default `-0.2`) in the last `PCR_NEGATIVE_DROP_WINDOW` cycles (default `20`).
+- **Detected**: threshold passes and either the typical checks or biphasic checks pass.
+- **Inconclusive**: threshold passes, but both check suites fail.
 
 ## Implementation references
 - Data preparation and baseline: `aquila-main/aq_curve/curve.py`
