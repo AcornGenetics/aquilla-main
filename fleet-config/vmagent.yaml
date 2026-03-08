@@ -9,5 +9,5 @@ scrape_configs:
 remote_write:
   - url: https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push
     basic_auth:
-      username: "REPLACE_GRAFANA_METRICS_USER"
-      password: "REPLACE_GRAFANA_METRICS_TOKEN"
+      username: "${GRAFANA_METRICS_USER}"
+      password: "${GRAFANA_METRICS_TOKEN}"
