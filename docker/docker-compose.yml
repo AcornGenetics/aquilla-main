@@ -1,0 +1,33 @@
+services:
+  backend:
+    image: ghcr.io/${GHCR_REPO:-AcornGenetics/aquilla-main}-api:latest
+    ports:
+      - "8090:8090"
+    environment:
+      DEVICE_ID: "arete-0001"
+      RUN_MODE: "prod"
+      DATA_DIR: "/opt/aquila"
+      PROFILE_DIR: "/opt/aquila/profiles"
+      RESULTS_PATH: "/opt/aquila/results/results.json"
+    volumes:
+      - ../data/results:/opt/aquila/results
+      - ../data/logs:/opt/aquila/logs
+      - ../data/profiles:/opt/aquila/profiles
+      - ../data/config:/opt/aquila/config
+    devices:
+      - "/dev/ttyACM0:/dev/ttyACM0"
+      - "/dev/i2c-1:/dev/i2c-1"
+      - "/dev/spidev0.0:/dev/spidev0.0"
+      - "/dev/spidev0.1:/dev/spidev0.1"
+      - "/dev/gpiomem:/dev/gpiomem"
+    privileged: true
+    restart: unless-stopped
+
+  ui:
+    image: ghcr.io/${GHCR_REPO:-AcornGenetics/aquilla-main}-ui:latest
+    ports:
+      - "8080:80"
+    environment:
+      DEVICE_ID: "arete-0001"
+      RUN_MODE: "prod"
+    restart: unless-stopped

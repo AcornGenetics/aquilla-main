@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic
+requests
+numpy
+pandas
+matplotlib
+pyserial
+smbus2
+simple-rpc
+psycopg[binary]

@@ -1,0 +1,127 @@
+services:
+  backend:
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG:-stable}
+    env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
+    container_name: aquila-backend
+    ports:
+      - "8090:8090"
+    environment:
+      DATA_DIR: "/opt/aquila"
+      PROFILE_DIR: "/opt/aquila/profiles"
+      RESULTS_PATH: "/opt/aquila/results/results.json"
+    volumes:
+      - /opt/aquila/results:/opt/aquila/results
+      - /opt/aquila/logs:/opt/aquila/logs
+      - /opt/aquila/profiles:/opt/aquila/profiles
+      - /opt/aquila/config:/opt/aquila/config
+    devices:
+      - "/dev/ttyACM0:/dev/ttyACM0"
+      - "/dev/i2c-1:/dev/i2c-1"
+      - "/dev/spidev0.0:/dev/spidev0.0"
+      - "/dev/spidev0.1:/dev/spidev0.1"
+      - "/dev/gpiomem:/dev/gpiomem"
+    privileged: true
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  ui:
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-ui:${IMAGE_TAG:-stable}
+    env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
+    container_name: aquila-ui
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: aquila-watchtower
+    env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
+    ports:
+      - "8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_HTTP_API_UPDATE: "true"
+      WATCHTOWER_CLEANUP: "true"
+    command: --label-enable --http-api-update --cleanup
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  node-exporter:
+    image: prom/node-exporter
+    container_name: aquila-node-exporter
+    network_mode: host
+    pid: host
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  vmagent:
+    image: victoriametrics/vmagent
+    container_name: aquila-vmagent
+    volumes:
+      - /opt/fleet/vmagent:/vmagentdata
+      - /opt/fleet/vmagent.yaml:/etc/vmagent/vmagent.yaml:ro
+    command:
+      - "-promscrape.config=/etc/vmagent/vmagent.yaml"
+      - "-remoteWrite.tmpDataPath=/vmagentdata"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  vector:
+    image: timberio/vector:0.33.1-alpine
+    container_name: aquila-vector
+    volumes:
+      - /opt/fleet/vector:/var/lib/vector
+      - /opt/fleet/vector.yaml:/etc/vector/vector.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["--config", "/etc/vector/vector.yaml"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
