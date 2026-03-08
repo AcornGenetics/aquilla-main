@@ -21,6 +21,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set lowercase repo
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -41,9 +44,9 @@ jobs:
           file: docker/Dockerfile.api
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}-api:latest
-            ghcr.io/${{ github.repository }}-api:${{ github.sha }}
-            ${{ inputs.ring_tag && format('ghcr.io/{0}-api:{1}', github.repository, inputs.ring_tag) || '' }}
+            ghcr.io/${{ env.REPO_LOWER }}-api:latest
+            ghcr.io/${{ env.REPO_LOWER }}-api:${{ github.sha }}
+            ${{ inputs.ring_tag && format('ghcr.io/{0}-api:{1}', env.REPO_LOWER, inputs.ring_tag) || '' }}
 
       - name: Build and push UI image
         uses: docker/build-push-action@v5
@@ -52,6 +55,6 @@ jobs:
           file: docker/Dockerfile.ui
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}-ui:latest
-            ghcr.io/${{ github.repository }}-ui:${{ github.sha }}
-            ${{ inputs.ring_tag && format('ghcr.io/{0}-ui:{1}', github.repository, inputs.ring_tag) || '' }}
+            ghcr.io/${{ env.REPO_LOWER }}-ui:latest
+            ghcr.io/${{ env.REPO_LOWER }}-ui:${{ github.sha }}
+            ${{ inputs.ring_tag && format('ghcr.io/{0}-ui:{1}', env.REPO_LOWER, inputs.ring_tag) || '' }}
