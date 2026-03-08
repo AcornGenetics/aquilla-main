@@ -1,0 +1,19 @@
+data_dir: /var/lib/vector
+
+sources:
+  docker_logs:
+    type: docker_logs
+
+sinks:
+  loki:
+    type: loki
+    inputs:
+      - docker_logs
+    endpoint: https://logs-prod-036.grafana.net/loki/api/v1/push
+    auth:
+      strategy: basic
+      user: "REPLACE_GRAFANA_LOGS_USER"
+      password: "REPLACE_GRAFANA_LOGS_TOKEN"
+    labels:
+      source: aquila
+      device_id: "${DEVICE_ID}"
