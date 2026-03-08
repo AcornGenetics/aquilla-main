@@ -20,6 +20,9 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     steps:
+      - name: Set lowercase repo
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -30,7 +33,7 @@ jobs:
       - name: Retag and push ring images
         run: |
           set -euo pipefail
-          repo="ghcr.io/${{ github.repository }}"
+          repo="ghcr.io/${{ env.REPO_LOWER }}"
           source_tag="${{ inputs.source_tag }}"
           target_tag="${{ inputs.target_tag }}"
 
