@@ -29,9 +29,7 @@
     "axis":{
 	"home_steps": 2500,
 	"step_multiplier": 8,
-	"well_one": 300,
-	"well_spacing": 359
-
+	"positions": [320, 675, 1030, 1380, 1740, 2100]
     },
     "adc":{
 	"famP": 0, "famN": 1,
@@ -68,8 +66,7 @@
     "axis":{
 	"home_steps": 2500,
 	"step_multiplier": 8,
-	"well_one": 300,
-	"well_spacing": 355
+	"positions": [280, 640, 1010, 1365, 1720, 2075]
     },
     "adc":{
 	"famP": 0, "famN": 1,

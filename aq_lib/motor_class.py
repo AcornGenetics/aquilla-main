@@ -162,12 +162,20 @@ class Axis ( Motor ):
     step_multiplier = config.axis["step_multiplier"]
     home_steps = config.axis["home_steps"]
 
-    w0 = config.axis["well_one"]
-    dw = config.axis["well_spacing"]
-
     def __init__( self ):
         super().__init__()
-        self.positions = [ self.w0 + self.dw*i for i in range(6) ]
+
+        # Read positions directly from config if available,
+        # otherwise fall back to calculating from well_one and well_spacing
+        if "positions" in config.axis:
+            self.positions = config.axis["positions"]
+            logger.info("Loaded axis positions from config: %s", self.positions)
+        else:
+            # Legacy fallback: calculate from well_one and well_spacing
+            w0 = config.axis.get("well_one", 300)
+            dw = config.axis.get("well_spacing", 355)
+            self.positions = [ w0 + dw*i for i in range(6) ]
+            logger.info("Calculated axis positions (legacy): %s", self.positions)
 
     def goto_position( self, N ):
         logger.info( "Go to position: %d", N )
