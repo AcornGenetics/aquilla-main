@@ -2,6 +2,32 @@
 
 set -euo pipefail
 
+if [[ -f /opt/aquila/config/grafana.env ]]; then
+  # shellcheck source=/dev/null
+  source /opt/aquila/config/grafana.env
+fi
+
+: "${GCLOUD_HOSTED_METRICS_ID:?Missing GCLOUD_HOSTED_METRICS_ID}"
+: "${GCLOUD_HOSTED_METRICS_URL:?Missing GCLOUD_HOSTED_METRICS_URL}"
+: "${GCLOUD_HOSTED_LOGS_ID:?Missing GCLOUD_HOSTED_LOGS_ID}"
+: "${GCLOUD_HOSTED_LOGS_URL:?Missing GCLOUD_HOSTED_LOGS_URL}"
+: "${GCLOUD_FM_URL:?Missing GCLOUD_FM_URL}"
+: "${GCLOUD_FM_POLL_FREQUENCY:?Missing GCLOUD_FM_POLL_FREQUENCY}"
+: "${GCLOUD_FM_HOSTED_ID:?Missing GCLOUD_FM_HOSTED_ID}"
+: "${ARCH:?Missing ARCH}"
+: "${GCLOUD_RW_API_KEY:?Missing GCLOUD_RW_API_KEY}"
+
+GCLOUD_HOSTED_METRICS_ID="$GCLOUD_HOSTED_METRICS_ID" \
+  GCLOUD_HOSTED_METRICS_URL="$GCLOUD_HOSTED_METRICS_URL" \
+  GCLOUD_HOSTED_LOGS_ID="$GCLOUD_HOSTED_LOGS_ID" \
+  GCLOUD_HOSTED_LOGS_URL="$GCLOUD_HOSTED_LOGS_URL" \
+  GCLOUD_FM_URL="$GCLOUD_FM_URL" \
+  GCLOUD_FM_POLL_FREQUENCY="$GCLOUD_FM_POLL_FREQUENCY" \
+  GCLOUD_FM_HOSTED_ID="$GCLOUD_FM_HOSTED_ID" \
+  ARCH="$ARCH" \
+  GCLOUD_RW_API_KEY="$GCLOUD_RW_API_KEY" \
+  /bin/sh -c "$(curl -fsSL https://storage.googleapis.com/cloud-onboarding/alloy/scripts/install-linux.sh)"
+
 CONFIG_PATH="/etc/alloy/config.alloy"
 
 if ! sudo test -f "$CONFIG_PATH"; then
