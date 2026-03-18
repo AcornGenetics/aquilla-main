@@ -1,6 +1,6 @@
 services:
   backend:
-    image: ghcr.io/${GHCR_REPO:-AcornGenetics/aquilla-main}-api:latest
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:latest
     ports:
       - "8090:8090"
     environment:
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   ui:
-    image: ghcr.io/${GHCR_REPO:-AcornGenetics/aquilla-main}-ui:latest
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-ui:latest
     ports:
       - "8080:80"
     environment:
