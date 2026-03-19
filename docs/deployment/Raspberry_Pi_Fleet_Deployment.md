@@ -17,18 +17,18 @@ CI/CD\
 Registry\
 - GitHub Container Registry (GHCR)
 
-Monitoring (offline-friendly)\
-- VictoriaMetrics Agent - Node Exporter - Grafana Cloud (optional)
+Monitoring (Grafana Labs)\
+- Grafana Agent (Alloy) - Node Exporter - Grafana Cloud
 
-Logging\
-- Vector → Loki
+Logging (Grafana Labs)\
+- Grafana Agent (Alloy) → Loki (Grafana Cloud)
 
 ------------------------------------------------------------------------
 
 # 1. System Architecture
 
 Developer pushes code → GitHub Actions builds container → Image pushed
-to GHCR → Watchtower pulls update → Devices update containers.
+to GHCR → Watchtower (or manual pull) updates devices.
 
 ------------------------------------------------------------------------
 
@@ -41,8 +41,7 @@ Each Raspberry Pi runs:
   Docker                   container runtime
   Watchtower               OTA container updates
   Tailscale                secure device networking
-  Vector                   log shipping
-  VictoriaMetrics Agent    metrics buffering
+  Grafana Agent (Alloy)    metrics + logs
   Node Exporter            system metrics
   Application containers   business logic
 
@@ -84,8 +83,7 @@ Directory structure:
 
     /opt/fleet
         docker-compose.yml
-        vector.yaml
-        vmagent.yaml
+        grafana-agent.yaml
 
 Example docker-compose.yml:
 
@@ -95,7 +93,7 @@ version: "3.9"
 services:
 
   app:
-    image: ghcr.io/org/myapp:stable
+    image: ghcr.io/org/aquila-api:pilot
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
@@ -123,8 +121,8 @@ services:
     restart: unless-stopped
     network_mode: host
 
-  vmagent:
-    image: victoriametrics/vmagent
+  grafana-agent:
+    image: grafana/agent
     restart: unless-stopped
 ```
 
@@ -135,8 +133,7 @@ services:
 1.  Developer pushes code
 2.  GitHub Actions builds container
 3.  Image pushed to GHCR
-4.  CI triggers Watchtower API
-5.  Devices pull updated container
+4.  Devices update via Watchtower API or manual pull
 
 Example OTA trigger:
 
@@ -152,15 +149,14 @@ Use deployment rings:
   Ring     Devices     Purpose
   -------- ----------- ------------------
   dev      5           internal testing
-  canary   10          early production
-  beta     30          wider rollout
+  pilot    30          wider rollout
   prod     remaining   full deployment
 
 Devices use different tags:
 
-    myapp:dev
-    myapp:canary
-    myapp:stable
+    aquila-api:dev
+    aquila-api:pilot
+    aquila-api:prod
 
 ------------------------------------------------------------------------
 
@@ -214,26 +210,26 @@ jobs:
 
     - name: Build image
       run: |
-        docker build -t ghcr.io/org/myapp:${{ github.sha }} .
-        docker push ghcr.io/org/myapp:${{ github.sha }}
+        docker build -t ghcr.io/org/aquila-api:${{ github.sha }} .
+        docker push ghcr.io/org/aquila-api:${{ github.sha }}
 
-    - name: Tag stable
+    - name: Tag pilot
       run: |
-        docker tag ghcr.io/org/myapp:${{ github.sha }} ghcr.io/org/myapp:stable
-        docker push ghcr.io/org/myapp:stable
+        docker tag ghcr.io/org/aquila-api:${{ github.sha }} ghcr.io/org/aquila-api:pilot
+        docker push ghcr.io/org/aquila-api:pilot
 ```
 
 ------------------------------------------------------------------------
 
-# 9. Monitoring (Offline Friendly)
+# 9. Monitoring (Grafana Labs)
 
-Use **VictoriaMetrics Agent**.
+Use **Grafana Agent (Alloy)**.
 
 Benefits:
 
 -   buffers metrics locally
 -   low memory footprint
--   forwards metrics when internet reconnects
+-   forwards metrics to Grafana Cloud
 
 Metrics collected:
 
@@ -245,25 +241,28 @@ Metrics collected:
 
 ------------------------------------------------------------------------
 
-# 10. Logging
+# 10. Logging (Grafana Labs)
 
-Use **Vector + Loki**.
+Use **Grafana Agent (Alloy) + Loki**.
 
 Architecture:
 
-Containers → Vector → Local Buffer → Loki
+Containers → Grafana Agent (Alloy) → Loki (Grafana Cloud)
 
-Example vector.yaml:
+Example grafana-agent.yaml:
 
 ``` yaml
-sources:
-  docker_logs:
-    type: docker_logs
-
-sinks:
-  loki:
-    type: loki
-    endpoint: https://loki.example.com
+logs:
+  configs:
+    - name: default
+      positions:
+        filename: /tmp/positions.yaml
+      scrape_configs:
+        - job_name: docker
+          docker_sd_configs:
+            - host: unix:///var/run/docker.sock
+      clients:
+        - url: https://loki.example.com/loki/api/v1/push
 ```
 
 ------------------------------------------------------------------------
@@ -279,12 +278,12 @@ Use immutable versions:
 
 Deployment tag:
 
-    myapp:stable
+    myapp:pilot
 
 Rollback:
 
-    docker tag myapp:1.2.3 myapp:stable
-    docker push myapp:stable
+    docker tag myapp:1.2.3 myapp:pilot
+    docker push myapp:pilot
 
 Devices automatically downgrade.
 
@@ -390,7 +389,7 @@ Device automatically rejoins fleet.
   OTA updates         Watchtower
   CI/CD               GitHub Actions
   registry            GHCR
-  monitoring          VictoriaMetrics
-  logs                Vector + Loki
+  monitoring          Grafana Labs (Grafana Cloud)
+  logs                Grafana Labs (Loki)
   rollout             ring deployments
   rollback            tag rollback

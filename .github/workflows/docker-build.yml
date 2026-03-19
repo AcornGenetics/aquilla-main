@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       ring_tag:
-        description: Optional ring tag to publish (dev/canary/stable/prod)
+        description: Optional ring tag to publish (dev/pilot/prod)
         required: false
         type: string
 

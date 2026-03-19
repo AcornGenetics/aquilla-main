@@ -92,6 +92,23 @@ A.7 Install x-server and browser
 
    sudo reboot now
 
+A.9 Docker + Watchtower (optional)
+    a. Install Docker
+        curl -fsSL https://get.docker.com | sh
+        sudo usermod -aG docker pi
+        sudo apt-get install -y docker-compose-plugin
+    b. Log out/in or run newgrp docker
+    c. Login to GHCR (for private images)
+        echo '<PAT>' | docker login ghcr.io -u <github_user> --password-stdin
+    d. Run containers
+        cd ~/aquilla-main
+        docker compose -f docker/docker-compose.yml up -d
+    e. Start Watchtower (label-based)
+        docker run -d --name watchtower --restart unless-stopped \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v /home/pi/.docker/config.json:/config.json \
+          containrrr/watchtower --label-enable --cleanup --interval 300
+
    After reboot, run: python3 ~/aquilla-main/scripts/check_service_paths.py
 
 A.8 Quiet login
