@@ -14,4 +14,6 @@ IMAGE_TAG=${IMAGE_TAG}
 WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN}
 EOF
 
+sudo docker compose --env-file /opt/aquila/config/device.env -f /opt/fleet/docker-compose.yml up -d
+
 echo "Configured device.env with IMAGE_TAG=${IMAGE_TAG}."
