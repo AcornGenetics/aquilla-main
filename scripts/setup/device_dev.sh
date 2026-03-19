@@ -5,7 +5,7 @@ DEVICE_ID="${DEVICE_ID:-dev-000}"
 WATCHTOWER_HTTP_API_TOKEN="${WATCHTOWER_HTTP_API_TOKEN:-REPLACE_WATCHTOWER_TOKEN}"
 IMAGE_TAG="dev"
 
-"$(dirname "$0")/../setup_fleet_device.sh"
+bash "$(dirname "$0")/../setup_fleet_device.sh"
 
 sudo tee /opt/aquila/config/device.env >/dev/null <<EOF
 DEVICE_ID=${DEVICE_ID}
