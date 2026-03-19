@@ -1,6 +1,6 @@
 services:
   backend:
-    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG:-stable}
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG}
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     container_name: aquila-backend
     ports:
@@ -35,7 +35,7 @@ services:
           memory: 1024M
 
   ui:
-    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-ui:${IMAGE_TAG:-stable}
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-ui:${IMAGE_TAG}
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     container_name: aquila-ui
     ports:

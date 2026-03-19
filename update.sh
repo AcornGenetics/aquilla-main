@@ -5,6 +5,9 @@ BASE_DIR="${AQ_SRC_BASEDIR:-/home/pi/aquilla-main}"
 AUTOLOGIN_USER="${AUTOLOGIN_USER:-${USER}}"
 ROTATE_OUTPUT="${ROTATE_OUTPUT:-HDMI-2}"
 ROTATE_DIR="${ROTATE_DIR:-left}"
+INSTALL_DOCKER="${INSTALL_DOCKER:-0}"
+WATCHTOWER_ENABLE="${WATCHTOWER_ENABLE:-0}"
+WATCHTOWER_INTERVAL="${WATCHTOWER_INTERVAL:-300}"
 
 echo "Using base directory: ${BASE_DIR}"
 
@@ -21,6 +24,17 @@ fi
 if [[ -f "${BASE_DIR}/config_files/wifi.json" ]]; then
   echo "Applying Wi-Fi config from config_files/wifi.json"
   sudo python3 "${BASE_DIR}/scripts/apply_wifi.py" || true
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  if [[ "${INSTALL_DOCKER}" == "1" ]]; then
+    echo "Docker not found. Installing Docker..."
+    curl -fsSL https://get.docker.com | sh
+    sudo usermod -aG docker "${AUTOLOGIN_USER}" || true
+    sudo apt-get install -y docker-compose-plugin
+  else
+    echo "Docker not found. Set INSTALL_DOCKER=1 to install it."
+  fi
 fi
 
 sudo mkdir -p /etc/lightdm/lightdm.conf.d
@@ -43,6 +57,17 @@ for service in aquila_app.service aquila_web.service serve.service; do
     sudo systemctl restart "$service"
   fi
 done
+
+if command -v docker >/dev/null 2>&1 && [[ "${WATCHTOWER_ENABLE}" == "1" ]]; then
+  if ! sudo docker ps -a --format '{{.Names}}' | grep -qx "watchtower"; then
+    sudo docker run -d --name watchtower --restart unless-stopped \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v "/home/${AUTOLOGIN_USER}/.docker/config.json:/config.json" \
+      containrrr/watchtower --label-enable --cleanup --interval "${WATCHTOWER_INTERVAL}"
+  else
+    sudo docker start watchtower >/dev/null 2>&1 || true
+  fi
+fi
 
 sudo mkdir -p /etc/xdg/openbox
 

@@ -7,6 +7,9 @@ BIN_LINK="${BASE_DIR}/bin"
 AUTOLOGIN_USER="${AUTOLOGIN_USER:-${USER}}"
 ROTATE_OUTPUT="${ROTATE_OUTPUT:-HDMI-2}"
 ROTATE_DIR="${ROTATE_DIR:-left}"
+INSTALL_DOCKER="${INSTALL_DOCKER:-0}"
+WATCHTOWER_ENABLE="${WATCHTOWER_ENABLE:-0}"
+WATCHTOWER_INTERVAL="${WATCHTOWER_INTERVAL:-300}"
 
 echo "Manual step: ensure SSH keys are installed if cloning private repos."
 echo "Using base directory: ${BASE_DIR}"
@@ -14,6 +17,20 @@ echo "Using base directory: ${BASE_DIR}"
 sudo apt-get update
 sudo apt-get upgrade -y
 sudo apt-get install -y git screen vim pylint python3-dev python3-venv python3-pip
+
+if ! command -v docker >/dev/null 2>&1; then
+  if [[ "${INSTALL_DOCKER}" == "1" ]]; then
+    echo "Docker not found. Installing Docker..."
+    sudo rm -rf /var/lib/apt/lists/*
+    sudo apt-get update
+    sudo apt-get install -y iptables || echo "iptables not available. Check apt sources."
+    curl -fsSL https://get.docker.com | sh
+    sudo usermod -aG docker "${AUTOLOGIN_USER}" || true
+    sudo apt-get install -y docker-compose-plugin
+  else
+    echo "Docker not found. Set INSTALL_DOCKER=1 to install it."
+  fi
+fi
 
 if [[ ! -d "${BASE_DIR}" ]]; then
   echo "Repo not found at ${BASE_DIR}. Clone it first."
@@ -98,6 +115,17 @@ if [[ -f "${BASE_DIR}/aquila_web/aquila_web.service" ]]; then
   sudo cp "${BASE_DIR}/aquila_web/aquila_web.service" /etc/systemd/system/
   sudo systemctl daemon-reload
   sudo systemctl enable --now aquila_web.service
+fi
+
+if command -v docker >/dev/null 2>&1 && [[ "${WATCHTOWER_ENABLE}" == "1" ]]; then
+  if ! sudo docker ps -a --format '{{.Names}}' | grep -qx "watchtower"; then
+    sudo docker run -d --name watchtower --restart unless-stopped \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v "/home/${AUTOLOGIN_USER}/.docker/config.json:/config.json" \
+      containrrr/watchtower --label-enable --cleanup --interval "${WATCHTOWER_INTERVAL}"
+  else
+    sudo docker start watchtower >/dev/null 2>&1 || true
+  fi
 fi
 
 if [[ -f "/boot/cmdline.txt" ]]; then

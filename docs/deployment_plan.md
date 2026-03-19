@@ -35,7 +35,7 @@
 
 - GHCR stores versioned container images (tag + digest)
 - GitHub Actions builds and pushes images on each `main` commit
-- Ring tags (`dev/stable/prod`) control which devices update
+- Ring tags (`dev/pilot/prod`) control which devices update
 
 ### Optional (later)
 
@@ -103,7 +103,7 @@ Use one of these approaches:
    - `docker compose pull`
    - `docker compose up -d`
 
-Devices choose release via `IMAGE_TAG` (`dev/stable/prod`) in `device.env`.
+Devices choose release via `IMAGE_TAG` (`dev/pilot/prod`) in `device.env`.
 
 ### 5) Rollout strategy (fleet-safe)
 
@@ -141,14 +141,14 @@ Outcome: containers handle “app”, Mender handles “platform”.
 2. Create GHCR repos to store images.
 3. GitHub Actions builds + pushes images to GHCR on each `main` commit (tag + digest).
 4. Devices pull updates via Watchtower or manual `docker compose pull`.
-5. Use ring tags (`dev/stable/prod`) to control rollout.
+5. Use ring tags (`dev/pilot/prod`) to control rollout.
 6. Add monitoring/log shipping as needed.
 7. Later: add Mender for OS A/B partitioning.
 
 ## What you still need to decide
 
 - Update mechanism: Watchtower API vs manual pulls on each device.
-- Tag strategy: how you promote `dev` → `stable` → `prod`.
+- Tag strategy: how you promote `dev` → `pilot` → `prod`.
 - Access control: device auth for GHCR pulls.
 
 ## Progress log

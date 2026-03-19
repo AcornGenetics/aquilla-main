@@ -22,6 +22,9 @@ sudo apt-get update
 sudo apt-get install -y alloy
 
 if ! command -v docker >/dev/null 2>&1; then
+  sudo rm -rf /var/lib/apt/lists/*
+  sudo apt-get update
+  sudo apt-get install -y iptables || echo "iptables not available. Check apt sources."
   curl -fsSL https://get.docker.com | sudo sh
   sudo usermod -aG docker "$USER"
 fi
@@ -30,7 +33,7 @@ sudo apt-get install -y docker-compose-plugin
 
 echo "Installing Tailscale..."
 curl -fsSL https://tailscale.com/install.sh | sudo sh
-echo "Run 'sudo tailscale up' to authenticate this device."
+echo "Run 'sudo tailscale up --ssh' to authenticate this device."
 
 echo "Creating fleet directories..."
 sudo mkdir -p /opt/fleet
@@ -46,6 +49,14 @@ sudo cp "${REPO_ROOT}/fleet-config/vector.yaml" /opt/fleet/vector.yaml.template
 sudo cp "${REPO_ROOT}/config_files/device.env" /opt/aquila/config/device.env
 sudo cp "${REPO_ROOT}/config_files/grafana.env" /opt/aquila/config/grafana.env
 
+if [[ -z "${WATCHTOWER_HTTP_API_TOKEN:-}" ]]; then
+  WATCHTOWER_HTTP_API_TOKEN="$(openssl rand -hex 32)"
+  echo "Generated WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN}"
+fi
+
+sudo sed -i "s/^WATCHTOWER_HTTP_API_TOKEN=.*/WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN}/" \
+  /opt/aquila/config/device.env
+
 echo "Rendering Grafana config templates..."
 set -a
 # shellcheck source=/dev/null
@@ -58,3 +69,5 @@ echo "Starting fleet services..."
 sudo docker compose --env-file /opt/aquila/config/device.env -f /opt/fleet/docker-compose.yml up -d
 
 echo "Done. If you just installed Docker, log out/in for group changes."
+echo "Edit /opt/aquila/config/device.env to set DEVICE_ID, IMAGE_TAG, and WATCHTOWER_HTTP_API_TOKEN."
+echo "Optional: run 'pytest tests/fleet_device' to verify scripts."

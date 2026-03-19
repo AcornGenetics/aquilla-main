@@ -99,5 +99,5 @@ docker compose -f docker-compose.prod.yml up -d
 ## 5) Best practices
 - Use **versioned tags** for rollbacks.
 - Keep **backend updates rare**, UI updates frequent.
-- Maintain a **stable** tag for production devices.
+- Maintain a **prod** tag for production devices.
 - Log container versions on boot for traceability.

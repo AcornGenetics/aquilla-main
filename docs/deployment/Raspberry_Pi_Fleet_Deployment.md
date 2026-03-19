@@ -93,7 +93,7 @@ version: "3.9"
 services:
 
   app:
-    image: ghcr.io/org/aquila-api:stable
+    image: ghcr.io/org/aquila-api:pilot
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
@@ -149,13 +149,13 @@ Use deployment rings:
   Ring     Devices     Purpose
   -------- ----------- ------------------
   dev      5           internal testing
-  stable   30          wider rollout
+  pilot    30          wider rollout
   prod     remaining   full deployment
 
 Devices use different tags:
 
     aquila-api:dev
-    aquila-api:stable
+    aquila-api:pilot
     aquila-api:prod
 
 ------------------------------------------------------------------------
@@ -213,10 +213,10 @@ jobs:
         docker build -t ghcr.io/org/aquila-api:${{ github.sha }} .
         docker push ghcr.io/org/aquila-api:${{ github.sha }}
 
-    - name: Tag stable
+    - name: Tag pilot
       run: |
-        docker tag ghcr.io/org/aquila-api:${{ github.sha }} ghcr.io/org/aquila-api:stable
-        docker push ghcr.io/org/aquila-api:stable
+        docker tag ghcr.io/org/aquila-api:${{ github.sha }} ghcr.io/org/aquila-api:pilot
+        docker push ghcr.io/org/aquila-api:pilot
 ```
 
 ------------------------------------------------------------------------
@@ -278,12 +278,12 @@ Use immutable versions:
 
 Deployment tag:
 
-    myapp:stable
+    myapp:pilot
 
 Rollback:
 
-    docker tag myapp:1.2.3 myapp:stable
-    docker push myapp:stable
+    docker tag myapp:1.2.3 myapp:pilot
+    docker push myapp:pilot
 
 Devices automatically downgrade.
 
