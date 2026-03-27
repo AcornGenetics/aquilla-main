@@ -625,6 +625,13 @@ a:active {
   z-index: 2;
 }
 
+.run-start-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .run-start-status {
   display: flex;
   flex-direction: column;
@@ -636,6 +643,13 @@ a:active {
 .run-start-header h2 {
   margin: 0;
   font-size: 24px;
+}
+
+.run-start-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background-color: #ec4899;
 }
 
 .run-ready-pill {
