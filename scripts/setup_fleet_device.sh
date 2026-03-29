@@ -30,6 +30,7 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 sudo apt-get install -y docker-compose-plugin
+sudo systemctl enable docker
 
 echo "Installing Tailscale..."
 curl -fsSL https://tailscale.com/install.sh | sudo sh
