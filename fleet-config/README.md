@@ -13,12 +13,18 @@ templates intended to live on each device (or in a fleet-config repo).
    - `RUN_MODE`
    - `IMAGE_TAG` (`dev`, `pilot`, or `prod`)
    - `WATCHTOWER_HTTP_API_TOKEN`
-5. Edit `/opt/aquila/config/grafana.env` with:
+5. Create `/opt/fleet/.env` with the same image tag (Compose reads this file):
+
+```bash
+echo "IMAGE_TAG=dev" | sudo tee /opt/fleet/.env
+```
+
+6. Edit `/opt/aquila/config/grafana.env` with:
    - `GRAFANA_METRICS_USER`
    - `GRAFANA_METRICS_TOKEN`
    - `GRAFANA_LOGS_USER`
    - `GRAFANA_LOGS_TOKEN`
-6. Render templates:
+7. Render templates:
 
 ```bash
 set -a
@@ -56,6 +62,10 @@ curl -X POST \
   -H "Authorization: Bearer $WATCHTOWER_HTTP_API_TOKEN" \
   http://localhost:8081/v1/update
 ```
+
+The default compose file enables Watchtower's HTTP API and periodic polling
+(every 5 minutes). If you want API-only updates, remove
+`--http-api-periodic-polls` and `--interval 300` from the Watchtower command.
 
 ## Secrets Note
 

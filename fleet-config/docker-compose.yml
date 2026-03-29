@@ -5,6 +5,10 @@ services:
     container_name: aquila-backend
     ports:
       - "8090:8090"
+    networks:
+      default:
+        aliases:
+          - backend
     environment:
       DATA_DIR: "/opt/aquila"
       PROFILE_DIR: "/opt/aquila/profiles"
@@ -40,6 +44,8 @@ services:
     container_name: aquila-ui
     ports:
       - "8080:80"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     restart: unless-stopped
     logging:
       driver: json-file
@@ -63,7 +69,7 @@ services:
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_HTTP_API_UPDATE: "true"
       WATCHTOWER_CLEANUP: "true"
-    command: --label-enable --http-api-update --cleanup
+    command: --label-enable --http-api-update --http-api-periodic-polls --cleanup --api-version 1.54 --interval 300
     restart: unless-stopped
     logging:
       driver: json-file

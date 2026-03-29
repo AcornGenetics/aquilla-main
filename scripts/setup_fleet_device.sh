@@ -49,6 +49,11 @@ sudo cp "${REPO_ROOT}/fleet-config/vector.yaml" /opt/fleet/vector.yaml.template
 sudo cp "${REPO_ROOT}/config_files/device.env" /opt/aquila/config/device.env
 sudo cp "${REPO_ROOT}/config_files/grafana.env" /opt/aquila/config/grafana.env
 
+image_tag="$(grep -E '^IMAGE_TAG=' /opt/aquila/config/device.env | tail -1 | cut -d= -f2-)"
+image_tag="${image_tag:-dev}"
+echo "IMAGE_TAG=${image_tag}" | sudo tee /opt/fleet/.env >/dev/null
+echo "Wrote /opt/fleet/.env with IMAGE_TAG=${image_tag}"
+
 if [[ -z "${WATCHTOWER_HTTP_API_TOKEN:-}" ]]; then
   WATCHTOWER_HTTP_API_TOKEN="$(openssl rand -hex 32)"
   echo "Generated WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN}"
