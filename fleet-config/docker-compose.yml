@@ -5,10 +5,6 @@ services:
     container_name: aquila-backend
     ports:
       - "8090:8090"
-    networks:
-      default:
-        aliases:
-          - backend
     environment:
       DATA_DIR: "/opt/aquila"
       PROFILE_DIR: "/opt/aquila/profiles"
