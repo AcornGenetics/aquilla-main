@@ -54,7 +54,7 @@ services:
           memory: 256M
 
   watchtower:
-    image: containrrr/watchtower
+    image: nickfedor/watchtower
     container_name: aquila-watchtower
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     ports:
