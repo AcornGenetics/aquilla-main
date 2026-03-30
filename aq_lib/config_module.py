@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 from serial.tools import list_ports
 
@@ -6,7 +7,7 @@ class Config():
 
     def __init__(self):
 
-        self.hostname = socket.gethostname()
+        self.hostname = os.environ.get("DEVICE_HOSTNAME", socket.gethostname())
 
         config = self.load_config(config_file = "config_files/host_config.json")
         state_config = self.load_config(config_file = "config_files/state_config.json")

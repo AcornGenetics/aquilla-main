@@ -40,7 +40,10 @@ echo "Creating fleet directories..."
 sudo mkdir -p /opt/fleet
 sudo mkdir -p /opt/aquila/config
 sudo mkdir -p /opt/aquila/results
-sudo mkdir -p /opt/aquila/logs
+sudo mkdir -p /opt/aquila/logs/lid_heater
+sudo mkdir -p /opt/aquila/logs/pcr
+sudo mkdir -p /opt/aquila/logs/optics
+sudo mkdir -p /opt/aquila/logs/results
 sudo mkdir -p /opt/aquila/profiles
 
 echo "Copying fleet configs..."
@@ -52,8 +55,10 @@ sudo cp "${REPO_ROOT}/config_files/grafana.env" /opt/aquila/config/grafana.env
 
 image_tag="$(grep -E '^IMAGE_TAG=' /opt/aquila/config/device.env | tail -1 | cut -d= -f2-)"
 image_tag="${image_tag:-dev}"
-echo "IMAGE_TAG=${image_tag}" | sudo tee /opt/fleet/.env >/dev/null
-echo "Wrote /opt/fleet/.env with IMAGE_TAG=${image_tag}"
+device_hostname="$(grep -E '^DEVICE_HOSTNAME=' /opt/aquila/config/device.env | tail -1 | cut -d= -f2- | tr -d '\r')"
+device_hostname="${device_hostname:-$(hostname)}"
+printf 'IMAGE_TAG=%s\nDEVICE_HOSTNAME=%s\n' "${image_tag}" "${device_hostname}" | sudo tee /opt/fleet/.env >/dev/null
+echo "Wrote /opt/fleet/.env with IMAGE_TAG=${image_tag} DEVICE_HOSTNAME=${device_hostname}"
 
 if [[ -z "${WATCHTOWER_HTTP_API_TOKEN:-}" ]]; then
   WATCHTOWER_HTTP_API_TOKEN="$(openssl rand -hex 32)"

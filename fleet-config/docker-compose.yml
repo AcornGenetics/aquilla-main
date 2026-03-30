@@ -38,6 +38,7 @@ services:
     image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG}
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     container_name: aquila-app
+    hostname: ${DEVICE_HOSTNAME}
     command: ["python3", "application.py"]
     environment:
       DATA_DIR: "/opt/aquila"
