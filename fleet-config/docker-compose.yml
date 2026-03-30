@@ -34,6 +34,42 @@ services:
         limits:
           memory: 1024M
 
+  app:
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG}
+    env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
+    container_name: aquila-app
+    command: ["python3", "application.py"]
+    environment:
+      DATA_DIR: "/opt/aquila"
+      PROFILE_DIR: "/opt/aquila/profiles"
+      RESULTS_PATH: "/opt/aquila/results/results.json"
+    volumes:
+      - /opt/aquila/results:/opt/aquila/results
+      - /opt/aquila/logs:/opt/aquila/logs
+      - /opt/aquila/profiles:/opt/aquila/profiles
+      - /opt/aquila/config:/opt/aquila/config
+    devices:
+      - "/dev/ttyACM0:/dev/ttyACM0"
+      - "/dev/i2c-1:/dev/i2c-1"
+      - "/dev/spidev0.0:/dev/spidev0.0"
+      - "/dev/spidev0.1:/dev/spidev0.1"
+      - "/dev/gpiomem:/dev/gpiomem"
+    privileged: true
+    depends_on:
+      - backend
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
   ui:
     image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-ui:${IMAGE_TAG}
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
