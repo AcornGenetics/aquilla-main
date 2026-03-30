@@ -1,3 +1,4 @@
+import os
 import time
 from pathlib import Path
 import requests
@@ -7,6 +8,7 @@ from .config_module import Config
 
 config = Config()
 logger = logging.getLogger("aquila")
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8090")
 
 def timer_control( status = "stop" ):
 
@@ -16,7 +18,7 @@ def timer_control( status = "stop" ):
 
     logger.info( "Timer request: %s" % status )
 
-    url = "http://127.0.0.1:8090/timer"
+    url = f"{BACKEND_URL}/timer"
     try:
         response = requests.post(url, json={"action":status})
     except requests.exceptions.RequestException as e:
@@ -29,14 +31,14 @@ def change_screen( state ):
         state = "-2"
     logger.info( "State selected: %s" % state )
 
-    url = "http://127.0.0.1:8090/change_screen/" 
+    url = f"{BACKEND_URL}/change_screen/"
     try:
         response = requests.post(url, json=config.state[state])
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in change screen request. Intended screen request: %s", state )
 
 def update_results_path( results_filename ):
-    url =  "http://127.0.0.1:8090/results/path"
+    url = f"{BACKEND_URL}/results/path"
     base_dir = Path(get_src_basedir())
     path = Path(results_filename)
     if not path.is_absolute():
@@ -53,7 +55,7 @@ def mark_results_ready(path: str | Path) -> None:
         resolved = base_dir / resolved
     try:
         requests.post(
-            "http://127.0.0.1:8090/results/path",
+            f"{BACKEND_URL}/results/path",
             json={"path": str(resolved)},
             timeout=5,
         )
@@ -61,7 +63,7 @@ def mark_results_ready(path: str | Path) -> None:
         logger.exception("Error marking results ready: %s", e)
 
 def log_history(profile, run_name, results_path, graph_path=None):
-    url = "http://127.0.0.1:8090/history/append"
+    url = f"{BACKEND_URL}/history/append"
     resolved_results_path = None
     if results_path:
         base_dir = Path(get_src_basedir())
@@ -81,7 +83,7 @@ def log_history(profile, run_name, results_path, graph_path=None):
         logger.exception("Error logging history: %s", e)
 
 def update_drawer_state(is_open: bool, is_closed: bool) -> None:
-    url = "http://127.0.0.1:8090/drawer/state"
+    url = f"{BACKEND_URL}/drawer/state"
     payload = {"open": bool(is_open), "closed": bool(is_closed)}
     try:
         requests.post(url, json=payload, timeout=5)
@@ -89,7 +91,7 @@ def update_drawer_state(is_open: bool, is_closed: bool) -> None:
         logger.exception("Error updating drawer state: %s", e)
 
 def advance_run_name():
-    url = "http://127.0.0.1:8090/run/name/advance"
+    url = f"{BACKEND_URL}/run/name/advance"
     try:
         requests.post(url, timeout=5)
     except requests.exceptions.RequestException as e:
@@ -97,24 +99,24 @@ def advance_run_name():
 
 def reset_exit():
     try:
-        requests.post("http://127.0.0.1:8090/exit/reset", timeout=5)
+        requests.post(f"{BACKEND_URL}/exit/reset", timeout=5)
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in path update. Intended path: %s", path )
 
 def reset_run_complete_ack() -> None:
     try:
-        requests.post("http://127.0.0.1:8090/run/complete/ack/reset", timeout=5)
+        requests.post(f"{BACKEND_URL}/run/complete/ack/reset", timeout=5)
     except requests.exceptions.RequestException as e:
         logger.exception("Error resetting run complete ack: %s", e)
 
 def reset_stop_request() -> None:
     try:
-        requests.post("http://127.0.0.1:8090/stop/reset", timeout=5)
+        requests.post(f"{BACKEND_URL}/stop/reset", timeout=5)
     except requests.exceptions.RequestException as e:
         logger.exception("Error resetting stop request: %s", e)
 
 def check_stop_request() -> bool:
-    url = "http://127.0.0.1:8090/button_status/"
+    url = f"{BACKEND_URL}/button_status/"
     try:
         ret = requests.get(url, timeout=5)
         ret.raise_for_status()
@@ -126,7 +128,7 @@ def check_stop_request() -> bool:
 
 
 def wait_for_button(include_run_complete_ack: bool = False):
-    url =  "http://127.0.0.1:8090/button_status/"
+    url = f"{BACKEND_URL}/button_status/"
     while True:
         try:
             ret = requests.get(url, timeout=5)
@@ -143,7 +145,7 @@ def wait_for_button(include_run_complete_ack: bool = False):
             profile_id = data.get("profile")
             logger.info("Requests profile selected: %s" % (profile_id))
             try:
-                requests.post("http://127.0.0.1:8090/run_status/reset", timeout=5)
+                requests.post(f"{BACKEND_URL}/run_status/reset", timeout=5)
             except Exception as e:
                 logger.warning("Error resetting button", e)
             return data
@@ -154,7 +156,7 @@ def wait_for_button(include_run_complete_ack: bool = False):
             drawer_open = True
             drawer_close = False
             try:
-                requests.post("http://127.0.0.1:8090/drawer_status/reset", timeout=5)
+                requests.post(f"{BACKEND_URL}/drawer_status/reset", timeout=5)
             except Exception as e:
                 logger.warning("Error resetting button", e)
             return data
@@ -165,7 +167,7 @@ def wait_for_button(include_run_complete_ack: bool = False):
             drawer_open = False
             drawer_close = True
             try:
-                requests.post("http://127.0.0.1:8090/drawer_status/reset", timeout=5)
+                requests.post(f"{BACKEND_URL}/drawer_status/reset", timeout=5)
             except Exception as e:
                 logger.warning("Error resetting button", e)
             return data
@@ -174,7 +176,7 @@ def wait_for_button(include_run_complete_ack: bool = False):
             ret = data.get("exit_button_status")
             logger.info("Exit button status: %s" % (ret))
             try:
-                requests.post("http://127.0.0.1:8090/exit/reset", timeout=5)
+                requests.post(f"{BACKEND_URL}/exit/reset", timeout=5)
             except Exception as e:
                 logger.warning("Error resetting button", e)
             return data

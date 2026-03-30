@@ -41,7 +41,8 @@ class AssayInterface():
 
         self.axis = Axis()
         self.drawer = Drawer()
-        self.pcr_fan = Fan() 
+        self.pcr_fan = Fan()
+        self.pcr_fan.set_state(1)
 
         self.message_queue = Queue()
         self.lid_heater_stop_event = Event()
