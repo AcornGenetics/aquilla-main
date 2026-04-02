@@ -49,60 +49,119 @@ python3 -m pip install -r "${BASE_DIR}/requirements.txt"
 sudo apt-get install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit openbox xterm unclutter
 sudo apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
 
+# Add device hostname to host_config.json if not already present
+DEVICE_HOSTNAME="$(hostname)"
+python3 - <<PYEOF
+import json, sys
+
+config_path = "${BASE_DIR}/config_files/host_config.json"
+hostname = "${DEVICE_HOSTNAME}"
+
+with open(config_path, "r") as f:
+    config = json.load(f)
+
+if hostname in config:
+    print(f"host_config.json already has entry for {hostname}, skipping.")
+else:
+    config[hostname] = {
+        "info": { "dock_name": hostname },
+        "pcr": {
+            "comport": "/dev/ttyUSB0",
+            "baudrate": 56700,
+            "vid": "0x0403",
+            "pid": "0x6001",
+            "device_type": "1089",
+            "pcr_profile": "profiles/verification_profile.json"
+        },
+        "optics": { "rox pin": 22, "fam pin": 27, "LED_ON": 0, "LED_OFF": 1 },
+        "drawer": {
+            "open_steps": 4500,
+            "close_steps": 0,
+            "read_steps": 160,
+            "home_steps": 5000,
+            "step_multiplier": 32
+        },
+        "axis": {
+            "home_steps": 2500,
+            "step_multiplier": 8,
+            "positions": [280, 640, 1010, 1365, 1720, 2075]
+        },
+        "adc": { "famP": 0, "famN": 1, "roxP": 2, "roxN": 3 }
+    }
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=4)
+    print(f"Added {hostname} to host_config.json with default template.")
+PYEOF
+
+# Enable I2C (required for ADS1115 lid temperature sensor)
+sudo raspi-config nonint do_i2c 0
+# Enable SPI (required for optical ADC)
+sudo raspi-config nonint do_spi 0
+
 sudo mkdir -p /etc/lightdm/lightdm.conf.d
 sudo tee /etc/lightdm/lightdm.conf.d/autologin.conf >/dev/null <<EOF
 [Seat:*]
 autologin-user=${AUTOLOGIN_USER}
-autologin-session=rpd-x
+autologin-session=rpd-labwc
 EOF
 
 if [[ -d "${BASE_DIR}/server_web" ]]; then
   cp "${BASE_DIR}/server_web/kiosk.py" "${HOME}/"
-  sudo cp "${BASE_DIR}/server_web/autostart" /etc/xdg/openbox/
-  sudo cp "${BASE_DIR}/server_web/environment" /etc/xdg/openbox/
-  if [[ -d "${HOME}/.config/chromium/Default/Cache" ]]; then
-    rm -rf "${HOME}/.config/chromium/Default/Cache"
-  fi
-  if [[ -d "${HOME}/.config/chromium/Default/Service Worker" ]]; then
-    rm -rf "${HOME}/.config/chromium/Default/Service Worker"
-  fi
-  if [[ -d "${HOME}/.config/chromium/Default/Code Cache" ]]; then
-    rm -rf "${HOME}/.config/chromium/Default/Code Cache"
-  fi
-  if [[ -d "${HOME}/.config/chromium/Default/GPUCache" ]]; then
-    rm -rf "${HOME}/.config/chromium/Default/GPUCache"
-  fi
-  if [[ -d "${HOME}/.cache/chromium" ]]; then
-    rm -rf "${HOME}/.cache/chromium"
-  fi
   if [[ -f "${BASE_DIR}/server_web/.bash_profile" ]]; then
     cp "${BASE_DIR}/server_web/.bash_profile" "${HOME}/"
   fi
   if [[ -d "${BASE_DIR}/server_web/app" ]]; then
     cp -r "${BASE_DIR}/server_web/app" "${HOME}/"
   fi
+
+  # Clear Chromium cache
+  rm -rf "${HOME}/.config/chromium/Default/Cache"
+  rm -rf "${HOME}/.config/chromium/Default/Service Worker"
+  rm -rf "${HOME}/.config/chromium/Default/Code Cache"
+  rm -rf "${HOME}/.config/chromium/Default/GPUCache"
+  rm -rf "${HOME}/.cache/chromium"
+
+  # XDG autostart for Chromium kiosk (works with rpd-labwc / Wayland)
+  mkdir -p "${HOME}/.config/autostart"
+  cat > "${HOME}/.config/autostart/chromium-kiosk.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic http://localhost:8090
+Hidden=false
+NoDisplay=false
+Name=Chromium Kiosk
+EOF
+
+  # labwc autostart: kanshi for display rotation, kiosk.py as fallback
+  mkdir -p "${HOME}/.config/labwc"
+  cat > "${HOME}/.config/labwc/autostart" <<EOF
+kanshi &
+sleep 3 && DISPLAY=:0 python3 ${HOME}/kiosk.py &
+EOF
+
+  # kanshi display rotation config for rpd-labwc (Wayland)
+  mkdir -p "${HOME}/.config/kanshi"
+  cat > "${HOME}/.config/kanshi/config" <<EOF
+profile {
+    output HDMI-A-2 enable mode 1024x768@60.004 position 0,0 transform ${ROTATE_DIR_KANSHI:-270}
+}
+
+profile {
+    output HDMI-A-1 enable mode 1024x768@60.004 position 0,0 transform ${ROTATE_DIR_KANSHI:-270}
+}
+EOF
 fi
 
-sudo mkdir -p /etc/xdg/openbox
-
-if [[ -f "/etc/xdg/openbox/autostart" ]]; then
-  if grep -q "xrandr --output .* --rotate" /etc/xdg/openbox/autostart; then
-    sudo sed -i "s/xrandr --output .* --rotate .*/xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}/" /etc/xdg/openbox/autostart
-  else
-    echo "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" | sudo tee -a /etc/xdg/openbox/autostart >/dev/null
-  fi
-else
-  echo "xrandr --output ${ROTATE_OUTPUT} --rotate ${ROTATE_DIR}" | sudo tee /etc/xdg/openbox/autostart >/dev/null
-fi
+# Display rotation is handled by kanshi (see ~/.config/kanshi/config above).
+# xrandr is not used — rpd-labwc runs Wayland, not X11.
 
 sudo apt-get install -y nodejs npm
 sudo npm install -g serve
 
-if [[ -f "${BASE_DIR}/server_web/serve.service" ]]; then
-  sudo cp "${BASE_DIR}/server_web/serve.service" /etc/systemd/system/
-  sudo systemctl daemon-reload
-  sudo systemctl enable serve.service
-  sudo systemctl start serve.service
+# serve.service is not used — no Astro dist exists in this repo.
+# Disable it if previously installed to prevent CHDIR failures.
+if sudo systemctl is-enabled serve.service &>/dev/null; then
+  sudo systemctl disable --now serve.service || true
 fi
 
 if [[ -f "${BASE_DIR}/aquila_app.service" ]]; then

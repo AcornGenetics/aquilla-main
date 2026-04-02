@@ -9,13 +9,14 @@ services:
       DATA_DIR: "/opt/aquila"
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
+      CONFIG_DIR: "/opt/aquila/config"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
       - /opt/aquila/profiles:/opt/aquila/profiles
       - /opt/aquila/config:/opt/aquila/config
     devices:
-      - "/dev/ttyACM0:/dev/ttyACM0"
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
       - "/dev/i2c-1:/dev/i2c-1"
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
@@ -44,13 +45,15 @@ services:
       DATA_DIR: "/opt/aquila"
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
+      CONFIG_DIR: "/opt/aquila/config"
+      BACKEND_URL: "http://aquila-backend:8090"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
       - /opt/aquila/profiles:/opt/aquila/profiles
       - /opt/aquila/config:/opt/aquila/config
     devices:
-      - "/dev/ttyACM0:/dev/ttyACM0"
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
       - "/dev/i2c-1:/dev/i2c-1"
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
