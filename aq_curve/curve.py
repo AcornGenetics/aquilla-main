@@ -86,20 +86,29 @@ class Curve:
         max_cycle = max([int(d[5]) for d in sub_data])
         y0 = [0] * max_cycle
         y1 = [0] * max_cycle
+        cycle_has_data = [False] * max_cycle
         xdata = list(range(1, max_cycle + 1))
 
         for cycle in range(max_cycle):
             sub_data2 = [d for d in sub_data if (int(d[5]) == cycle + 1) and (int(d[6]) == position)]
 
             try:
+                if not sub_data2:
+                    continue
                 # fluorescence value is in col2. 
                 # On off designator is in col 3. 
                 y0_valid = self._reject_outliers(numpy.array([float(d[2]) for d in sub_data2 if (int(d[3]) == 0)]))
                 y0[cycle] = mean(y0_valid)
                 y1_valid = self._reject_outliers(numpy.array([float(d[2]) for d in sub_data2 if (int(d[3]) == 1)]))
                 y1[cycle] = mean(y1_valid)
+                cycle_has_data[cycle] = True
             except ZeroDivisionError:
                 continue
+        if any(cycle_has_data):
+            last_valid = len(cycle_has_data) - 1 - cycle_has_data[::-1].index(True)
+            xdata = xdata[: last_valid + 1]
+            y0 = y0[: last_valid + 1]
+            y1 = y1[: last_valid + 1]
         return (xdata, y0, y1,)
 
     def baseline(self, xdata, ydata):
@@ -153,6 +162,12 @@ class Curve:
 
     def get_curve(self, run_id, dye, channel):
         xdata, y0, y1 = self.extract_data(run_id, dye, channel)
+        y1_array = numpy.array(y1)
+        nonzero_indices = numpy.where(y1_array != 0)[0]
+        if nonzero_indices.size:
+            last_valid = int(nonzero_indices[-1])
+            xdata = xdata[: last_valid + 1]
+            y1 = y1[: last_valid + 1]
         xdata = numpy.array(xdata)
         if len(xdata) < 20:
             self.test_run = True
