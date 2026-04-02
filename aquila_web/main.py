@@ -88,6 +88,8 @@ stop_requested = False
 drawer_task = None
 drawer_state_open = False
 drawer_state_closed = False
+DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"]
+current_tube_names = DEFAULT_TUBE_NAMES[:]
 
 class Item(BaseModel):
     title: str = "Arete Biosciences"
@@ -118,6 +120,18 @@ current_item = Item( title = "title_bm", text = "text_bm", screen="init" )
 
 def _sanitize_name(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "run"
+
+def _normalize_tube_names(names: list | None) -> list[str]:
+    if not isinstance(names, list):
+        return DEFAULT_TUBE_NAMES[:]
+    resolved = []
+    for index, fallback in enumerate(DEFAULT_TUBE_NAMES):
+        value = names[index] if index < len(names) else None
+        if isinstance(value, str) and value.strip():
+            resolved.append(value.strip())
+        else:
+            resolved.append(fallback)
+    return resolved
 
 def _next_run_info(history: list[dict] | None = None) -> tuple[str, int]:
     if history is None:
@@ -377,7 +391,8 @@ async def _simulate_run(profile_name: str) -> None:
         "result": detected_summary,
         "graph_path": f"/plots/{plot_filename}",
         "results_path": results_path,
-        "labels": labels
+        "labels": labels,
+        "tube_names": current_tube_names
     })
     _save_history(history)
 
@@ -527,6 +542,17 @@ async def get_path():
 async def get_results_status():
     return {"cleared": results_cleared}
 
+@app.get("/tube_names")
+async def get_tube_names():
+    return {"names": current_tube_names}
+
+@app.post("/tube_names")
+async def set_tube_names(payload: dict):
+    global current_tube_names
+    names = payload.get("names") if isinstance(payload, dict) else None
+    current_tube_names = _normalize_tube_names(names)
+    return {"names": current_tube_names}
+
 @app.get("/history/data")
 async def history_data():
     return _load_history()
@@ -589,13 +615,15 @@ async def append_history(payload: dict):
         result_path = candidate_path
     result_text = _summarize_results_from_file(result_path) if result_path else "Results unavailable"
     history = _load_history()
+    tube_names = payload.get("tube_names") if isinstance(payload, dict) else None
     history.append({
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "profile": profile,
         "run_name": run_label,
         "result": result_text,
         "graph_path": graph_path,
-        "results_path": path_value
+        "results_path": path_value,
+        "tube_names": _normalize_tube_names(tube_names or current_tube_names)
     })
     _save_history(history)
     if result_path:

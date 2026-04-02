@@ -62,6 +62,18 @@ const loadTubeNames = () => {
   }
 };
 
+const syncTubeNames = async (names) => {
+  try {
+    await fetch("/tube_names", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ names })
+    });
+  } catch (error) {
+    return;
+  }
+};
+
 const saveTubeNames = (names) => {
   tubeNames = names.map((name, index) => {
     const fallback = DEFAULT_TUBE_NAMES[index];
@@ -72,6 +84,7 @@ const saveTubeNames = (names) => {
   } catch (error) {
     return;
   }
+  syncTubeNames(tubeNames);
 };
 
 const updateTubeLabels = () => {
@@ -954,6 +967,7 @@ document.addEventListener("DOMContentLoaded", () => {
     tubeNames = loadTubeNames();
     updateTubeLabels();
     setupTubeNameInputs();
+    syncTubeNames(tubeNames);
     applyDyeLabels();
     try {
         runDoneAcknowledged = window.sessionStorage.getItem(RUN_ACK_KEY) === "true";

@@ -65,6 +65,14 @@ def mark_results_ready(path: str | Path) -> None:
 def log_history(profile, run_name, results_path, graph_path=None):
     url = f"{BACKEND_URL}/history/append"
     resolved_results_path = None
+    tube_names = None
+    try:
+        response = requests.get(f"{BACKEND_URL}/tube_names", timeout=5)
+        if response.ok:
+            data = response.json()
+            tube_names = data.get("names")
+    except requests.exceptions.RequestException:
+        tube_names = None
     if results_path:
         base_dir = Path(get_src_basedir())
         candidate_path = Path(results_path)
@@ -75,7 +83,8 @@ def log_history(profile, run_name, results_path, graph_path=None):
         "profile": profile,
         "run_name": run_name,
         "results_path": resolved_results_path or results_path,
-        "graph_path": graph_path
+        "graph_path": graph_path,
+        "tube_names": tube_names
     }
     try:
         requests.post(url, json=payload, timeout=5)

@@ -1,30 +1,24 @@
 const TUBE_NAME_KEY = "aqTubeNames";
 const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
 
-const getTubeNames = () => {
-  try {
-    const stored = localStorage.getItem(TUBE_NAME_KEY);
-    if (!stored) {
-      return DEFAULT_TUBE_NAMES.slice();
-    }
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) {
-      return DEFAULT_TUBE_NAMES.slice();
-    }
-    return DEFAULT_TUBE_NAMES.map((fallback, index) => {
-      const value = parsed[index];
-      return typeof value === "string" && value.trim() ? value.trim() : fallback;
-    });
-  } catch (error) {
-    return DEFAULT_TUBE_NAMES.slice();
+const normalizeTubeNames = (names) =>
+  DEFAULT_TUBE_NAMES.map((fallback, index) => {
+    const value = Array.isArray(names) ? names[index] : null;
+    return typeof value === "string" && value.trim() ? value.trim() : fallback;
+  });
+
+const resolveTubeNames = (entry) => {
+  if (entry && Array.isArray(entry.tube_names)) {
+    return normalizeTubeNames(entry.tube_names);
   }
+  return DEFAULT_TUBE_NAMES.slice();
 };
 
-const formatResultLabels = (result) => {
+const formatResultLabels = (result, entry) => {
   if (typeof result !== "string") {
     return result;
   }
-  const tubeNames = getTubeNames();
+  const tubeNames = resolveTubeNames(entry);
   return tubeNames.reduce((updated, name, index) => {
     const pattern = new RegExp(`\\bTube ${index + 1}\\b`, "g");
     return updated.replace(pattern, name);
@@ -80,7 +74,7 @@ async function loadHistory() {
       row.appendChild(profileCell);
 
       const resultCell = document.createElement("td");
-      resultCell.textContent = formatResultLabels(entry.result || "--");
+      resultCell.textContent = formatResultLabels(entry.result || "--", entry);
       row.appendChild(resultCell);
 
       const graphCell = document.createElement("td");
