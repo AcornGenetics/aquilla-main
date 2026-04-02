@@ -1,30 +1,23 @@
 const TUBE_NAME_KEY = "aqTubeNames";
 const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
 
-const getTubeNames = () => {
-  try {
-    const stored = localStorage.getItem(TUBE_NAME_KEY);
-    if (!stored) {
-      return DEFAULT_TUBE_NAMES.slice();
-    }
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) {
-      return DEFAULT_TUBE_NAMES.slice();
-    }
-    return DEFAULT_TUBE_NAMES.map((fallback, index) => {
-      const value = parsed[index];
-      return typeof value === "string" && value.trim() ? value.trim() : fallback;
-    });
-  } catch (error) {
-    return DEFAULT_TUBE_NAMES.slice();
+const normalizeTubeNames = (names) =>
+  DEFAULT_TUBE_NAMES.map((fallback, index) => {
+    const value = Array.isArray(names) ? names[index] : null;
+    return typeof value === "string" && value.trim() ? value.trim() : fallback;
+  });
+
+const resolveTubeNames = (entry) => {
+  if (entry && Array.isArray(entry.tube_names)) {
+    return normalizeTubeNames(entry.tube_names);
   }
+  return DEFAULT_TUBE_NAMES.slice();
 };
 
-const formatResultLabels = (result) => {
+const formatResultLabels = (result, tubeNames) => {
   if (typeof result !== "string") {
     return result;
   }
-  const tubeNames = getTubeNames();
   return tubeNames.reduce((updated, name, index) => {
     const pattern = new RegExp(`\\bTube ${index + 1}\\b`, "g");
     return updated.replace(pattern, name);
@@ -37,8 +30,7 @@ const normalizeStatus = (value) => {
   return "not-detected";
 };
 
-const formatResultSummary = (perTube) => {
-  const tubeNames = getTubeNames();
+const formatResultSummary = (perTube, tubeNames) => {
   const detectedLabels = [];
   const inconclusiveLabels = [];
   perTube.forEach((status, index) => {
@@ -61,8 +53,7 @@ const formatResultSummary = (perTube) => {
   return parts.join(" · ");
 };
 
-const summarizeResults = (resultsData, labels = {}) => {
-  const tubeNames = getTubeNames();
+const summarizeResults = (resultsData, labels = {}, tubeNames = DEFAULT_TUBE_NAMES.slice()) => {
   const perTube = tubeNames.map(() => "not-detected");
   const perTubeDetectedLabels = tubeNames.map(() => []);
   if (!resultsData || typeof resultsData !== "object") {
@@ -143,11 +134,14 @@ async function loadRunDetail() {
       container.textContent = "Run not found";
       return;
     }
+    const tubeNames = resolveTubeNames(entry);
 
     const resultsData = await loadResultsData(entry);
-    const summary = summarizeResults(resultsData, entry.labels || {});
+    const summary = summarizeResults(resultsData, entry.labels || {}, tubeNames);
     const qcStatus = summary.inconclusiveCount > 0 ? "Review" : "Pass";
-    const resultText = resultsData ? formatResultSummary(summary.perTube) : formatResultLabels(entry.result || "--");
+    const resultText = resultsData
+      ? formatResultSummary(summary.perTube, tubeNames)
+      : formatResultLabels(entry.result || "--", tubeNames);
     const cqValues = [];
     if (resultsData?.cq) {
       for (let tube = 1; tube <= 4; tube += 1) {
@@ -198,7 +192,7 @@ async function loadRunDetail() {
               } else if (status === "inconclusive") {
                 labelDetail = "Inconclusive";
               }
-              const label = `${getTubeNames()[index]}: ${labelDetail}`;
+              const label = `${tubeNames[index]}: ${labelDetail}`;
               return `<span class="run-detail-pill run-detail-pill--${status}">${label}</span>`;
             })
             .join("")}

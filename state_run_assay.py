@@ -244,6 +244,7 @@ class AssayInterface():
                 self.message_queue.put("quit")
                 execution_thread.join(timeout=5)
             self.hw_deinitialize()
+            sr.timer_control("stop")
             self.drawer.open()
             if self.run_aborted:
                 sr.timer_control( "stop" )
