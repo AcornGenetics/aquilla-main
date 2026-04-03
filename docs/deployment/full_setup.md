@@ -25,6 +25,8 @@ Edit `/opt/aquila/config/device.env`:
 - `DEVICE_ID=...`
 - `IMAGE_TAG=dev|pilot|prod`
 - `WATCHTOWER_HTTP_API_TOKEN=...` (or keep the generated one)
+- `GHCR_USERNAME=...`
+- `GHCR_TOKEN=...`
 
 Or use a ring script instead of editing manually:
 
@@ -38,6 +40,9 @@ DEVICE_ID=pi-003 scripts/setup/device_prod.sh
 
 ```bash
 echo '<PAT>' | docker login ghcr.io -u <user> --password-stdin
+
+If you are using Watchtower for auto-updates, the GHCR credentials must be present
+in `/opt/aquila/config/device.env` so the watchtower container can pull updates.
 ```
 
 4) Start / verify:

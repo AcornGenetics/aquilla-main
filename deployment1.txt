@@ -16,7 +16,7 @@ A.2. Create ssh
                 > authorized_keys                               100%  568    35.1KB/s   00:00
                 > pi@rasp5:~/.ssh $ scp 192.168.244.94:.ssh/config .
 
-Run deployment1.sh to complete folllwing steps.
+Run deployment1.sh to complete following steps.
 
 A.2b. Upgrade
 
@@ -34,47 +34,74 @@ A.4. Install developer tools
 
 A.5 Setup env
 
-    go into Nebula_WP2 directory, e.g. cd Nebula_WP2
+    go into aquilla-main directory: cd aquilla-main
         python -m venv venv
     sudo ln -s venv/bin .
         source bin/activate
 
-(maybe this is meant to be the repo name? Nebula_WP2 = aquilla-main)
-
 A.6 Install pip requirements
 
     python3 -m pip install update  [optional]
-        vi requirments.txt
+        vi requirements.txt
     python3 -m pip install -r requirements.txt
 
 A.7 Install x-server and browser
    sudo apt install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit openbox xterm unclutter
    sudo apt install -y python3 python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
-   
-   --AUTOLOGIN (X11) --
+
+   --ENABLE INTERFACES--
+   sudo raspi-config nonint do_i2c 0    (required for lid temperature sensor)
+   sudo raspi-config nonint do_spi 0    (required for optical ADC)
+
+   --AUTOLOGIN (Wayland / rpd-labwc) --
+   NOTE: Current Pi OS uses rpd-labwc (Wayland), NOT rpd-x (X11).
    sudo mkdir -p /etc/lightdm/lightdm.conf.d
    sudo nano /etc/lightdm/lightdm.conf.d/autologin.conf
    [Seat:*]
    autologin-user=pi
-   autologin-session=rpd-x
-   cp ~/aquilla-main/server_web/kiosk.py ~/
-   --NOTE: THE AUTOSTART FILE FOR ACORN GUI PROVIDED BY AQUILA IS IN autostart_4b --
-   --MAY NEED TO ADJUST TO WORK WITH GUI MADE BY ARETE--
-   sudo cp ~/aquilla-main/server_web/autostart /etc/xdg/openbox/
-   sudo cp ~/aquilla-main/server_web/environment /etc/xdg/openbox/
-   cp ~/aquilla-main/server_web/.bash_profile ~/
-   --NOTE:app IS ONLY USED FOR GUI PROVIDED BY AQUILA--
-   cp -r ~/aquilla-main/server_web/app ~/
+   autologin-session=rpd-labwc
 
-   to check errors tail -n 100 ~/.xsession-errors 
-  
-   --NOTE: THE FOLLOWING IS FOR GUI PROVIDED BY AQUILA -- 
-   sudo apt install -y nodejs npm
-   sudo npm install -g serve
-   
-   sudo cp ~/aquilla-main/server_web/serve.service /etc/systemd/system/
-   sudo systemctl enable serve.service
-   sudo systemctl start serve.service
+   cp ~/aquilla-main/server_web/kiosk.py ~/
+
+   --KIOSK (Wayland / Chromium) --
+   NOTE: Use Chromium via XDG autostart, not kiosk.py + openbox autostart.
+         kiosk.py is kept as a fallback only.
+   mkdir -p ~/.config/autostart
+   Create ~/.config/autostart/chromium-kiosk.desktop:
+       [Desktop Entry]
+       Type=Application
+       Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic http://localhost:8090
+       Hidden=false
+       NoDisplay=false
+       Name=Chromium Kiosk
+   NOTE: No quotes around URL. --password-store=basic requires two dashes.
+
+   --DISPLAY ROTATION (Wayland) --
+   NOTE: xrandr does NOT work on Wayland. Use kanshi instead.
+         Output name on this device is HDMI-A-2 (not HDMI-2 or HDMI-A-1).
+   sudo apt install -y kanshi
+   mkdir -p ~/.config/kanshi
+   Create ~/.config/kanshi/config (use 4 spaces, not single line):
+       profile {
+           output HDMI-A-2 enable mode 1024x768@60.004 position 0,0 transform 270
+       }
+
+       profile {
+           output HDMI-A-1 enable mode 1024x768@60.004 position 0,0 transform 270
+       }
+
+   mkdir -p ~/.config/labwc
+   Create ~/.config/labwc/autostart:
+       kanshi &
+       sleep 3 && DISPLAY=:0 python3 /home/pi/kiosk.py &
+
+   --ADD DEVICE TO HOST CONFIG--
+   NOTE: deployment1.sh auto-adds the device hostname to config_files/host_config.json
+         using a standard template. Drawer/axis positions may need tuning per device.
+
+   --SERVICES--
+   NOTE: serve.service is NOT used — no Astro dist exists. Disable it if present.
+   sudo systemctl disable --now serve.service  (if previously enabled)
 
    sudo cp ~/aquilla-main/aquila_app.service /etc/systemd/system/
    sudo systemctl enable aquila_app.service
@@ -84,11 +111,13 @@ A.7 Install x-server and browser
    sudo systemctl enable aquila_web.service
    sudo systemctl start aquila_web.service
 
-   --ROTATE DISPLAY (X11) --
-   xrandr --query
-   sudo nano /etc/xdg/openbox/autostart
-   Add line: xrandr --output HDMI-2 --rotate left
-   (Use the output name from xrandr --query, e.g. HDMI-2)
+   --FIRST BOOT NOTE--
+   On first boot, physically push the drawer back to the home sensor before
+   powering on, or the drawer homing routine will fail and the drawer won't open.
+   After the first run, the firmware leaves the drawer open and future boots
+   will home correctly on their own.
+
+   to check errors: sudo journalctl -u aquila_app.service -n 50 --no-pager
 
    sudo reboot now
 
@@ -113,6 +142,3 @@ A.9 Docker + Watchtower (optional)
 
 A.8 Quiet login
    /boot/cmdline.txt change console=tty1 to tty3
-
-
-TODO add auto login and quiet boot

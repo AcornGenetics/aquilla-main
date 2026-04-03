@@ -9,9 +9,10 @@ class Config():
 
         self.hostname = os.environ.get("DEVICE_HOSTNAME", socket.gethostname())
 
-        config = self.load_config(config_file = "config_files/host_config.json")
-        state_config = self.load_config(config_file = "config_files/state_config.json")
-        self.dict = config[ self.hostname ]
+        config_dir = os.environ.get("CONFIG_DIR", "config_files")
+        config = self.load_config(config_file = os.path.join(config_dir, "host_config.json"))
+        state_config = self.load_config(config_file = os.path.join(config_dir, "state_config.json"))
+        self.dict = config
         self.state = state_config
         self.__dict__.update ( self.dict )
         

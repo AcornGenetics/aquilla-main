@@ -80,5 +80,5 @@ echo "Starting fleet services..."
 sudo docker compose --env-file /opt/aquila/config/device.env -f /opt/fleet/docker-compose.yml up -d
 
 echo "Done. If you just installed Docker, log out/in for group changes."
-echo "Edit /opt/aquila/config/device.env to set DEVICE_ID, IMAGE_TAG, and WATCHTOWER_HTTP_API_TOKEN."
+echo "Edit /opt/aquila/config/device.env to set DEVICE_ID, IMAGE_TAG, WATCHTOWER_HTTP_API_TOKEN, GHCR_USERNAME, and GHCR_TOKEN."
 echo "Optional: run 'pytest tests/fleet_device' to verify scripts."
