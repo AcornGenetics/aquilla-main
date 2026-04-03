@@ -720,9 +720,10 @@ async def button_open():
 
 @app.post("/button/run")
 async def button_run():
-    global run_requested, stop_requested
+    global run_requested, stop_requested, current_tube_names
     run_requested = True
     stop_requested = False
+    current_tube_names = DEFAULT_TUBE_NAMES[:]
     logger.info("Run button pressed")
     if not selected_profile:
         run_requested = False
