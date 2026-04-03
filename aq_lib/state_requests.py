@@ -20,7 +20,7 @@ def timer_control( status = "stop" ):
 
     url = f"{BACKEND_URL}/timer"
     try:
-        response = requests.post(url, json={"action":status})
+        response = requests.post(url, json={"action":status}, timeout=5)
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in timer request. Intended timer request: %s", status )
 
@@ -33,7 +33,7 @@ def change_screen( state ):
 
     url = f"{BACKEND_URL}/change_screen/"
     try:
-        response = requests.post(url, json=config.state[state])
+        response = requests.post(url, json=config.state[state], timeout=5)
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in change screen request. Intended screen request: %s", state )
 
@@ -44,7 +44,7 @@ def update_results_path( results_filename ):
     if not path.is_absolute():
         path = base_dir / path
     try:
-        response = requests.post(url, json={"path":str(path)})
+        response = requests.post(url, json={"path":str(path)}, timeout=5)
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in path update. Intended path: %s", path )
 

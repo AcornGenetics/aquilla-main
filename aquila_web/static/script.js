@@ -449,6 +449,12 @@ socket.onmessage = function(event) {
           } catch (error) {
             console.warn("Failed to clear run ack", error);
           }
+          if (previousScreen !== "running") {
+            tubeNames = DEFAULT_TUBE_NAMES.slice();
+            updateTubeLabels();
+            syncTubeNames(tubeNames);
+            try { localStorage.removeItem(TUBE_NAME_KEY); } catch (e) {}
+          }
         }
         if (screen === "running") {
           setRunButtonState(true);
