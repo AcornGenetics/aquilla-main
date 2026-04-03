@@ -218,6 +218,8 @@ phase_start 8 "Device Identity and Config Files"
 
 prompt_if_unset DEVICE_HOSTNAME "Enter device hostname (e.g. sn04)"
 prompt_if_unset IMAGE_TAG       "Enter IMAGE_TAG (dev/pilot/prod)"
+prompt_if_unset GHCR_USER       "Enter GHCR username"
+prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token" true
 
 WATCHTOWER_TOKEN="${WATCHTOWER_TOKEN:-$(openssl rand -hex 32)}"
 
@@ -229,6 +231,8 @@ IMAGE_TAG=${IMAGE_TAG}
 GHCR_REPO=${GHCR_REPO}
 RUN_MODE=prod
 WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN}
+GHCR_USERNAME=${GHCR_USER}
+GHCR_TOKEN=${GHCR_TOKEN}
 EOF
 
 # fleet .env (Compose variable substitution)
@@ -361,6 +365,8 @@ run_test "DEVICE_HOSTNAME set"        "grep -q 'DEVICE_HOSTNAME=' /opt/aquila/co
 run_test "DEVICE_ID set"              "grep -q 'DEVICE_ID=' /opt/aquila/config/device.env"
 run_test "IMAGE_TAG set"              "grep -q 'IMAGE_TAG=' /opt/aquila/config/device.env"
 run_test "WATCHTOWER_TOKEN set"       "grep -q 'WATCHTOWER_HTTP_API_TOKEN=' /opt/aquila/config/device.env"
+run_test "GHCR username set"          "grep -q 'GHCR_USERNAME=' /opt/aquila/config/device.env"
+run_test "GHCR token set"             "grep -q 'GHCR_TOKEN=' /opt/aquila/config/device.env"
 run_test "/opt/fleet/.env exists"     "test -f /opt/fleet/.env"
 run_test "host_config.json valid JSON" \
     "python3 -m json.tool /opt/aquila/config/host_config.json"
@@ -373,9 +379,6 @@ phase_pass "device.env, fleet .env, host_config.json, and state_config.json writ
 # Phase 9 — GHCR Login, Download Compose File, and Pull Images
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 9 "GHCR Login, Download Compose File, and Pull Images"
-
-prompt_if_unset GHCR_USER  "Enter GHCR username"
-prompt_if_unset GHCR_TOKEN "Enter GHCR personal access token" true
 
 echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
 run_test "GHCR login succeeded" "grep -q 'ghcr.io' /root/.docker/config.json"
