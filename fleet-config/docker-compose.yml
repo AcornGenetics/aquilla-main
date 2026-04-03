@@ -9,6 +9,7 @@ services:
       DATA_DIR: "/opt/aquila"
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
+      BACKEND_URL: "http://backend:8090"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs

@@ -145,7 +145,7 @@ def wait_for_button(include_run_complete_ack: bool = False):
             data = ret.json()
             #print(data)
         except Exception as e:
-            logger.warning("Error polling run_status button", e)
+            logger.warning("Error polling run_status button: %s", e)
             time.sleep(0.5)
             continue
 

@@ -381,7 +381,7 @@ Device automatically rejoins fleet.
 ### What you can do remotely (Tailscale SSH)
 
 - Restart Docker or app containers
-- Update `device.env` (`IMAGE_TAG`, `DEVICE_ID`, tokens)
+- Update `device.env` (`IMAGE_TAG`, `DEVICE_ID`, `WATCHTOWER_HTTP_API_TOKEN`, `GHCR_USERNAME`, `GHCR_TOKEN`)
 - Re-run provisioning scripts (`scripts/setup_fleet_device.sh`)
 - Pull new images or trigger Watchtower
 

@@ -6,8 +6,8 @@ services:
     ports:
       - "8090:8090"
     environment:
-      DEVICE_ID: "arete-0001"
-      RUN_MODE: "prod"
+      DEVICE_ID: "${DEVICE_ID}"
+      RUN_MODE: "${RUN_MODE}"
       DATA_DIR: "/opt/aquila"
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
@@ -32,6 +32,6 @@ services:
     ports:
       - "8080:80"
     environment:
-      DEVICE_ID: "arete-0001"
-      RUN_MODE: "prod"
+      DEVICE_ID: "${DEVICE_ID}"
+      RUN_MODE: "${RUN_MODE}"
     restart: unless-stopped

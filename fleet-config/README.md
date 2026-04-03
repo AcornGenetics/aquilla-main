@@ -13,6 +13,8 @@ templates intended to live on each device (or in a fleet-config repo).
    - `RUN_MODE`
    - `IMAGE_TAG` (`dev`, `pilot`, or `prod`)
    - `WATCHTOWER_HTTP_API_TOKEN`
+   - `GHCR_USERNAME`
+   - `GHCR_TOKEN`
 5. Create `/opt/fleet/.env` with the same image tag (Compose reads this file):
 
 ```bash
