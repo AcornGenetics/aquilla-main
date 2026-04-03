@@ -2,8 +2,13 @@
 {
     "-4":{
         "title"  :"EXIT",
-        "text"   :"Exit button pressed 3x in a row, closing gui",
-        "screen" :"init" 
+        "text"   :"Closing GUI...",
+        "screen" :"init"
+    },
+    "-5":{
+        "title"  :"EXIT?",
+        "text"   :"Press Exit again to close the GUI",
+        "screen" :"init"
     },
     "-3":{
         "title"  :"KEYBOARD INTERRUPT",

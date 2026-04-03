@@ -88,6 +88,7 @@ stop_requested = False
 drawer_task = None
 drawer_state_open = False
 drawer_state_closed = False
+sim_exit_pending = False
 DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"]
 current_tube_names = DEFAULT_TUBE_NAMES[:]
 
@@ -769,10 +770,41 @@ async def exit_button_reset():
 
 @app.post("/button/exit")
 async def button_exit():
-    global exit_button
+    global exit_button, sim_exit_pending
     exit_button = True
     logger.info("exit button pressed")
+    if DEV_SIMULATE:
+        if sim_exit_pending:
+            sim_exit_pending = False
+            asyncio.create_task(_simulate_exit_confirmed())
+        else:
+            sim_exit_pending = True
+            asyncio.create_task(_simulate_exit_warning())
     return{"ok":True}
+
+async def _simulate_exit_warning() -> None:
+    global exit_button, current_item, sim_exit_pending
+    exit_button = False
+    current_item = Item(title="EXIT?", text="Press Exit again to close the GUI", screen="init")
+    state_change_event.set()
+    state_change_event.clear()
+    await asyncio.sleep(10)
+    if sim_exit_pending:
+        sim_exit_pending = False
+        current_item = Item(title="READY TO RUN", text='Select profile then select "Run" to start', screen="ready")
+        state_change_event.set()
+        state_change_event.clear()
+
+async def _simulate_exit_confirmed() -> None:
+    global exit_button, current_item
+    exit_button = False
+    current_item = Item(title="EXIT", text="Closing GUI...", screen="init")
+    state_change_event.set()
+    state_change_event.clear()
+    await asyncio.sleep(3)
+    current_item = Item(title="READY TO RUN", text='Select profile then select "Run" to start', screen="ready")
+    state_change_event.set()
+    state_change_event.clear()
 
 @app.get("/button_status")
 async def button_status():
