@@ -180,6 +180,13 @@ def wait_for_button(include_run_complete_ack: bool = False):
             except Exception as e:
                 logger.warning("Error resetting button", e)
             return data
+        elif data.get("force_exit"):
+            logger.info("Force exit requested")
+            try:
+                requests.post(f"{BACKEND_URL}/exit/force/reset", timeout=5)
+            except Exception as e:
+                logger.warning("Error resetting force exit", e)
+            return data
         elif data.get("exit_button_status"):
             logger.info("Exit button pressed")
             ret = data.get("exit_button_status")

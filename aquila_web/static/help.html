@@ -22,6 +22,7 @@
             <span>?</span>
             <span class="help-tooltip">How to run a test</span>
           </a>
+          <button class="run-stop-btn" onclick="notifyExitForce()" type="button">Exit GUI</button>
         </nav>
       </header>
       <div class="run-divider"></div>
@@ -113,6 +114,16 @@
       </section>
     </main>
   </div>
+  <script>
+    async function notifyExitForce() {
+      if (!window.confirm("Exit GUI?")) return;
+      try {
+        await fetch("/button/exit/force", { method: "POST" });
+      } catch (err) {
+        console.error("Exit button failed", err);
+      }
+    }
+  </script>
   <script>
     const sidebar = document.getElementById("help-sidebar");
     const layout = document.getElementById("help-layout");
