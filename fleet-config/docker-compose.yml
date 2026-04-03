@@ -10,7 +10,7 @@ services:
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
-      BACKEND_URL: "http://backend:8090"
+      BACKEND_URL: "http://aquila-backend:8090"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
@@ -47,7 +47,7 @@ services:
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
-      BACKEND_URL: "http://aquila-backend:8090"
+      BACKEND_URL: "http://backend:8090"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
@@ -102,10 +102,12 @@ services:
       - "8081:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json:ro
     environment:
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_HTTP_API_UPDATE: "true"
       WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_CONFIG_FILE: "/config.json"
     command: --label-enable --http-api-update --http-api-periodic-polls --cleanup --api-version 1.54 --interval 300
     restart: unless-stopped
     logging:

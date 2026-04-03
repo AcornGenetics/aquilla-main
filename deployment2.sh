@@ -134,7 +134,7 @@ mkdir -p "${PI_HOME}/.config/autostart"
 cat > "${PI_HOME}/.config/autostart/chromium-kiosk.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic http://localhost:8090
+Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic --incognito --disable-application-cache --disk-cache-dir=/tmp/chromium-cache --disk-cache-size=1 --media-cache-size=1 http://localhost:8090
 Hidden=false
 NoDisplay=false
 Name=Chromium Kiosk

@@ -250,23 +250,23 @@ class AssayInterface():
                 sr.timer_control( "stop" )
                 sr.timer_control( "reset" )
                 sr.change_screen("1")
-                return
-            try:
-                os.makedirs("logs/results", exist_ok=True)
-                results_to_json( optics_log, results_json )
-                sr.mark_results_ready(results_json)
-            except Exception as e:
-                logger.error("Failed to generate results: %s", e)
-            graph_path = None
-            try:
-                os.makedirs("logs/plots", exist_ok=True)
-                generate_optics_plot(optics_log, plot_path)
-                graph_path = f"/plots/{plot_filename}"
-            except Exception as e:
-                logger.error("Failed to generate plot: %s", e)
-            sr.log_history(self.thermal_profile.replace("profiles/", ""), self.run_name, results_json, graph_path)
-            sr.advance_run_name()
-            sr.change_screen("3")
+            else:
+                try:
+                    os.makedirs("logs/results", exist_ok=True)
+                    results_to_json( optics_log, results_json )
+                    sr.mark_results_ready(results_json)
+                except Exception as e:
+                    logger.error("Failed to generate results: %s", e)
+                graph_path = None
+                try:
+                    os.makedirs("logs/plots", exist_ok=True)
+                    generate_optics_plot(optics_log, plot_path)
+                    graph_path = f"/plots/{plot_filename}"
+                except Exception as e:
+                    logger.error("Failed to generate plot: %s", e)
+                sr.log_history(self.thermal_profile.replace("profiles/", ""), self.run_name, results_json, graph_path)
+                sr.advance_run_name()
+                sr.change_screen("3")
 
 
     def hw_deinitialize(self):
@@ -351,25 +351,21 @@ class AssayInterface():
                 elif( state == "end" ):
                     break
             elif( exit_status is True ):
+                sr.change_screen("-5")
                 ret = sr.wait_for_button(include_run_complete_ack)
                 if(ret.get("exit_button_status")):
-                    ret = sr.wait_for_button(include_run_complete_ack)
-                    if(ret.get("exit_button_status")):
-                        sr.change_screen("-4")
-                        time.sleep(3)
-                        base_dir = Path(get_src_basedir())
-                        exit_script = base_dir / "exit_kiosk.sh"
-                        subprocess.run(
-                                [str(exit_script)], 
-                                check=False
-                                )
-                        time.sleep(3)
-                        sr.change_screen( screens[1] )
-                        ret = sr.wait_for_button(include_run_complete_ack) 
-                    else:
-                        pass
+                    sr.change_screen("-4")
+                    time.sleep(3)
+                    base_dir = Path(get_src_basedir())
+                    exit_script = base_dir / "exit_kiosk.sh"
+                    subprocess.run(
+                            [str(exit_script)],
+                            check=False
+                            )
+                    return
                 else:
-                    pass
+                    sr.change_screen( screens[1] )
+                    ret = sr.wait_for_button(include_run_complete_ack)
             elif run_complete_ack and state == "end":
                 sr.change_screen("1")
                 sr.reset_run_complete_ack()
