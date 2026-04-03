@@ -329,7 +329,7 @@ def _delete_history_artifacts(entry: dict) -> None:
 async def _simulate_run(profile_name: str) -> None:
     global start_time, elapsed_time, timer_running, current_item
     global results_path, run_requested, run_in_progress, results_cleared, run_complete_ack
-    global stop_requested
+    global stop_requested, current_tube_names
 
     run_in_progress = True
     run_complete_ack = False
@@ -405,6 +405,7 @@ async def _simulate_run(profile_name: str) -> None:
     while not run_complete_ack:
         await asyncio.sleep(0.5)
     run_complete_ack = False
+    current_tube_names = DEFAULT_TUBE_NAMES[:]
     current_item.screen = "ready"
     state_change_event.set()
     state_change_event.clear()
@@ -438,7 +439,9 @@ async def change_screen():
 @app.post("/change_screen/")
 async def change_screen(state: Item ):
     logger.info ( "Change_screen" )
-    global current_item, start_time
+    global current_item, start_time, current_tube_names
+    if state.screen == "ready" and current_item.screen == "complete":
+        current_tube_names = DEFAULT_TUBE_NAMES[:]
     current_item = state
     #start_time = datetime.now()
     state_change_event.set()

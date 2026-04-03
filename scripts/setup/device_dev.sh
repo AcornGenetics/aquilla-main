@@ -3,6 +3,8 @@ set -euo pipefail
 
 DEVICE_ID="${DEVICE_ID:-dev-000}"
 WATCHTOWER_HTTP_API_TOKEN="${WATCHTOWER_HTTP_API_TOKEN:-REPLACE_WATCHTOWER_TOKEN}"
+GHCR_USERNAME="${GHCR_USERNAME:-REPLACE_GHCR_USERNAME}"
+GHCR_TOKEN="${GHCR_TOKEN:-REPLACE_GHCR_TOKEN}"
 IMAGE_TAG="dev"
 
 bash "$(dirname "$0")/../setup_fleet_device.sh"
@@ -12,6 +14,8 @@ DEVICE_ID=${DEVICE_ID}
 RUN_MODE=prod
 IMAGE_TAG=${IMAGE_TAG}
 WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN}
+GHCR_USERNAME=${GHCR_USERNAME}
+GHCR_TOKEN=${GHCR_TOKEN}
 EOF
 
 sudo docker compose --env-file /opt/aquila/config/device.env -f /opt/fleet/docker-compose.yml up -d

@@ -396,6 +396,9 @@ function resetRunScreen() {
     setDrawerActionsVisibility(true);
     updateDashboardSections("ready");
     resetResultsUI();
+    tubeNames = DEFAULT_TUBE_NAMES.slice();
+    updateTubeLabels();
+    try { localStorage.removeItem(TUBE_NAME_KEY); } catch (e) {}
   }
   fetch("/results/clear", { method: "POST" }).catch(() => null);
   acknowledgeRunComplete();
@@ -468,6 +471,11 @@ socket.onmessage = function(event) {
           document.body.classList.remove("is-running");
           if (screen === "ready" && previousScreen === "running" && !runDoneAcknowledged) {
             resetResultsUI("Results unavailable");
+          }
+          if (screen === "ready" && previousScreen === "complete") {
+            tubeNames = DEFAULT_TUBE_NAMES.slice();
+            updateTubeLabels();
+            try { localStorage.removeItem(TUBE_NAME_KEY); } catch (e) {}
           }
         }
         if (screen === "complete" && !runDoneAcknowledged) {
@@ -964,10 +972,23 @@ async function loadProfiles(){
 
 
 document.addEventListener("DOMContentLoaded", () => {
-    tubeNames = loadTubeNames();
-    updateTubeLabels();
     setupTubeNameInputs();
-    syncTubeNames(tubeNames);
+    fetch("/tube_names")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+          if (data && Array.isArray(data.names)) {
+              tubeNames = data.names.map((n, i) =>
+                  typeof n === "string" && n.trim() ? n.trim() : DEFAULT_TUBE_NAMES[i]
+              );
+          } else {
+              tubeNames = loadTubeNames();
+          }
+          updateTubeLabels();
+      })
+      .catch(() => {
+          tubeNames = loadTubeNames();
+          updateTubeLabels();
+      });
     applyDyeLabels();
     try {
         runDoneAcknowledged = window.sessionStorage.getItem(RUN_ACK_KEY) === "true";
