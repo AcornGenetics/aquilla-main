@@ -324,6 +324,7 @@ class AssayInterface():
             drawer_open = ret.get("drawer_open_status")
             drawer_close = ret.get("drawer_close_status")
             exit_status = ret.get("exit_button_status")
+            force_exit = ret.get("force_exit")
             run_complete_ack = ret.get("run_complete_ack")
 
             if( run is True and profile is not None ):
@@ -350,6 +351,14 @@ class AssayInterface():
                     ret = sr.wait_for_button(include_run_complete_ack)
                 elif( state == "end" ):
                     break
+            elif force_exit:
+                sr.change_screen("-4")
+                time.sleep(3)
+                base_dir = Path(get_src_basedir())
+                exit_script = base_dir / "exit_kiosk.sh"
+                subprocess.run([str(exit_script)], check=False)
+                sr.change_screen(screens[1])
+                ret = sr.wait_for_button(include_run_complete_ack)
             elif( exit_status is True ):
                 sr.change_screen("-5")
                 ret = sr.wait_for_button(include_run_complete_ack)
@@ -362,7 +371,8 @@ class AssayInterface():
                             [str(exit_script)],
                             check=False
                             )
-                    return
+                    sr.change_screen(screens[1])
+                    ret = sr.wait_for_button(include_run_complete_ack)
                 else:
                     sr.change_screen( screens[1] )
                     ret = sr.wait_for_button(include_run_complete_ack)

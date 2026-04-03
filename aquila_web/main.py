@@ -89,6 +89,7 @@ drawer_task = None
 drawer_state_open = False
 drawer_state_closed = False
 sim_exit_pending = False
+force_exit = False
 DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"]
 current_tube_names = DEFAULT_TUBE_NAMES[:]
 
@@ -806,6 +807,21 @@ async def _simulate_exit_confirmed() -> None:
     state_change_event.set()
     state_change_event.clear()
 
+@app.post("/button/exit/force")
+async def button_exit_force():
+    global force_exit
+    force_exit = True
+    logger.info("Force exit requested")
+    if DEV_SIMULATE:
+        asyncio.create_task(_simulate_exit_confirmed())
+    return {"ok": True}
+
+@app.post("/exit/force/reset")
+async def exit_force_reset():
+    global force_exit
+    force_exit = False
+    return {"ok": True}
+
 @app.get("/button_status")
 async def button_status():
     return {
@@ -815,6 +831,7 @@ async def button_status():
         "drawer_open_status":drawer_open,
         "drawer_close_status":drawer_close,
         "exit_button_status":exit_button,
+        "force_exit": force_exit,
         "run_complete_ack": run_complete_ack,
         "stop_requested": stop_requested,
         "dev_simulate": DEV_SIMULATE

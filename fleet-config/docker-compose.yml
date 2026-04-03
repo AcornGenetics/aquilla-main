@@ -10,7 +10,6 @@ services:
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
-      BACKEND_URL: "http://aquila-backend:8090"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
@@ -47,7 +46,7 @@ services:
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
-      BACKEND_URL: "http://backend:8090"
+      BACKEND_URL: "http://aquila-backend:8090"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
