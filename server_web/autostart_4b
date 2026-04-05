@@ -28,6 +28,6 @@ setxkbmap -option terminate:ctrl_alt_bksp
 unclutter -idle 0.5 &
 
 sleep 3
-chromium --kiosk http://localhost:3000 --incognito --fast --window-size 1024x768 --start-maximized
+chromium --kiosk --noerrdialogs --disable-infobars --touch-events=enabled --enable-touch-drag-drop --disable-pinch --overscroll-history-navigation=0 --no-first-run --disable-session-crashed-bubble --check-for-update-interval=31536000 http://localhost:8090
 
 

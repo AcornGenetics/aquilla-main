@@ -126,17 +126,16 @@ if [[ -d "${BASE_DIR}/server_web" ]]; then
   cat > "${HOME}/.config/autostart/chromium-kiosk.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic http://localhost:8090
+Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic --touch-events=enabled --enable-touch-drag-drop --disable-pinch --overscroll-history-navigation=0 --no-first-run --disable-session-crashed-bubble --check-for-update-interval=31536000 http://localhost:8090
 Hidden=false
 NoDisplay=false
 Name=Chromium Kiosk
 EOF
 
-  # labwc autostart: kanshi for display rotation, kiosk.py as fallback
+  # labwc autostart: kanshi for display rotation only
   mkdir -p "${HOME}/.config/labwc"
   cat > "${HOME}/.config/labwc/autostart" <<EOF
 kanshi &
-sleep 3 && DISPLAY=:0 python3 ${HOME}/kiosk.py &
 EOF
 
   # kanshi display rotation config for rpd-labwc (Wayland)

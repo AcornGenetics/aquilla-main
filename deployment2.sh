@@ -134,7 +134,7 @@ mkdir -p "${PI_HOME}/.config/autostart"
 cat > "${PI_HOME}/.config/autostart/chromium-kiosk.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic --incognito --disable-application-cache --disk-cache-dir=/tmp/chromium-cache --disk-cache-size=1 --media-cache-size=1 http://localhost:8090
+Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic --touch-events=enabled --enable-touch-drag-drop --disable-pinch --overscroll-history-navigation=0 --no-first-run --disable-session-crashed-bubble --check-for-update-interval=31536000 --incognito --disable-application-cache --disk-cache-dir=/tmp/chromium-cache --disk-cache-size=1 --media-cache-size=1 http://localhost:8090
 Hidden=false
 NoDisplay=false
 Name=Chromium Kiosk
@@ -233,6 +233,7 @@ RUN_MODE=prod
 WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN}
 GHCR_USERNAME=${GHCR_USER}
 GHCR_TOKEN=${GHCR_TOKEN}
+AQ_SRC_BASEDIR=/opt/aquila
 EOF
 
 # fleet .env (Compose variable substitution)
@@ -287,9 +288,14 @@ EOF
 # state_config.json — static, same on all devices
 cat > /opt/aquila/config/state_config.json <<'EOF'
 {
+    "-5": {
+        "title": "EXIT?",
+        "text": "Press Exit again to close the GUI",
+        "screen": "init"
+    },
     "-4": {
         "title": "EXIT",
-        "text": "Exit button pressed 3x in a row, closing gui",
+        "text": "Closing GUI...",
         "screen": "init"
     },
     "-3": {
