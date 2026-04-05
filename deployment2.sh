@@ -473,6 +473,8 @@ if not device:
     raise SystemExit("Meerstetter device not found")
 
 meer = MeerStetter(device, baudrate=57600, timeout=1)
+meer.set_parid_long(108, 1, 0)
+meer.read(100)
 meer.set_parid_long(2000, 1, 1)
 meer.set_parid_float(3002, 3.0)
 meer.set_parid_float(3010, 80.0)

@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-DEFAULT_SRC_BASEDIR = "/home/pi/aquilla-main"
+DEFAULT_SRC_BASEDIR = "/opt/aquila"
 CONFIG_PATH = Path(__file__).with_name("config.json")
 
 
@@ -16,8 +16,11 @@ def get_src_basedir() -> str:
         except Exception:
             data = {}
         value = data.get("src_basedir") if isinstance(data, dict) else None
-        if value:
+        if value and Path(value).exists():
             return value
+    this_dir = str(Path(__file__).resolve().parent)
+    if Path(this_dir).exists():
+        return this_dir
     return DEFAULT_SRC_BASEDIR
 
 
