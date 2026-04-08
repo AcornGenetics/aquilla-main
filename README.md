@@ -13,6 +13,7 @@ Aquila PCR system project.
 - `aquila_web/`: FastAPI backend and UI routes
 - `aquila_web/static/`: no-build HTML/CSS/JS UI assets
 - `config_files/`: runtime configs and templates
+- `config_files/meerstetter/`: Meerstetter XML configs copied to `/opt/aquila/config/meerstetter`
 - `profiles/`: assay/profile JSON files
 - `logs/` and `data/`: results, logs, and run artifacts
 - `docs/`: internal documentation
@@ -32,6 +33,12 @@ Aquila PCR system project.
 ## Docker Images
 - API Dockerfile: `docker/Dockerfile.api`
 - UI Dockerfile: `docker/Dockerfile.ui`
+
+## Bundled Profiles
+- Place profiles you want baked into images in `profiles/bundled/`.
+- On container start, bundled profiles are copied into `PROFILE_DIR` if it is empty.
+- Set `PROFILE_BUNDLE` (comma-separated filenames) to copy only specific bundled profiles; listed files are copied even if `PROFILE_DIR` already has other profiles, and existing filenames are not overwritten.
+- Or set `profile_bundle` in `config_files/profile_config.json` (mounted to `/opt/aquila/config/profile_config.json`) to control which bundled profiles are seeded on device.
 
 ## Local Development
 - Backend (FastAPI): run from `aquila_web/` with `uvicorn main:app --host 127.0.0.1 --port 8090`
