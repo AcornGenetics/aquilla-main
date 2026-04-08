@@ -1,6 +1,7 @@
 {
   "profile_bundle": [
-    "acorn_pcr_profile.json",
+    "ABBA_ramp1.75_EA30.json",
+    "Hygiena_ramp1.75_EA30.json",
     "verification_profile.json"
   ]
 }

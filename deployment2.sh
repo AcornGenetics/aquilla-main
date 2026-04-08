@@ -10,6 +10,7 @@ set -euo pipefail
 
 PI_HOME="/home/pi"
 GHCR_REPO="${GHCR_REPO:-acorngenetics/aquilla-main}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 PHASE=""
@@ -365,6 +366,15 @@ cat > /opt/aquila/config/state_config.json <<'EOF'
     }
 }
 EOF
+
+if [[ -d "${SCRIPT_DIR}/config_files/meerstetter" ]]; then
+    mkdir -p /opt/aquila/config/meerstetter
+    shopt -s nullglob
+    for xml_file in "${SCRIPT_DIR}/config_files/meerstetter"/*.xml; do
+        cp -n "${xml_file}" /opt/aquila/config/meerstetter/
+    done
+    shopt -u nullglob
+fi
 
 run_test "device.env exists"          "test -f /opt/aquila/config/device.env"
 run_test "DEVICE_HOSTNAME set"        "grep -q 'DEVICE_HOSTNAME=' /opt/aquila/config/device.env"

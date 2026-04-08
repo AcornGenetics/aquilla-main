@@ -13,6 +13,7 @@ Aquila PCR system project.
 - `aquila_web/`: FastAPI backend and UI routes
 - `aquila_web/static/`: no-build HTML/CSS/JS UI assets
 - `config_files/`: runtime configs and templates
+- `config_files/meerstetter/`: Meerstetter XML configs copied to `/opt/aquila/config/meerstetter`
 - `profiles/`: assay/profile JSON files
 - `logs/` and `data/`: results, logs, and run artifacts
 - `docs/`: internal documentation
