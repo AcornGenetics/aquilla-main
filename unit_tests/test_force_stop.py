@@ -13,7 +13,7 @@ class DummyMeer:
         self.output_enabled = None
         self.setpoint = None
 
-    def log(self, endtime=None, logfile=None):
+    def log(self, endtime=None, logfile=None, stop_event=None):
         self.log_called = True
 
     def change_setpoint(self, setpoint):

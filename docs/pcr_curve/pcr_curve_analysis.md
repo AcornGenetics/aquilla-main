@@ -54,7 +54,7 @@ Each check is evaluated on the baseline-corrected curve unless noted.
 - **Monotonic rise**: no post-threshold drop worse than `PCR_MAX_DROP`.
 - **Sustained increase**: enough positive deltas after rise (`PCR_MIN_RISE_CYCLES`).
 - **Sigmoidal profile**: amplitude fraction ≥ `PCR_MIN_PEAK_FRACTION` and positive overall slope.
-- **Single transition**: number of strong derivative peaks ≤ `PCR_MAX_TRANSITIONS`.
+- **Single transition**: number of strong derivative peaks ≤ `PCR_MAX_TRANSITIONS`. A dip between peaks that stays within `PCR_TRANSITION_DIP_TOLERANCE` (default 5%) of the peak threshold is treated as a continuation of the same group, not a new transition.
 - **Smooth features**: max diff ≤ `PCR_SPIKE_MULTIPLIER * median_diff` (or ≤ `PCR_MAX_DIFF` if median is 0).
 - **No late drift**: slope of last `PCR_LATE_CYCLES` ≤ `PCR_LATE_DRIFT_MAX`.
 - **Signal range (raw)**: peak amplitude fraction ≥ `PCR_SIGNAL_RANGE_PEAK_FRACTION` or fold-change ≥ `PCR_MIN_FOLD`.

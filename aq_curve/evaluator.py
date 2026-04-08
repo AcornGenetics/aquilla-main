@@ -162,13 +162,19 @@ def check_single_transition(curve_data, curve):
     if max_deriv <= 0:
         return True
     peak_fraction = config.get_float("PCR_PEAK_FRACTION")
-    peak_indices = np.where(rise_deriv >= max_deriv * peak_fraction)[0]
+    peak_threshold = max_deriv * peak_fraction
+    dip_tolerance = config.get_float("PCR_TRANSITION_DIP_TOLERANCE")
+    dip_threshold = peak_threshold * (1.0 - dip_tolerance)
     transitions = 0
-    last_index = None
-    for idx in peak_indices:
-        if last_index is None or idx > last_index + 1:
-            transitions += 1
-        last_index = idx
+    in_peak = False
+    for val in rise_deriv:
+        if val >= peak_threshold:
+            if not in_peak:
+                transitions += 1
+                in_peak = True
+        elif val < dip_threshold:
+            in_peak = False
+        # values in [dip_threshold, peak_threshold): maintain current state
     max_transitions = config.get_int("PCR_MAX_TRANSITIONS")
     return transitions <= max_transitions
 

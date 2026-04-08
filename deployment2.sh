@@ -456,41 +456,41 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-echo "  Running Meerstetter first-time tuning..."
-if ! docker exec \
-    -e CONFIG_DIR=/opt/aquila/config \
-    aquila-app \
-    python3 - <<'PY'
-from aq_lib.config_module import Config
-from aq_lib.meerstetter import MeerStetter
-
-config = Config()
-device_type = int(config.pcr["device_type"])
-pid = int(config.pcr["pid"], 16)
-vid = int(config.pcr["vid"], 16)
-device = MeerStetter.find_meer(vid, pid, device_type)
-if not device:
-    raise SystemExit("Meerstetter device not found")
-
-meer = MeerStetter(device, baudrate=57600, timeout=1)
-meer.set_parid_long(108, 1, 0)
-meer.read(100)
-meer.set_parid_long(2000, 1, 1)
-meer.set_parid_float(3002, 3.0)
-meer.set_parid_float(3010, 80.0)
-meer.set_parid_float(3011, 5.0)
-meer.set_parid_float(3012, 4.0)
-meer.set_parid_float(3013, 0.0)
-meer.set_parid_float(3030, 9.0)
-meer.set_parid_float(3033, 73.0)
-meer.set_parid_float(3040, 1.0)
-meer.set_parid_long(108, 1, 1)
-meer.close()
-print("Meerstetter tuning applied")
-PY
-then
-    phase_fail "Meerstetter tuning failed"
-fi
+# echo "  Running Meerstetter first-time tuning..."
+# if ! docker exec \
+#     -e CONFIG_DIR=/opt/aquila/config \
+#     aquila-app \
+#     python3 - <<'PY'
+# from aq_lib.config_module import Config
+# from aq_lib.meerstetter import MeerStetter
+#
+# config = Config()
+# device_type = int(config.pcr["device_type"])
+# pid = int(config.pcr["pid"], 16)
+# vid = int(config.pcr["vid"], 16)
+# device = MeerStetter.find_meer(vid, pid, device_type)
+# if not device:
+#     raise SystemExit("Meerstetter device not found")
+#
+# meer = MeerStetter(device, baudrate=57600, timeout=1)
+# meer.set_parid_long(108, 1, 0)
+# meer.read(100)
+# meer.set_parid_long(2000, 1, 1)
+# meer.set_parid_float(3002, 3.0)
+# meer.set_parid_float(3010, 80.0)
+# meer.set_parid_float(3011, 5.0)
+# meer.set_parid_float(3012, 4.0)
+# meer.set_parid_float(3013, 0.0)
+# meer.set_parid_float(3030, 9.0)
+# meer.set_parid_float(3033, 73.0)
+# meer.set_parid_float(3040, 1.0)
+# meer.set_parid_long(108, 1, 1)
+# meer.close()
+# print("Meerstetter tuning applied")
+# PY
+# then
+#     phase_fail "Meerstetter tuning failed"
+# fi
 
 WATCHTOWER_TOKEN=$(grep WATCHTOWER_HTTP_API_TOKEN /opt/aquila/config/device.env | cut -d= -f2)
 

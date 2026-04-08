@@ -37,22 +37,22 @@ def thermal_engine( actions, meer, callback, logfile, stop_event ):
 
         if name == "hold":
             logger.info (f"{n:2} Hold            {setpoint} for {duration:6.2f} seconds until {last_time:.2f}")
-            meer.log ( endtime = last_time, logfile = logfile )
+            meer.log ( endtime = last_time, logfile = logfile, stop_event = stop_event )
 
         elif name == "ramp":
             logger.info( f"{n:2} Ramp from {last_temp} to {setpoint} for {duration:6.2f} seconds until {last_time:.2f}")
             meer.change_setpoint ( setpoint )
-            meer.log ( endtime = last_time, logfile = logfile )
+            meer.log ( endtime = last_time, logfile = logfile, stop_event = stop_event )
 
         elif name == "disable":
             logger.info( f"{n:2} disable for {duration:6.2f} seconds until {last_time:.2f}")
             meer.output_stage_enable ( 0 )
-            meer.log ( endtime = last_time, logfile = logfile )
-            
+            meer.log ( endtime = last_time, logfile = logfile, stop_event = stop_event )
+
         elif name == "enable":
             logger.info( f"{n:2} enable for {duration:6.2f} seconds until {last_time:.2f}")
             meer.output_stage_enable ( 1 )
-            meer.log ( endtime = last_time, logfile = logfile )
+            meer.log ( endtime = last_time, logfile = logfile, stop_event = stop_event )
 
         else:
             meer.output_stage_enable ( 0 )
