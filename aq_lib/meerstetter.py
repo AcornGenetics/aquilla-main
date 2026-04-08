@@ -287,7 +287,7 @@ class MeerStetter( Serial ):
 
     def get_current_temp ( self ): return self.get_temp()
 
-    def log( self, endtime, logfile ):
+    def log( self, endtime, logfile, stop_event=None ):
 
         send_cmds = [
             self.compile( 1000, 1, seq_nr=1543 ),  # Object Temperature
@@ -304,6 +304,8 @@ class MeerStetter( Serial ):
 
         condition = True
         while (condition):
+            if stop_event and stop_event.is_set():
+                break
             t = get_time()
             if t>=endtime:
                 condition = False

@@ -29,7 +29,7 @@ Define acceptance criteria for PCR amplification curves used in analysis and QC.
 ## Additional QC Checks
 - **Signal range:** raw peak meets `PCR_SIGNAL_RANGE_PEAK_FRACTION` or `PCR_MIN_FOLD`.
 - **Sigmoidal profile:** amplitude fraction ≥ `PCR_MIN_PEAK_FRACTION` and positive slope.
-- **Single transition:** strong slope peaks ≤ `PCR_MAX_TRANSITIONS`.
+- **Single transition:** strong slope peaks ≤ `PCR_MAX_TRANSITIONS`. A dip between peaks that stays within `PCR_TRANSITION_DIP_TOLERANCE` (default 5%) of the peak threshold is treated as a continuation of the same group, not a new transition.
 - **Cycle location:** `PCR_CQ_MIN ≤ Cq ≤ PCR_CQ_MAX`.
 - **Threshold oscillation:** threshold crossings ≤ 1.
 
