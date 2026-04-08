@@ -47,6 +47,7 @@ HISTORY_PATH = BASE_DIR / "logs" / "history.json"
 DEFAULT_PROFILE_DIR = BASE_DIR / "profiles"
 LOCAL_PROFILE_DIR = MODULE_BASE_DIR / "profiles"
 BUNDLED_PROFILE_DIR = DEFAULT_PROFILE_DIR / "bundled"
+LOCAL_BUNDLED_PROFILE_DIR = LOCAL_PROFILE_DIR / "bundled"
 
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -55,6 +56,8 @@ app.mount("/plots", StaticFiles(directory=str(PLOTS_DIR)), name="plots")
 def resolve_profile_dir() -> Path:
     if DEV_SIMULATE and BUNDLED_PROFILE_DIR.exists():
         return BUNDLED_PROFILE_DIR
+    if DEV_SIMULATE and LOCAL_BUNDLED_PROFILE_DIR.exists():
+        return LOCAL_BUNDLED_PROFILE_DIR
     if DEFAULT_PROFILE_DIR.exists():
         return DEFAULT_PROFILE_DIR
     return LOCAL_PROFILE_DIR
