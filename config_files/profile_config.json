@@ -1,0 +1,6 @@
+{
+  "profile_bundle": [
+    "acorn_pcr_profile.json",
+    "verification_profile.json"
+  ]
+}
