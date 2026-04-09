@@ -893,7 +893,7 @@ async def list_profiles():
             created_at = data.get("createdAt") or int(path.stat().st_ctime * 1000)
             modified_at = data.get("modifiedAt") or int(path.stat().st_mtime * 1000)
             profiles.append({
-                "id": data.get("id", path.name),
+                "id": path.name,
                 "name": data.get("name"),
                 "label": data.get("name"),
                 "createdAt": created_at,
@@ -1151,7 +1151,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
 
     if "configuration" in data and "name" in data:
         return {
-            "id": data.get("id", profile_path.name),
+            "id": profile_path.name,
             "title": data.get("name"),
             "labels": data.get("labels", {}),
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
