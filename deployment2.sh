@@ -224,6 +224,7 @@ prompt_if_unset GHCR_USER       "Enter GHCR username"
 prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token" true
 prompt_if_unset LID_HEATER_UPPER_BOUND "Enter lid heater upper bound voltage (e.g. 0.34)"
 prompt_if_unset LID_HEATER_LOWER_BOUND "Enter lid heater lower bound voltage (e.g. 0.20)"
+prompt_if_unset DRAWER_READ_STEPS      "Enter drawer read_steps for this device (e.g. 160)"
 
 WATCHTOWER_TOKEN="${WATCHTOWER_TOKEN:-$(openssl rand -hex 32)}"
 
@@ -248,43 +249,45 @@ GHCR_REPO=${GHCR_REPO}
 DEVICE_ENV_FILE=/opt/aquila/config/device.env
 EOF
 
-# host_config.json — standardized across all devices (sn02 baseline)
-cat > /opt/aquila/config/host_config.json <<'EOF'
+# host_config.json — keyed by device hostname to match repo structure
+cat > /opt/aquila/config/host_config.json <<EOF
 {
-    "info": {
-        "dock_name": "aquila"
-    },
-    "pcr": {
-        "comport": "/dev/ttyUSB0",
-        "baudrate": 56700,
-        "vid": "0x0403",
-        "pid": "0x6001",
-        "device_type": "1089",
-        "pcr_profile": "profiles/verification_profile.json"
-    },
-    "optics": {
-        "rox pin": 22,
-        "fam pin": 27,
-        "LED_ON": 0,
-        "LED_OFF": 1
-    },
-    "drawer": {
-        "open_steps": 4500,
-        "close_steps": 0,
-        "read_steps": 160,
-        "home_steps": 5000,
-        "step_multiplier": 32
-    },
-    "axis": {
-        "home_steps": 2500,
-        "step_multiplier": 8,
-        "positions": [280, 640, 1010, 1365, 1720, 2075]
-    },
-    "adc": {
-        "famP": 0,
-        "famN": 1,
-        "roxP": 2,
-        "roxN": 3
+    "${DEVICE_HOSTNAME}": {
+        "info": {
+            "dock_name": "${DEVICE_HOSTNAME}"
+        },
+        "pcr": {
+            "comport": "/dev/ttyUSB0",
+            "baudrate": 57600,
+            "vid": "0x0403",
+            "pid": "0x6001",
+            "device_type": "1089",
+            "pcr_profile": "profiles/verification_profile.json"
+        },
+        "optics": {
+            "rox pin": 22,
+            "fam pin": 27,
+            "LED_ON": 0,
+            "LED_OFF": 1
+        },
+        "drawer": {
+            "open_steps": 4500,
+            "close_steps": 0,
+            "read_steps": ${DRAWER_READ_STEPS},
+            "home_steps": 5000,
+            "step_multiplier": 32
+        },
+        "axis": {
+            "home_steps": 2500,
+            "step_multiplier": 8,
+            "positions": [320, 675, 1030, 1380, 1740, 2080]
+        },
+        "adc": {
+            "famP": 0,
+            "famN": 1,
+            "roxP": 2,
+            "roxN": 3
+        }
     }
 }
 EOF
@@ -387,10 +390,14 @@ run_test "GHCR token set"             "grep -q 'GHCR_TOKEN=' /opt/aquila/config/
 run_test "/opt/fleet/.env exists"     "test -f /opt/fleet/.env"
 run_test "host_config.json valid JSON" \
     "python3 -m json.tool /opt/aquila/config/host_config.json"
+run_test "host_config.json has hostname key" \
+    "python3 -c \"import json; c=json.load(open('/opt/aquila/config/host_config.json')); assert '${DEVICE_HOSTNAME}' in c, 'missing key'\""
 run_test "state_config.json valid JSON" \
     "python3 -m json.tool /opt/aquila/config/state_config.json"
 run_test "lid_heater_config.json valid JSON" \
     "python3 -m json.tool /opt/aquila/config/lid_heater_config.json"
+run_test "drawer read_steps is numeric" \
+    "python3 -c \"import json; c=json.load(open('/opt/aquila/config/host_config.json')); assert isinstance(c['${DEVICE_HOSTNAME}']['drawer']['read_steps'], int)\""
 
 phase_pass "device.env, fleet .env, host_config.json, and state_config.json written"
 
