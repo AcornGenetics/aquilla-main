@@ -1,37 +1,114 @@
 {
-    "info": {
-        "dock_name": "aquila"
+"sn01":{
+    "simulation" : 1,
+    "info":{
+        "dock_name":"aquila1"
     },
-    "pcr": {
-        "comport": "/dev/ttyUSB0",
-        "baudrate": 56700,
+    "pcr":{
+        "comport":"/dev/ttyUSB0",
+        "baudrate":57600,
         "vid": "0x0403",
         "pid": "0x6001",
         "device_type": "1089",
-        "pcr_profile": "profiles/verification_profile.json"
+        "pcr_profile" : "profiles/joel_test.json"
     },
-    "optics": {
-        "rox pin": 22,
-        "fam pin": 27,
-        "LED_ON": 0,
-        "LED_OFF": 1
+    "optics":{
+	"rox pin": 22,
+	"fam pin": 27,
+	"LED_ON": 0,
+	"LED_OFF": 1
     },
-    "drawer": {
+
+    "drawer":{
         "open_steps": 4500,
         "close_steps": 0,
-        "read_steps": 160,
-        "home_steps": 5000,
-        "step_multiplier": 32
+	"read_steps": 152,
+	"home_steps": 5000,
+	"step_multiplier": 32
     },
-    "axis": {
-        "home_steps": 2500,
-        "step_multiplier": 8,
-        "positions": [280, 640, 1010, 1365, 1720, 2075]
+    "axis":{
+	"home_steps": 2500,
+	"step_multiplier": 8,
+        "positions": [320, 675, 1030, 1380, 1740, 2080]
     },
-    "adc": {
-        "famP": 0,
-        "famN": 1,
-        "roxP": 2,
-        "roxN": 3
+    "adc":{
+	"famP": 0, "famN": 1,
+	"roxP": 2, "roxN": 3
     }
+},
+
+"sn02":{
+    "info":{
+        "dock_name":"aquila2"
+    },
+    "pcr":{
+        "comport":"/dev/ttyUSB0",
+        "baudrate":57600,
+        "vid": "0x0403",
+        "pid": "0x6001",
+        "device_type": "1089",
+        "pcr_profile" : "profiles/verification_profile.json"
+    },
+    "optics":{
+	"rox pin": 22,
+	"fam pin": 27,
+    	"LED_ON": 0,
+    	"LED_OFF": 1
+    },
+
+    "drawer":{
+        "open_steps": 4500,
+        "close_steps": 0,
+	"read_steps": 160,
+	"home_steps": 5000,
+	"step_multiplier": 32
+    },
+    "axis":{
+	"home_steps": 2500,
+	"step_multiplier": 8,
+        "positions": [320, 675, 1030, 1380, 1740, 2080]
+    },
+    "adc":{
+	"famP": 0, "famN": 1,
+	"roxP": 2, "roxN": 3
+    }
+},
+
+"sn03":{
+    "simulation" : 1,
+    "info":{
+        "dock_name":"aquila3"
+    },
+    "pcr":{
+        "comport":"/dev/ttyUSB0",
+        "baudrate":57600,
+        "vid": "0x0403",
+        "pid": "0x6001",
+        "device_type": "1089",
+        "pcr_profile" : "profiles/verification_profile.json"
+    },
+    "optics":{
+	"rox pin": 22,
+	"fam pin": 27,
+	"LED_ON": 0,
+	"LED_OFF": 1
+    },
+
+    "drawer":{
+        "open_steps": 4500,
+        "close_steps": 0,
+	"read_steps": 250,
+	"home_steps": 5000,
+	"step_multiplier": 32
+    },
+    "axis":{
+	"home_steps": 2500,
+	"step_multiplier": 8,
+        "positions": [320, 675, 1030, 1380, 1740, 2080]
+    },
+    "adc":{
+	"famP": 0, "famN": 1,
+	"roxP": 2, "roxN": 3
+    }
+}
 }

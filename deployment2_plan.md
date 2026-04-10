@@ -43,7 +43,7 @@ The difference is the `command:` override in docker-compose:
 /opt/aquila/                          ← all app data
 ├── config/
 │   ├── device.env                    ← device identity (DEVICE_HOSTNAME, IMAGE_TAG, WATCHTOWER_TOKEN)
-│   ├── host_config.json              ← hardware config (motor steps, GPIO, ADC) — standardized, same on all devices
+│   ├── host_config.json              ← hardware config (motor steps, GPIO, ADC) — keyed by device hostname, device-specific values
 │   └── state_config.json             ← UI state machine screen definitions — same on all devices
 ├── profiles/                         ← PCR thermal profiles (read-write, editable via web UI)
 ├── results/
@@ -85,7 +85,7 @@ Each file written by the script:
 | File | How It's Written | Contents |
 |---|---|---|
 | `/opt/aquila/config/device.env` | bash heredoc | `DEVICE_HOSTNAME`, `IMAGE_TAG`, `GHCR_REPO`, `WATCHTOWER_HTTP_API_TOKEN` |
-| `/opt/aquila/config/host_config.json` | bash heredoc | Standardized hardware config (motor steps, GPIO, ADC) — same values on all devices |
+| `/opt/aquila/config/host_config.json` | bash heredoc | Hardware config keyed by `DEVICE_HOSTNAME` — `read_steps` and other values are device-specific |
 | `/opt/aquila/config/state_config.json` | bash heredoc | UI state machine screen definitions — static, same on all devices |
 | `/opt/fleet/.env` | bash heredoc | `IMAGE_TAG`, `DEVICE_HOSTNAME` for Docker Compose variable substitution |
 | `/opt/fleet/docker-compose.yml` | `curl` from GitHub raw URL | Always gets latest from repo |
@@ -101,6 +101,10 @@ Each file written by the script:
 `Config()` reads from the path set by `CONFIG_DIR` env var, defaulting to `config_files` for local dev.
 In Docker, `CONFIG_DIR=/opt/aquila/config` is set in the compose environment, pointing to the host-mounted volume.
 The deployment script writes `host_config.json` and `state_config.json` to `/opt/aquila/config/` on the device.
+
+`host_config.json` is keyed by device hostname. `Config()` looks up the running device's hostname automatically.
+If the hostname is not found in the primary config, it falls back to `config_files/host_config.json` in the repo
+(which contains sn01/sn02/sn03 entries for development use).
 
 ---
 
@@ -145,6 +149,7 @@ Each phase asks for what it needs, when it needs it. Example flow:
 [Phase 8] Enter IMAGE_TAG (dev/pilot/prod): _
 [Phase 8] Enter lid heater upper bound voltage (e.g. 0.34): _
 [Phase 8] Enter lid heater lower bound voltage (e.g. 0.20): _
+[Phase 8] Enter drawer read_steps for this device (e.g. 160): _
 [Phase 9] Enter GHCR username: _
 [Phase 9] Enter GHCR personal access token: _
 [Phase 12] Enter Tailscale auth key (or press Enter to authenticate interactively): _
@@ -358,6 +363,13 @@ mkdir -p /opt/fleet
 
 ### Phase 8 — Write Device Identity Files
 
+Prompts for device-specific values at this point:
+- `DEVICE_HOSTNAME` — device serial (e.g. `sn04`)
+- `IMAGE_TAG` — release ring (`dev`/`pilot`/`prod`)
+- `LID_HEATER_UPPER_BOUND` — voltage upper bound (e.g. `0.34`)
+- `LID_HEATER_LOWER_BOUND` — voltage lower bound (e.g. `0.20`)
+- `DRAWER_READ_STEPS` — drawer close distance in steps, varies per physical device (e.g. `160`)
+
 `/opt/aquila/config/device.env`:
 ```bash
 DEVICE_ID=<DEVICE_HOSTNAME>
@@ -375,6 +387,19 @@ DEVICE_HOSTNAME=<DEVICE_HOSTNAME>
 DEVICE_ENV_FILE=/opt/aquila/config/device.env
 ```
 
+`/opt/aquila/config/host_config.json` — keyed by device hostname so `Config()` can look it up:
+```json
+{
+    "<DEVICE_HOSTNAME>": {
+        "info": { "dock_name": "<DEVICE_HOSTNAME>" },
+        "pcr": { "comport": "/dev/ttyUSB0", "baudrate": 57600, ... },
+        "drawer": { "read_steps": <DRAWER_READ_STEPS>, ... },
+        "axis": { "positions": [320, 675, 1030, 1380, 1740, 2080], ... },
+        ...
+    }
+}
+```
+
 `/opt/aquila/config/lid_heater_config.json`:
 ```json
 {
@@ -386,7 +411,7 @@ DEVICE_ENV_FILE=/opt/aquila/config/device.env
 #### Verification (runs automatically at end of phase)
 > Full test definitions: [deployment2_tests.md — Phase 8](deployment2_tests.md#phase-8--device-identity-files)
 ```
-✓ Phase 8 complete — device.env and fleet .env written
+✓ Phase 8 complete — device.env, fleet .env, host_config.json written
 ✗ Phase 8 FAILED — WATCHTOWER_HTTP_API_TOKEN not set in device.env
 ```
 
