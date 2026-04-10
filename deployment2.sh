@@ -35,11 +35,13 @@ phase_fail() {
 
 prompt_if_unset() {
     local var=$1 msg=$2 secret=${3:-false}
-    [[ -n "${!var:-}" ]] && return
+    local _cur=""
+    eval "_cur=\"\${${var}:-}\""
+    [[ -n "${_cur}" ]] && return
     if [[ "${secret}" == "true" ]]; then
-        read -rsp "[Phase ${PHASE}] ${msg}: " "${var}"; echo ""
+        read -rsp "[Phase ${PHASE}] ${msg}: " "${var}" </dev/tty; echo ""
     else
-        read -rp  "[Phase ${PHASE}] ${msg}: " "${var}"
+        read -rp  "[Phase ${PHASE}] ${msg}: " "${var}" </dev/tty; echo ""
     fi
 }
 
