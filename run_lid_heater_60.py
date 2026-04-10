@@ -18,7 +18,9 @@ def main():
     logging.config.dictConfig( LOGGING_CONFIG )
 
     stop_event = Event()
-    thread = Thread( target = lid_heater_worker, args=( stop_event, 0.304, ) )
+    quiet_event = Event()
+    quiet_event.clear()
+    thread = Thread( target = lid_heater_worker, args=( stop_event, quiet_event, 0.304, ) )
     thread.start()
 
     try:

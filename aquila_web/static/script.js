@@ -672,13 +672,28 @@ async function notifyDrawerClose(){
 }
 
 async function notifyExit(){
+    // Step 1: Tell the backend the exit button was pressed (native flow).
     try {
-        const ret = await fetch("/button/exit", {
-            method:"POST"
-        });
-        console.log("Exit button clicked", await ret.text());
+        await fetch("/button/exit", { method: "POST" });
     } catch (err) {
-        console.error("Button failed", err);
+        console.warn("notifyExit backend signal failed", err);
+    }
+
+    // Step 2: Call the host-side kiosk-control service via the nginx proxy.
+    // This works in the Docker deployment (/kiosk-control/ is proxied to
+    // host.docker.internal:9191 by nginx). In the native deployment this
+    // endpoint will 404, which is fine — the backend handles it above.
+    try {
+        const resp = await fetch("/kiosk-control/exit-kiosk", {
+            method: "POST",
+            signal: AbortSignal.timeout(5000),
+        });
+        if (!resp.ok) {
+            console.warn("kiosk-control exit returned", resp.status);
+        }
+    } catch (err) {
+        // Expected in native mode — kiosk-control proxy is not present.
+        console.info("kiosk-control not available (native mode or proxy missing)", err.message);
     }
 }
 
@@ -1060,7 +1075,3 @@ document.addEventListener("DOMContentLoaded", () => {
 window.addEventListener("beforeunload", () => {
     return;
 });
-
-
-
-

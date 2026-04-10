@@ -143,6 +143,8 @@ Each phase asks for what it needs, when it needs it. Example flow:
 ```
 [Phase 8] Enter device hostname (e.g. sn04): _
 [Phase 8] Enter IMAGE_TAG (dev/pilot/prod): _
+[Phase 8] Enter lid heater upper bound voltage (e.g. 0.34): _
+[Phase 8] Enter lid heater lower bound voltage (e.g. 0.20): _
 [Phase 9] Enter GHCR username: _
 [Phase 9] Enter GHCR personal access token: _
 [Phase 12] Enter Tailscale auth key (or press Enter to authenticate interactively): _
@@ -373,6 +375,14 @@ DEVICE_HOSTNAME=<DEVICE_HOSTNAME>
 DEVICE_ENV_FILE=/opt/aquila/config/device.env
 ```
 
+`/opt/aquila/config/lid_heater_config.json`:
+```json
+{
+    "lower_bound": <LID_HEATER_LOWER_BOUND>,
+    "upper_bound": <LID_HEATER_UPPER_BOUND>
+}
+```
+
 #### Verification (runs automatically at end of phase)
 > Full test definitions: [deployment2_tests.md — Phase 8](deployment2_tests.md#phase-8--device-identity-files)
 ```
@@ -393,6 +403,16 @@ The script prompts for GHCR credentials here if not already set as env vars.
 
 # Login to GHCR
 echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+
+# Download boot config (private repo requires token)
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+  "https://raw.githubusercontent.com/${GHCR_REPO}/main/config.txt" \
+  -o /boot/firmware/config.txt
+
+# Download Meerstetter TEC config(s)
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+  "https://raw.githubusercontent.com/${GHCR_REPO}/main/config_files/meerstetter/24NOV25.SN1.Config.w.PT1000.cal.1.xml" \
+  -o /opt/aquila/config/meerstetter/24NOV25.SN1.Config.w.PT1000.cal.1.xml
 
 # Download compose file from GitHub (no git clone needed)
 curl -fsSL "https://raw.githubusercontent.com/${GHCR_REPO}/main/fleet-config/docker-compose.yml" \

@@ -8,6 +8,7 @@ import RPi.GPIO as GPIO
 import sys
 import time
 import subprocess
+import requests as _requests
 import re
 import os
 from pathlib import Path
@@ -354,9 +355,7 @@ class AssayInterface():
             elif force_exit:
                 sr.change_screen("-4")
                 time.sleep(3)
-                base_dir = Path(get_src_basedir())
-                exit_script = base_dir / "exit_kiosk.sh"
-                subprocess.run([str(exit_script)], check=False)
+                self._exit_kiosk()
                 sr.change_screen(screens[1])
                 ret = sr.wait_for_button(include_run_complete_ack)
             elif( exit_status is True ):
@@ -365,12 +364,7 @@ class AssayInterface():
                 if(ret.get("exit_button_status")):
                     sr.change_screen("-4")
                     time.sleep(3)
-                    base_dir = Path(get_src_basedir())
-                    exit_script = base_dir / "exit_kiosk.sh"
-                    subprocess.run(
-                            [str(exit_script)],
-                            check=False
-                            )
+                    self._exit_kiosk()
                     sr.change_screen(screens[1])
                     ret = sr.wait_for_button(include_run_complete_ack)
                 else:
@@ -382,6 +376,28 @@ class AssayInterface():
                 ret = sr.wait_for_button(include_run_complete_ack)
 
         return profile, run_name
+
+    def _exit_kiosk(self) -> None:
+        """Ask the host kiosk-control service to kill Chromium.
+
+        Tries the HTTP API first (works in both Docker and native deployments
+        because kiosk-control always listens on 127.0.0.1:9191 on the host).
+        Falls back to running exit_kiosk.sh as a subprocess in case the service
+        is not yet running.
+        """
+        try:
+            resp = _requests.post("http://127.0.0.1:9191/exit-kiosk", timeout=5)
+            if resp.ok:
+                logger.info("kiosk-control: exit-kiosk OK")
+                return
+            logger.warning("kiosk-control returned %s", resp.status_code)
+        except Exception as e:
+            logger.warning("kiosk-control unreachable, falling back to script: %s", e)
+
+        # Fallback: run the shell script directly
+        base_dir = Path(get_src_basedir())
+        exit_script = base_dir / "exit_kiosk.sh"
+        subprocess.run([str(exit_script)], check=False)
 
     def _safe_name(self, value: str | None) -> str:
         if not value:

@@ -10,7 +10,8 @@ set -euo pipefail
 
 PI_HOME="/home/pi"
 GHCR_REPO="${GHCR_REPO:-acorngenetics/aquilla-main}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RAW_REPO_URL="https://raw.githubusercontent.com/${GHCR_REPO}/main"
+MEERSTETTER_XMLS=(${MEERSTETTER_XMLS:-"24NOV25.SN1.Config.w.PT1000.cal.1.xml"})
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 PHASE=""
@@ -221,6 +222,8 @@ prompt_if_unset DEVICE_HOSTNAME "Enter device hostname (e.g. sn04)"
 prompt_if_unset IMAGE_TAG       "Enter IMAGE_TAG (dev/pilot/prod)"
 prompt_if_unset GHCR_USER       "Enter GHCR username"
 prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token" true
+prompt_if_unset LID_HEATER_UPPER_BOUND "Enter lid heater upper bound voltage (e.g. 0.34)"
+prompt_if_unset LID_HEATER_LOWER_BOUND "Enter lid heater lower bound voltage (e.g. 0.20)"
 
 WATCHTOWER_TOKEN="${WATCHTOWER_TOKEN:-$(openssl rand -hex 32)}"
 
@@ -367,14 +370,12 @@ cat > /opt/aquila/config/state_config.json <<'EOF'
 }
 EOF
 
-if [[ -d "${SCRIPT_DIR}/config_files/meerstetter" ]]; then
-    mkdir -p /opt/aquila/config/meerstetter
-    shopt -s nullglob
-    for xml_file in "${SCRIPT_DIR}/config_files/meerstetter"/*.xml; do
-        cp -n "${xml_file}" /opt/aquila/config/meerstetter/
-    done
-    shopt -u nullglob
-fi
+cat > /opt/aquila/config/lid_heater_config.json <<EOF
+{
+    "lower_bound": ${LID_HEATER_LOWER_BOUND},
+    "upper_bound": ${LID_HEATER_UPPER_BOUND}
+}
+EOF
 
 run_test "device.env exists"          "test -f /opt/aquila/config/device.env"
 run_test "DEVICE_HOSTNAME set"        "grep -q 'DEVICE_HOSTNAME=' /opt/aquila/config/device.env"
@@ -388,6 +389,8 @@ run_test "host_config.json valid JSON" \
     "python3 -m json.tool /opt/aquila/config/host_config.json"
 run_test "state_config.json valid JSON" \
     "python3 -m json.tool /opt/aquila/config/state_config.json"
+run_test "lid_heater_config.json valid JSON" \
+    "python3 -m json.tool /opt/aquila/config/lid_heater_config.json"
 
 phase_pass "device.env, fleet .env, host_config.json, and state_config.json written"
 
@@ -398,6 +401,33 @@ phase_start 9 "GHCR Login, Download Compose File, and Pull Images"
 
 echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
 run_test "GHCR login succeeded" "grep -q 'ghcr.io' /root/.docker/config.json"
+
+if [[ -f "/boot/firmware/config.txt" ]]; then
+    tmp_boot_config=$(mktemp)
+    if curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+        "${RAW_REPO_URL}/config.txt" -o "${tmp_boot_config}"; then
+        cp "${tmp_boot_config}" /boot/firmware/config.txt
+    else
+        echo "Warning: failed to download ${RAW_REPO_URL}/config.txt, skipping boot config update."
+    fi
+    rm -f "${tmp_boot_config}"
+else
+    echo "Warning: /boot/firmware/config.txt not found, skipping boot config update."
+fi
+
+if [[ ${#MEERSTETTER_XMLS[@]} -gt 0 ]]; then
+    mkdir -p /opt/aquila/config/meerstetter
+    for xml_name in "${MEERSTETTER_XMLS[@]}"; do
+        tmp_meerstetter=$(mktemp)
+        if curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+            "${RAW_REPO_URL}/config_files/meerstetter/${xml_name}" -o "${tmp_meerstetter}"; then
+            cp -n "${tmp_meerstetter}" "/opt/aquila/config/meerstetter/${xml_name}"
+        else
+            echo "Warning: failed to download ${RAW_REPO_URL}/config_files/meerstetter/${xml_name}"
+        fi
+        rm -f "${tmp_meerstetter}"
+    done
+fi
 
 curl -fsSL \
     "https://raw.githubusercontent.com/${GHCR_REPO}/main/fleet-config/docker-compose.yml" \
