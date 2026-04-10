@@ -107,6 +107,8 @@ test_phase_8() {
     check 8 "/opt/fleet/.env exists"       "test -f /opt/fleet/.env"
     check 8 "host_config.json valid JSON"  "python3 -m json.tool /opt/aquila/config/host_config.json"
     check 8 "state_config.json valid JSON" "python3 -m json.tool /opt/aquila/config/state_config.json"
+    check 8 "lid_heater_config.json valid JSON" \
+        "python3 -m json.tool /opt/aquila/config/lid_heater_config.json"
 }
 
 test_phase_9() {

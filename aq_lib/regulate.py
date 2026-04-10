@@ -1,3 +1,5 @@
+import json
+import os
 import RPi.GPIO as GPIO
 import time
 import logging
@@ -16,10 +18,50 @@ adc = ADS1115( address = 0x48 )
 logging.config.dictConfig( LID_HEATER_LOGGING_CONFIG )
 logger = logging.getLogger( "lid_heater" )
 
-def lid_heater_worker( stop_event, quiet_event, setpoint = 0.34):
+DEFAULT_LID_HEATER_CONFIG = {
+    "lower_bound": 0.2,
+    "upper_bound": 0.34
+}
+
+def _load_lid_heater_config(config_path = None):
+    config_dir = os.environ.get("CONFIG_DIR", "config_files")
+    resolved_path = config_path or os.path.join(config_dir, "lid_heater_config.json")
+    config = DEFAULT_LID_HEATER_CONFIG.copy()
+    try:
+        with open(resolved_path, "r") as fp:
+            data = json.load(fp)
+        if "lower_bound" in data:
+            config["lower_bound"] = float(data["lower_bound"])
+        if "upper_bound" in data:
+            config["upper_bound"] = float(data["upper_bound"])
+    except FileNotFoundError:
+        logger.warning("Lid heater config not found at %s, using defaults.", resolved_path)
+    except Exception as exc:
+        logger.warning("Failed to load lid heater config from %s: %s. Using defaults.", resolved_path, exc)
+    return config
+
+def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bound = None ):
 
     logger.info("Starting lid heater worker")
     adc.start_continuous(channel=0, pga_fs_v=4.096, sps=64)
+
+    if quiet_event is None or not hasattr(quiet_event, "is_set"):
+        from threading import Event
+        if setpoint is None and quiet_event is not None:
+            setpoint = quiet_event
+        quiet_event = Event()
+        quiet_event.clear()
+
+    config = _load_lid_heater_config()
+    if lower_bound is None:
+        lower_bound = config["lower_bound"]
+    if setpoint is None:
+        setpoint = config["upper_bound"]
+
+    if lower_bound >= setpoint:
+        logger.warning("Lid heater lower bound %.3f >= upper bound %.3f", lower_bound, setpoint)
+    else:
+        logger.info("Lid heater bounds: lower=%.3f upper=%.3f", lower_bound, setpoint)
 
     while not stop_event.is_set():
         for i in range ( 10 ):
@@ -33,7 +75,7 @@ def lid_heater_worker( stop_event, quiet_event, setpoint = 0.34):
                     raise e
             time.sleep ( 0.4 )
         if not quiet_event.is_set():
-            if 0.2<v<setpoint:
+            if lower_bound < v < setpoint:
                 GPIO.output( pin_number, GPIO.HIGH )
                 #pwm.ChangeDutyCycle(50)
 

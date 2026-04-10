@@ -5,6 +5,7 @@ WORKDIR /opt/aquila
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     procps \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements-backend.txt ./requirements-backend.txt

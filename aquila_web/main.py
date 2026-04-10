@@ -209,9 +209,10 @@ def _resolve_results_path() -> Path | None:
     candidates = []
     if results_path:
         candidates.append(Path(results_path))
-    history_path = _latest_history_results_path()
-    if history_path:
-        candidates.append(history_path)
+    else:
+        history_path = _latest_history_results_path()
+        if history_path:
+            candidates.append(history_path)
     for candidate in candidates:
         if not candidate.is_absolute():
             candidate = BASE_DIR / str(candidate).lstrip("/")
@@ -280,7 +281,7 @@ def _summarize_results_from_file(path: Path) -> str:
                         inconclusive.add(int(col))
                     except ValueError:
                         continue
-                elif value and value != "Not Detected":
+                elif isinstance(value, str) and value and value != "Not Detected":
                     try:
                         detected.add(int(col))
                     except ValueError:
@@ -368,9 +369,12 @@ async def _simulate_run(profile_name: str) -> None:
     profile_slug = _sanitize_name(profile_name)
     run_slug = _sanitize_name(run_name)
     run_index = _next_run_index(profile_slug)
+    run_suffix = f"run{run_index}"
+    if run_slug and run_slug != run_suffix:
+        run_suffix = f"{run_suffix}_{run_slug}"
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    results_file = RESULTS_DIR / f"{profile_slug}_{run_slug}.json"
-    plot_filename = _plot_filename(profile_slug, run_slug)
+    results_file = RESULTS_DIR / f"{profile_slug}_{run_suffix}.json"
+    plot_filename = _plot_filename(profile_slug, run_suffix)
     plot_path = PLOTS_DIR / plot_filename
     optics_path = Path(dev_optics_path).expanduser() if dev_optics_path else None
     if not optics_path or not optics_path.exists():
@@ -548,6 +552,18 @@ async def reset_run_complete_ack():
 @app.get("/results/get_path")
 async def get_path():
     return {"path":results_path}
+
+@app.get("/results/by-path")
+async def get_results_by_path(path: str):
+    try:
+        resolved = Path(path).resolve()
+        if not resolved.is_file():
+            return {"data": {"failed": True}}
+        with resolved.open() as f:
+            data = json.load(f)
+        return data
+    except Exception:
+        return {"data": {"failed": True}}
 
 @app.get("/results/status")
 async def get_results_status():
