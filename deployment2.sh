@@ -223,7 +223,7 @@ phase_start 8 "Device Identity and Config Files"
 prompt_if_unset DEVICE_HOSTNAME "Enter device hostname (e.g. sn04)"
 prompt_if_unset IMAGE_TAG       "Enter IMAGE_TAG (dev/pilot/prod)"
 prompt_if_unset GHCR_USER       "Enter GHCR username"
-prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token" true
+prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token"
 prompt_if_unset LID_HEATER_UPPER_BOUND "Enter lid heater upper bound voltage (e.g. 0.34)"
 prompt_if_unset LID_HEATER_LOWER_BOUND "Enter lid heater lower bound voltage (e.g. 0.20)"
 prompt_if_unset DRAWER_READ_STEPS      "Enter drawer read_steps for this device (e.g. 160)"
