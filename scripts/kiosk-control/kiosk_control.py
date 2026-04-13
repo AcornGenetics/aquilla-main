@@ -81,45 +81,34 @@ def _kill_chromium() -> tuple[bool, str]:
 
 
 def _start_chromium() -> tuple[bool, str]:
-    """Launch Chromium in kiosk mode as the kiosk user."""
+    """Launch Chromium in kiosk mode as the kiosk user (X11)."""
     env = os.environ.copy()
     env["DISPLAY"] = ":0"
     env["XAUTHORITY"] = f"/home/{KIOSK_USER}/.Xauthority"
 
-    # Run as the desktop user if we are root; otherwise run directly.
+    chromium_flags = [
+        "--kiosk",
+        "--incognito",
+        "--noerrdialogs",
+        "--disable-infobars",
+        "--disable-session-crashed-bubble",
+        "--check-for-update-interval=31536000",
+        "--disable-pinch",
+        "--overscroll-history-navigation=0",
+        "--disable-features=TranslateUI",
+        "--touch-events=enabled",
+        "--enable-touch-drag-drop",
+        "--enable-gpu-rasterization",
+        "--use-angle=gles",
+        "--ozone-platform=x11",
+        "--start-maximized",
+        KIOSK_URL,
+    ]
+
     if os.geteuid() == 0:
-        cmd = [
-            "sudo", "-u", KIOSK_USER, "-E",
-            CHROMIUM_BIN,
-            "--kiosk",
-            "--noerrdialogs",
-            "--disable-infobars",
-            "--ozone-platform=wayland",
-            "--password-store=basic",
-            "--touch-events=enabled",
-            "--enable-touch-drag-drop",
-            "--disable-pinch",
-            "--overscroll-history-navigation=0",
-            "--no-first-run",
-            "--disable-session-crashed-bubble",
-            KIOSK_URL,
-        ]
+        cmd = ["sudo", "-u", KIOSK_USER, "-E", CHROMIUM_BIN] + chromium_flags
     else:
-        cmd = [
-            CHROMIUM_BIN,
-            "--kiosk",
-            "--noerrdialogs",
-            "--disable-infobars",
-            "--ozone-platform=wayland",
-            "--password-store=basic",
-            "--touch-events=enabled",
-            "--enable-touch-drag-drop",
-            "--disable-pinch",
-            "--overscroll-history-navigation=0",
-            "--no-first-run",
-            "--disable-session-crashed-bubble",
-            KIOSK_URL,
-        ]
+        cmd = [CHROMIUM_BIN] + chromium_flags
 
     subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return True, "chromium launched"

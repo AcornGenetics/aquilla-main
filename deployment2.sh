@@ -63,13 +63,16 @@ apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     curl ca-certificates gnupg gettext-base python3 \
-    chromium kanshi \
+    chromium openbox \
+    xserver-xorg x11-xserver-utils xinput \
     python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 \
     xterm unclutter
 
 run_test "curl installed"       "which curl"
 run_test "chromium installed"   "which chromium"
-run_test "kanshi installed"     "which kanshi"
+run_test "openbox installed"    "which openbox"
+run_test "xrandr installed"     "which xrandr"
+run_test "xinput installed"     "which xinput"
 run_test "python3 installed"    "which python3"
 run_test "python3-gi available" "python3 -c 'import gi'"
 run_test "WebKit2 available"    "dpkg -l libwebkit2gtk-4.1-0 | grep -q '^ii'"
@@ -112,81 +115,100 @@ run_test "pi in docker group"       "groups pi | grep -q docker"
 phase_pass "Docker installed and running, pi in docker group"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phase 4 — Autologin (Wayland)
+# Phase 4 — Autologin (X11/Openbox)
 # ═══════════════════════════════════════════════════════════════════════════════
-phase_start 4 "Autologin (Wayland)"
+phase_start 4 "Autologin (X11/Openbox)"
 
 mkdir -p /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/autologin.conf <<'EOF'
 [Seat:*]
 autologin-user=pi
-autologin-session=rpd-labwc
+autologin-session=openbox
 EOF
 
-run_test "autologin.conf exists"        "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
-run_test "autologin-user=pi"           "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
-run_test "autologin-session=rpd-labwc" "grep -q 'autologin-session=rpd-labwc' /etc/lightdm/lightdm.conf.d/autologin.conf"
+run_test "autologin.conf exists"      "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
+run_test "autologin-user=pi"          "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
+run_test "autologin-session=openbox"  "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
 
-phase_pass "LightDM configured for rpd-labwc autologin"
+phase_pass "LightDM configured for X11/Openbox autologin"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phase 5 — Chromium Kiosk
+# Phase 5 — Chromium Kiosk (Openbox autostart)
 # ═══════════════════════════════════════════════════════════════════════════════
-phase_start 5 "Chromium Kiosk"
+phase_start 5 "Chromium Kiosk (Openbox autostart)"
 
-mkdir -p "${PI_HOME}/.config/autostart"
-cat > "${PI_HOME}/.config/autostart/chromium-kiosk.desktop" <<'EOF'
-[Desktop Entry]
-Type=Application
-Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic --touch-events=enabled --enable-touch-drag-drop --disable-pinch --overscroll-history-navigation=0 --no-first-run --disable-session-crashed-bubble --check-for-update-interval=31536000 --incognito --disable-application-cache --disk-cache-dir=/tmp/chromium-cache --disk-cache-size=1 --media-cache-size=1 http://localhost:8090
-Hidden=false
-NoDisplay=false
-Name=Chromium Kiosk
+# Remove stale Wayland/desktop launcher paths so only one launch path exists
+rm -f "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
+rm -f "${PI_HOME}/.config/labwc/autostart"
+
+mkdir -p "${PI_HOME}/.config/openbox"
+
+cat > "${PI_HOME}/.config/openbox/autostart" <<'EOF'
+# Disable screen blanking and power management
+xset s off
+xset s noblank
+xset -dpms
+
+# Rotate display and match touch matrix (HDMI-2, rotate right)
+xrandr --output HDMI-2 --mode 1024x768 --rate 60 --rotate right
+
+xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
+  "Coordinate Transformation Matrix" \
+  0 1 0 -1 0 1 0 0 1
+
+# Hide cursor after 0.5s idle
+unclutter -idle 0.5 &
+
+# Allow display and compositor to settle before launching Chromium
+sleep 3
+
+chromium \
+  --kiosk http://localhost:8090 \
+  --incognito \
+  --noerrdialogs \
+  --disable-infobars \
+  --disable-session-crashed-bubble \
+  --check-for-update-interval=31536000 \
+  --disable-pinch \
+  --overscroll-history-navigation=0 \
+  --disable-features=TranslateUI \
+  --touch-events=enabled \
+  --enable-touch-drag-drop \
+  --enable-gpu-rasterization \
+  --use-angle=gles \
+  --ozone-platform=x11 \
+  --start-maximized \
+  &
 EOF
-chown pi:pi "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
 
-DESKTOP="${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
-run_test ".desktop file exists"        "test -f ${DESKTOP}"
-run_test "Wayland flag present"        "grep -q -- '--ozone-platform=wayland' ${DESKTOP}"
-run_test "password-store flag present" "grep -q -- '--password-store=basic' ${DESKTOP}"
-run_test "URL not quoted"              "grep -qv '\"http' ${DESKTOP}"
-run_test "Correct URL"                 "grep -q 'http://localhost:8090' ${DESKTOP}"
+chown -R pi:pi "${PI_HOME}/.config/openbox"
 
-phase_pass "Chromium kiosk .desktop file configured correctly"
+AUTOSTART="${PI_HOME}/.config/openbox/autostart"
+run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
+run_test "correct URL (8090)"          "grep -q 'localhost:8090' ${AUTOSTART}"
+run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
+run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
+run_test "xrandr present"              "grep -q 'xrandr' ${AUTOSTART}"
+run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
+run_test "no stale Wayland .desktop"   "test ! -f ${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
+run_test "correct file ownership"      "stat -c '%U' ${AUTOSTART} | grep -q pi"
+
+phase_pass "Openbox autostart configured — X11 kiosk with rotation and touch mapping"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phase 6 — Display Rotation (kanshi)
+# Phase 6 — Display and Touch (verified via autostart)
 # ═══════════════════════════════════════════════════════════════════════════════
-phase_start 6 "Display Rotation (kanshi)"
+phase_start 6 "Display and Touch configuration"
 
-mkdir -p "${PI_HOME}/.config/kanshi"
-cat > "${PI_HOME}/.config/kanshi/config" <<'EOF'
-profile {
-    output HDMI-A-2 enable mode 1024x768@60.004 position 0,0 transform 270
-}
-
-profile {
-    output HDMI-A-1 enable mode 1024x768@60.004 position 0,0 transform 270
-}
-EOF
-
-mkdir -p "${PI_HOME}/.config/labwc"
-cat > "${PI_HOME}/.config/labwc/autostart" <<'EOF'
-kanshi &
-EOF
+# xrandr and xinput are called at runtime from Openbox autostart (Phase 5).
+# This phase verifies the required tools are present on the host.
+run_test "xrandr binary present"  "which xrandr"
+run_test "xinput binary present"  "which xinput"
+run_test "unclutter present"      "which unclutter"
 
 chown -R pi:pi "${PI_HOME}/.config"
 
-KANSHI_CONF="${PI_HOME}/.config/kanshi/config"
-run_test "kanshi config exists"      "test -f ${KANSHI_CONF}"
-run_test "kanshi config multiline"   "test \$(wc -l < ${KANSHI_CONF}) -gt 1"
-run_test "HDMI-A-2 present"          "grep -q 'HDMI-A-2' ${KANSHI_CONF}"
-run_test "transform 270 set"         "grep -q 'transform 270' ${KANSHI_CONF}"
-run_test "labwc autostart exists"    "test -f ${PI_HOME}/.config/labwc/autostart"
-run_test "kanshi in labwc autostart" "grep -q 'kanshi' ${PI_HOME}/.config/labwc/autostart"
-run_test "correct file ownership"    "stat -c '%U' ${KANSHI_CONF} | grep -q pi"
-
-phase_pass "kanshi config valid, labwc autostart configured"
+phase_pass "Display and touch tools verified — runtime config applied via Openbox autostart"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 7 — Persistent Directory Structure
