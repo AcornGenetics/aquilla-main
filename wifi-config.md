@@ -8,25 +8,58 @@ access to the host NetworkManager through the D-Bus socket.
 
 ---
 
-## Prerequisites (verify on Pi before starting)
+## Architecture Decision: D-Bus in Docker vs. kiosk-control proxy
+
+There are two valid approaches. Choose one before starting.
+
+### Option A: Mount D-Bus socket into the backend container (original plan)
+- Requires rebuilding the Docker image (Dockerfile.api change)
+- Requires updating fleet-config/docker-compose.yml
+- `nmcli` runs inside the container over the host D-Bus socket
+- More self-contained — all WiFi logic lives in the backend
+
+### Option B: Add WiFi commands to the kiosk-control host service (simpler)
+- No Dockerfile changes needed
+- No D-Bus socket mounting needed
+- The `kiosk-control` service already runs as root on the host and can call `nmcli` directly
+- The backend proxies requests to `127.0.0.1:9191/wifi/...`
+- WiFi endpoints added to `scripts/kiosk-control/kiosk_control.py`
+
+**Recommendation:** Option B is simpler for the current deployment since kiosk-control
+already exists and runs on the host with root access. Use Option A if you want all
+logic in the container long-term.
+
+---
+
+## Prerequisites — Verify on Pi before starting
+
+Run these on the Pi to confirm which network stack is in use:
 
 ```bash
-# Confirm NetworkManager is running
+# Confirm NetworkManager is running (Pi OS Bookworm uses this)
 nmcli general status
 
-# Confirm D-Bus socket exists
+# Confirm D-Bus socket exists (needed for Option A)
 ls /run/dbus/system_bus_socket
 
 # Confirm Pi OS version
 cat /etc/os-release
 ```
 
-If `nmcli` is not found, the Pi is using `dhcpcd` + `wpa_supplicant` (Bullseye or
-older) and the command layer in Step 3 will need to use `wpa_cli` instead.
+**If `nmcli` is not found**, the Pi is using `dhcpcd` + `wpa_supplicant` (Bullseye or
+older). In that case the command layer in Step 3 must use `wpa_cli` instead of `nmcli`.
+The endpoint contract (same URLs, same request/response shapes) stays the same —
+only the subprocess calls change.
+
+**Expected output on Bookworm with NetworkManager:**
+```
+STATE      CONNECTIVITY  WIFI-HW  WIFI     WWAN-HW  WWAN
+connected  full          enabled  enabled  missing  missing
+```
 
 ---
 
-## Step 1 — Dockerfile.api
+## Step 1 — Dockerfile.api (Option A only)
 
 Add `network-manager` to the apt install block so `nmcli` is available inside the
 container image.
@@ -41,9 +74,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 ```
 
+Skip this step if using Option B.
+
 ---
 
-## Step 2 — docker-compose.yml (fleet-config)
+## Step 2 — docker-compose.yml (Option A only)
 
 Mount the host D-Bus socket into the backend container and add `NET_ADMIN`
 capability so `nmcli` can issue network commands.
@@ -79,6 +114,8 @@ backend:
     - /opt/aquila/config:/opt/aquila/config
     - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket  # <-- add
 ```
+
+Skip this step if using Option B.
 
 ---
 
@@ -184,10 +221,31 @@ New static page at `aquila_web/static/wifi.html`.
 
 ---
 
-## Step 5 — Nav update
+## Step 5 — Placement: Help page (for now)
 
-Add a WiFi link to the nav in every page that has a nav bar:
+Rather than adding a WiFi link to every nav bar immediately, add a **WiFi Settings**
+section and link inside `help.html` only. This keeps the scope small and lets the
+feature be tested before promoting it to the main nav.
 
+**In `aquila_web/static/help.html`** — add to the sidebar nav:
+```html
+<a href="/wifi">WiFi Settings</a>
+```
+
+**Add a new section** at the bottom of the help content:
+```html
+<section id="help-wifi">
+  <h2>WiFi Settings</h2>
+  <p>To connect this device to a new network, tap <strong>WiFi Settings</strong>
+     in the sidebar. You can scan for available networks, enter a password,
+     and connect without leaving the kiosk.</p>
+  <a href="/wifi" class="btn">Open WiFi Settings →</a>
+</section>
+```
+
+### Promoting to the main nav later
+
+When ready to add WiFi to all pages, add to the nav in each of these files:
 ```html
 <a class="run-nav-link" href="/wifi">WiFi</a>
 ```
@@ -216,12 +274,18 @@ async def wifi_page():
 
 ## Deployment checklist
 
-- [ ] Verify `nmcli general status` works on Pi before building
-- [ ] Rebuild and push the `api` image (`docker build -f docker/Dockerfile.api`)
-- [ ] Update `/opt/aquila/config/device.env` if needed
-- [ ] Restart with updated `fleet-config/docker-compose.yml`
-- [ ] Confirm `nmcli` runs inside the container: `docker exec aquila-backend nmcli general status`
-- [ ] Test scan, connect, and forget flows
+- [ ] SSH into Pi and run `nmcli general status` to confirm NetworkManager is active
+- [ ] Decide: Option A (D-Bus in Docker) or Option B (kiosk-control proxy)
+- [ ] If Option A: rebuild and push the `api` image (`docker build -f docker/Dockerfile.api`)
+- [ ] If Option A: update `/opt/fleet/docker-compose.yml` with D-Bus socket mount
+- [ ] If Option B: add WiFi handlers to `scripts/kiosk-control/kiosk_control.py`
+- [ ] Add 4 WiFi endpoints to `aquila_web/main.py`
+- [ ] Create `aquila_web/static/wifi.html`
+- [ ] Add WiFi link/section to `aquila_web/static/help.html`
+- [ ] Add FastAPI `/wifi` route to `main.py`
+- [ ] Restart the stack: `docker compose -f /opt/fleet/docker-compose.yml up -d`
+- [ ] Confirm `nmcli` runs inside the container (Option A): `docker exec aquila-backend nmcli general status`
+- [ ] Test scan, connect, and forget flows on device
 
 ---
 
@@ -234,3 +298,4 @@ async def wifi_page():
 | D-Bus socket path differs on some Pi OS versions | Check `/run/dbus/system_bus_socket` vs `/var/run/dbus/system_bus_socket` |
 | NetworkManager not installed (Bullseye) | Fall back to `wpa_cli` command layer — same endpoint contract, different subprocess calls |
 | Connecting to a network with no internet kicks the Pi off fleet monitoring | Out of scope — user responsibility |
+| Password sent as plain text over localhost HTTP | Acceptable for local kiosk — not exposed externally |

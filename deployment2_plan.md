@@ -19,9 +19,9 @@ All app updates are delivered by pulling new container images via Watchtower —
 | `aquila-app` (application.py) | Container (same image as backend) | All Python code shared; needs `privileged: true` + device passthrough |
 | `aquila-ui` (nginx + static files) | Container | Separate update cadence from Python backend |
 | `watchtower` | Container | Auto-pulls new images on schedule or webhook |
-| Chromium kiosk | Host | Wayland socket is user-session-scoped, not exposable to Docker |
-| kanshi (display rotation) | Host | Session-level, trivial config, no value containerizing |
-| labwc autostart | Host | Session-level, managed once by deployment2.sh |
+| Chromium kiosk | Host | X11 DISPLAY is user-session-scoped, not exposable to Docker |
+| Openbox autostart | Host | Session-level, single source of truth for kiosk launch |
+| kiosk-control (systemd) | Host | Proxies nmcli WiFi + kiosk start/stop; listens on 127.0.0.1:9191 |
 | lightdm autologin | Host | OS-level, must stay on host |
 
 ### One Image, Two Containers
@@ -90,10 +90,10 @@ Each file written by the script:
 | `/opt/fleet/.env` | bash heredoc | `IMAGE_TAG`, `DEVICE_HOSTNAME` for Docker Compose variable substitution |
 | `/opt/fleet/docker-compose.yml` | `curl` from GitHub raw URL | Always gets latest from repo |
 | `/opt/fleet/update.sh` | bash heredoc | Shell script to pull latest compose + images |
-| `~/.config/autostart/chromium-kiosk.desktop` | bash heredoc | Chromium kiosk launch config |
-| `~/.config/kanshi/config` | bash heredoc | Display rotation (HDMI-A-2, transform 270) |
-| `~/.config/labwc/autostart` | bash heredoc | `kanshi &` |
-| `/etc/lightdm/lightdm.conf.d/autologin.conf` | bash heredoc | `autologin-session=rpd-labwc` |
+| `~/.config/openbox/autostart` | bash heredoc | xset + xrandr HDMI-2 right + xinput touch matrix + unclutter + Chromium X11 kiosk |
+| `/etc/lightdm/lightdm.conf.d/autologin.conf` | bash heredoc | `autologin-session=openbox` |
+| `/etc/systemd/system/kiosk-control.service` | bash heredoc | kiosk-control.py systemd unit |
+| `/usr/local/bin/kiosk_control.py` | `curl` from GitHub raw URL | Host-side WiFi + kiosk start/stop HTTP service |
 | `/etc/systemd/system/aquila-stack.service` | bash heredoc | Starts `docker compose up -d` on boot |
 
 ### Config Path
@@ -209,26 +209,20 @@ apt-get update && apt-get upgrade -y
 # Core utilities
 apt-get install -y curl ca-certificates gnupg gettext-base python3
 
-# Wayland display + kiosk browser
-apt-get install -y chromium kanshi
-
-# Kiosk fallback (kiosk.py via GTK/WebKit — kept as backup)
-apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
-
-# X11 tools (unclutter for cursor hiding, xterm for debugging)
-apt-get install -y --no-install-recommends xterm unclutter
+# X11/Openbox kiosk stack
+apt-get install -y chromium openbox xserver-xorg x11-xserver-utils xinput unclutter
 ```
 
 > **Key difference from deployment1:** No Python venv, no `pip install`, no `requirements.txt`
 > on the host. All Python code and dependencies live inside the Docker container image.
-> The host only needs packages for the kiosk display (Chromium + GTK fallback) and system tools.
+> The host only needs packages for the kiosk display (Chromium + X11/Openbox) and system tools.
 
 #### What is NOT installed on the host (unlike deployment1)
 | deployment1 | deployment2 | Reason |
 |---|---|---|
 | `python3-venv` + venv setup | Not needed | Python runs in container |
 | `pip install -r requirements.txt` | Not needed | Dependencies baked into image |
-| `xserver-xorg`, `openbox` | Not needed | Using Wayland (rpd-labwc), not X11 |
+| `kanshi` | Not needed | Replaced by xrandr in Openbox autostart |
 | `nodejs`, `npm`, `serve` | Not needed | serve.service removed |
 | `aquila_app.service` | Not needed | Replaced by Docker Compose |
 | `aquila_web.service` | Not needed | Replaced by Docker Compose |
@@ -275,66 +269,133 @@ systemctl enable docker
 
 ---
 
-### Phase 4 — Configure Autologin (Wayland)
+### Phase 4 — Configure Autologin (X11/Openbox)
 Creates `/etc/lightdm/lightdm.conf.d/autologin.conf`:
 ```ini
 [Seat:*]
 autologin-user=pi
-autologin-session=rpd-labwc
+autologin-session=openbox
 ```
 
 #### Verification (runs automatically at end of phase)
-> Full test definitions: [deployment2_tests.md — Phase 4](deployment2_tests.md#phase-4--autologin-wayland)
+> Full test definitions: [deployment2_tests.md — Phase 4](deployment2_tests.md#phase-4--autologin-x11openbox)
 ```
-✓ Phase 4 complete — LightDM configured for rpd-labwc autologin
+✓ Phase 4 complete — LightDM configured for openbox autologin
 ✗ Phase 4 FAILED — autologin.conf missing or has wrong session value
 ```
 
 ---
 
-### Phase 5 — Chromium Kiosk
-Creates `~/.config/autostart/chromium-kiosk.desktop`:
-```ini
-[Desktop Entry]
-Type=Application
-Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic http://localhost:8090
-Hidden=false
-NoDisplay=false
-Name=Chromium Kiosk
+### Phase 5 — Chromium Kiosk (Openbox autostart)
+Creates `~/.config/openbox/autostart` — the single source of truth for kiosk launch:
+```bash
+# Disable screen blanking and power management
+xset s off
+xset s noblank
+xset -dpms
+
+# Rotate display and match touch matrix (HDMI-2, rotate right)
+xrandr --output HDMI-2 --mode 1024x768 --rate 60 --rotate right
+
+xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
+  "Coordinate Transformation Matrix" \
+  0 1 0 -1 0 1 0 0 1
+
+# Hide cursor after 0.5s idle
+unclutter -idle 0.5 &
+
+# Allow display and compositor to settle before launching Chromium
+sleep 3
+
+chromium \
+  --kiosk http://localhost:8090 \
+  --incognito \
+  --noerrdialogs \
+  --disable-infobars \
+  --disable-session-crashed-bubble \
+  --check-for-update-interval=31536000 \
+  --disable-pinch \
+  --overscroll-history-navigation=0 \
+  --disable-features=TranslateUI \
+  --touch-events=enabled \
+  --enable-touch-drag-drop \
+  --enable-gpu-rasterization \
+  --use-angle=gles \
+  --ozone-platform=x11 \
+  --start-maximized \
+  &
 ```
-Notes: no quotes around URL, `--password-store=basic` requires two dashes.
+
+Notes:
+- `xrandr --output HDMI-2` — display is on HDMI-2 (HDMI-1 disconnected)
+- Touch matrix `0 1 0 -1 0 1 0 0 1` matches right-rotation for "Focaltech Systems FT5926 MultiTouch"
+- `sleep 3` prevents Chromium launching before X11 compositor is ready
+- `--ozone-platform=x11` required; Wayland flags removed
+- Stale Wayland files removed: `chromium-kiosk.desktop`, `labwc/autostart`, `kanshi/config`
+- Sets correct ownership: `chown -R pi:pi /home/pi/.config/openbox`
 
 #### Verification (runs automatically at end of phase)
 > Full test definitions: [deployment2_tests.md — Phase 5](deployment2_tests.md#phase-5--chromium-kiosk)
 ```
-✓ Phase 5 complete — Chromium kiosk .desktop file configured correctly
-✗ Phase 5 FAILED — --ozone-platform=wayland flag missing from .desktop file
+✓ Phase 5 complete — Openbox autostart written, X11 flags present, correct URL and ownership
+✗ Phase 5 FAILED — --ozone-platform=x11 flag missing from autostart
 ```
 
 ---
 
-### Phase 6 — Display Rotation (kanshi)
-Creates `~/.config/kanshi/config` (4 spaces indent, NOT single line):
-```
-profile {
-    output HDMI-A-2 enable mode 1024x768@60.004 position 0,0 transform 270
-}
+### Phase 6 — kiosk-control Service
 
-profile {
-    output HDMI-A-1 enable mode 1024x768@60.004 position 0,0 transform 270
-}
+Installs and enables the host-side kiosk-control service, which the backend container uses to:
+- Start/stop the Chromium kiosk process
+- Proxy WiFi management commands (`nmcli`) from the web UI
+
+Downloads `kiosk_control.py` from GitHub and registers it as a systemd service:
+
 ```
-Creates `~/.config/labwc/autostart`:
+/usr/local/bin/kiosk_control.py   ← downloaded from GitHub raw URL
+/etc/systemd/system/kiosk-control.service
 ```
-kanshi &
+
+Service unit:
+```ini
+[Unit]
+Description=Aquila Kiosk Control
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/kiosk_control.py
+Restart=always
+User=root
+Environment=KIOSK_USER=pi
+Environment=KIOSK_URL=http://localhost:8090
+Environment=CHROMIUM_BIN=chromium
+
+[Install]
+WantedBy=multi-user.target
 ```
-Sets correct ownership: `chown -R pi:pi /home/pi/.config/`
+
+Listens on `127.0.0.1:9191`. Reachable from Docker via `host.docker.internal:9191`
+(requires `--add-host=host.docker.internal:host-gateway` in docker-compose, already present).
+
+Endpoints:
+- `POST /exit-kiosk` — kill Chromium
+- `POST /start-kiosk` — launch Chromium in kiosk mode
+- `GET /health` — liveness check
+- `GET /wifi/status` — current WiFi connection (nmcli)
+- `GET /wifi/scan` — scan for networks (nmcli)
+- `POST /wifi/connect` — connect to a network `{ssid, password}`
+- `POST /wifi/forget` — forget a saved network `{ssid}`
+
+```bash
+systemctl daemon-reload
+systemctl enable --now kiosk-control.service
+```
 
 #### Verification (runs automatically at end of phase)
-> Full test definitions: [deployment2_tests.md — Phase 6](deployment2_tests.md#phase-6--display-rotation-kanshi)
+> Full test definitions: [deployment2_tests.md — Phase 6](deployment2_tests.md#phase-6--kiosk-control-service)
 ```
-✓ Phase 6 complete — kanshi config valid, labwc autostart configured
-✗ Phase 6 FAILED — kanshi config is single-line (must be multiline with 4-space indent)
+✓ Phase 6 complete — kiosk-control service running, /health responding on 127.0.0.1:9191
+✗ Phase 6 FAILED — kiosk-control.service not active. Check: journalctl -u kiosk-control
 ```
 
 ---
@@ -633,6 +694,26 @@ back to the home sensor before powering on.
 ==================================================
 Rebooting in 5 seconds...
 ```
+
+---
+
+## Migrating Existing Devices to X11/Openbox
+
+Devices deployed with the old Wayland/labwc stack can be migrated without a full re-deployment
+using `update_kiosk_x11.sh`:
+
+```bash
+sudo bash update_kiosk_x11.sh
+```
+
+What it does:
+1. Installs `openbox xserver-xorg x11-xserver-utils xinput unclutter` via apt
+2. Writes `/etc/lightdm/lightdm.conf.d/autologin.conf` with `autologin-session=openbox`
+3. Removes stale Wayland files: `chromium-kiosk.desktop`, `labwc/autostart`, `kanshi/config`
+4. Writes `/home/pi/.config/openbox/autostart` with full xrandr + touch matrix + Chromium sequence
+5. Prompts to reboot
+
+The script runs verification tests after each step and exits on first failure.
 
 ---
 

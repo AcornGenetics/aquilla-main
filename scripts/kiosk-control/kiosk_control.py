@@ -8,16 +8,22 @@ host.docker.internal (requires --add-host=host.docker.internal:host-gateway in
 docker-compose) but NOT reachable from the network.
 
 Endpoints:
-    POST /exit-kiosk  — kill the Chromium kiosk process
-    POST /start-kiosk — launch Chromium in kiosk mode
-    GET  /health      — liveness check
+    POST /exit-kiosk     — kill the Chromium kiosk process
+    POST /start-kiosk    — launch Chromium in kiosk mode
+    GET  /health         — liveness check
+    GET  /wifi/status    — current WiFi connection info
+    GET  /wifi/scan      — scan for available networks
+    POST /wifi/connect   — connect to a network  {ssid, password}
+    POST /wifi/forget    — forget a saved network {ssid}
 """
 
+import json
 import logging
 import os
 import signal
 import subprocess
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ---------------------------------------------------------------------------
@@ -75,49 +81,102 @@ def _kill_chromium() -> tuple[bool, str]:
 
 
 def _start_chromium() -> tuple[bool, str]:
-    """Launch Chromium in kiosk mode as the kiosk user."""
+    """Launch Chromium in kiosk mode as the kiosk user (X11)."""
     env = os.environ.copy()
     env["DISPLAY"] = ":0"
     env["XAUTHORITY"] = f"/home/{KIOSK_USER}/.Xauthority"
 
-    # Run as the desktop user if we are root; otherwise run directly.
+    chromium_flags = [
+        "--kiosk",
+        "--incognito",
+        "--noerrdialogs",
+        "--disable-infobars",
+        "--disable-session-crashed-bubble",
+        "--check-for-update-interval=31536000",
+        "--disable-pinch",
+        "--overscroll-history-navigation=0",
+        "--disable-features=TranslateUI",
+        "--touch-events=enabled",
+        "--enable-touch-drag-drop",
+        "--enable-gpu-rasterization",
+        "--use-angle=gles",
+        "--ozone-platform=x11",
+        "--start-maximized",
+        KIOSK_URL,
+    ]
+
     if os.geteuid() == 0:
-        cmd = [
-            "sudo", "-u", KIOSK_USER, "-E",
-            CHROMIUM_BIN,
-            "--kiosk",
-            "--noerrdialogs",
-            "--disable-infobars",
-            "--ozone-platform=wayland",
-            "--password-store=basic",
-            "--touch-events=enabled",
-            "--enable-touch-drag-drop",
-            "--disable-pinch",
-            "--overscroll-history-navigation=0",
-            "--no-first-run",
-            "--disable-session-crashed-bubble",
-            KIOSK_URL,
-        ]
+        cmd = ["sudo", "-u", KIOSK_USER, "-E", CHROMIUM_BIN] + chromium_flags
     else:
-        cmd = [
-            CHROMIUM_BIN,
-            "--kiosk",
-            "--noerrdialogs",
-            "--disable-infobars",
-            "--ozone-platform=wayland",
-            "--password-store=basic",
-            "--touch-events=enabled",
-            "--enable-touch-drag-drop",
-            "--disable-pinch",
-            "--overscroll-history-navigation=0",
-            "--no-first-run",
-            "--disable-session-crashed-bubble",
-            KIOSK_URL,
-        ]
+        cmd = [CHROMIUM_BIN] + chromium_flags
 
     subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return True, "chromium launched"
 
+
+# ---------------------------------------------------------------------------
+# WiFi helpers (nmcli)
+# ---------------------------------------------------------------------------
+
+def _nmcli(*args) -> tuple[int, str, str]:
+    result = subprocess.run(
+        ["nmcli", "--terse", "--colors", "no", *args],
+        capture_output=True, text=True,
+    )
+    return result.returncode, result.stdout.strip(), result.stderr.strip()
+
+
+def _wifi_status() -> dict:
+    code, out, err = _nmcli("-f", "ACTIVE,SSID,SIGNAL,SECURITY", "device", "wifi")
+    if code != 0:
+        return {"connected": False, "ssid": None, "signal": None, "error": err}
+    for line in out.splitlines():
+        parts = line.split(":")
+        if len(parts) >= 2 and parts[0] == "yes":
+            ssid = parts[1]
+            signal = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+            return {"connected": True, "ssid": ssid, "signal": signal}
+    return {"connected": False, "ssid": None, "signal": None}
+
+
+def _wifi_scan() -> list:
+    _nmcli("device", "wifi", "rescan")
+    time.sleep(3)
+    code, out, err = _nmcli("-f", "SSID,SIGNAL,SECURITY,IN-USE", "device", "wifi", "list")
+    networks = []
+    seen = set()
+    for line in out.splitlines():
+        parts = line.split(":")
+        if len(parts) < 4:
+            continue
+        ssid, signal, security, in_use = parts[0], parts[1], parts[2], parts[3]
+        if not ssid or ssid in seen:
+            continue
+        seen.add(ssid)
+        networks.append({
+            "ssid": ssid,
+            "signal": int(signal) if signal.isdigit() else 0,
+            "secured": bool(security and security != "--"),
+            "in_use": in_use.strip() == "*",
+        })
+    networks.sort(key=lambda n: n["signal"], reverse=True)
+    return networks
+
+
+def _wifi_connect(ssid: str, password: str) -> dict:
+    if password:
+        code, out, err = _nmcli("device", "wifi", "connect", ssid, "password", password)
+    else:
+        code, out, err = _nmcli("device", "wifi", "connect", ssid)
+    return {"ok": code == 0, "error": err if code != 0 else None}
+
+
+def _wifi_forget(ssid: str) -> dict:
+    code, out, err = _nmcli("connection", "delete", ssid)
+    return {"ok": code == 0, "error": err if code != 0 else None}
+
+
+# ---------------------------------------------------------------------------
 
 class KioskHandler(BaseHTTPRequestHandler):
     """Minimal HTTP handler — no external dependencies required."""
@@ -142,9 +201,20 @@ class KioskHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _read_json_body(self) -> dict:
+        length = int(self.headers.get("Content-Length", 0))
+        if length == 0:
+            return {}
+        return json.loads(self.rfile.read(length))
+
     def do_GET(self):
         if self.path == "/health":
             self._respond(200, {"ok": True})
+        elif self.path == "/wifi/status":
+            self._respond(200, _wifi_status())
+        elif self.path == "/wifi/scan":
+            networks = _wifi_scan()
+            self._respond(200, {"networks": networks})
         else:
             self._respond(404, {"error": "not found"})
 
@@ -161,6 +231,27 @@ class KioskHandler(BaseHTTPRequestHandler):
             ok, msg = _start_chromium()
             log.info("start-kiosk: %s", msg)
             self._respond(200 if ok else 500, {"ok": ok, "message": msg})
+
+        elif self.path == "/wifi/connect":
+            body = self._read_json_body()
+            ssid = body.get("ssid", "").strip()
+            password = body.get("password", "").strip()
+            if not ssid:
+                self._respond(400, {"ok": False, "error": "ssid required"})
+                return
+            log.info("wifi/connect: ssid=%s", ssid)
+            result = _wifi_connect(ssid, password)
+            self._respond(200 if result["ok"] else 500, result)
+
+        elif self.path == "/wifi/forget":
+            body = self._read_json_body()
+            ssid = body.get("ssid", "").strip()
+            if not ssid:
+                self._respond(400, {"ok": False, "error": "ssid required"})
+                return
+            log.info("wifi/forget: ssid=%s", ssid)
+            result = _wifi_forget(ssid)
+            self._respond(200 if result["ok"] else 500, result)
 
         else:
             self._respond(404, {"error": "not found"})
