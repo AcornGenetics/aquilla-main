@@ -1209,3 +1209,60 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info ( "Websocket ended" )
 from aq_curve.main import results_to_json
 from aq_lib.plot_utils import generate_optics_plot
+
+# ---------------------------------------------------------------------------
+# WiFi — proxy to kiosk-control host service
+# ---------------------------------------------------------------------------
+
+KIOSK_CONTROL_URL = os.getenv("KIOSK_CONTROL_URL", "http://127.0.0.1:9191")
+
+import httpx
+
+async def _kiosk_get(path: str) -> dict:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(f"{KIOSK_CONTROL_URL}{path}")
+        return r.json()
+
+async def _kiosk_post(path: str, body: dict) -> dict:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.post(f"{KIOSK_CONTROL_URL}{path}", json=body)
+        return r.json()
+
+@app.get("/wifi")
+async def wifi_page():
+    return FileResponse(static_dir / "wifi.html")
+
+@app.get("/wifi/status")
+async def wifi_status():
+    try:
+        return await _kiosk_get("/wifi/status")
+    except Exception as e:
+        return {"connected": False, "ssid": None, "signal": None, "error": str(e)}
+
+@app.get("/wifi/scan")
+async def wifi_scan():
+    try:
+        return await _kiosk_get("/wifi/scan")
+    except Exception as e:
+        return {"networks": [], "error": str(e)}
+
+class WifiConnect(BaseModel):
+    ssid: str
+    password: str = ""
+
+@app.post("/wifi/connect")
+async def wifi_connect(body: WifiConnect):
+    try:
+        return await _kiosk_post("/wifi/connect", {"ssid": body.ssid, "password": body.password})
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+class WifiForget(BaseModel):
+    ssid: str
+
+@app.post("/wifi/forget")
+async def wifi_forget(body: WifiForget):
+    try:
+        return await _kiosk_post("/wifi/forget", {"ssid": body.ssid})
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
