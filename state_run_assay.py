@@ -247,6 +247,7 @@ class AssayInterface():
             self.hw_deinitialize()
             sr.timer_control("stop")
             self.drawer.open()
+            sr.update_drawer_state(is_open=True, is_closed=False)
             if self.run_aborted:
                 sr.timer_control( "stop" )
                 sr.timer_control( "reset" )

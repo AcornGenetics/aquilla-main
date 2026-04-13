@@ -867,13 +867,13 @@ a:active {
   left: 0;
   right: 0;
   bottom: 0;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-  padding: 16px 20px 24px;
+  background: rgba(240, 242, 245, 0.97);
+  border-top: 1px solid #c8cdd5;
+  padding: 10px 16px 18px;
   display: none;
   flex-direction: column;
-  gap: 10px;
-  box-shadow: 0 -12px 24px rgba(15, 23, 42, 0.12);
+  gap: 8px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
   z-index: 20;
 }
 
@@ -881,52 +881,93 @@ a:active {
   display: flex;
 }
 
+.keyboard-top-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -2px;
+}
+
+.keyboard-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1.5px solid #444;
+  background: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+
 .keyboard-row {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .keyboard-row--actions {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  column-gap: 12px;
-}
-
-.keyboard-actions {
   display: flex;
-  gap: 8px;
-}
-
-.keyboard-actions--left {
-  justify-content: flex-end;
-}
-
-.keyboard-actions--right {
-  justify-content: flex-start;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: nowrap;
+  margin-top: 2px;
 }
 
 .keyboard-key {
-  min-width: 48px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: var(--icon-white);
-  font-size: 18px;
-  color: #1f2937;
+  flex: 1;
+  min-width: 0;
+  padding: 11px 6px;
+  border-radius: 10px;
+  border: 1px solid #c0c5cc;
+  background: #ffffff;
+  font-size: 17px;
+  color: #1a1a1a;
   cursor: pointer;
-  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 0 #aab0ba;
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.keyboard-key--action {
-  background: #eef2f7;
+.keyboard-key:active {
+  box-shadow: none;
+  transform: translateY(2px);
+  background: #e8eaed;
+}
+
+.keyboard-key--delete {
+  flex: 0 0 auto;
+  width: 80px;
+  font-size: 14px;
   font-weight: 600;
 }
 
-.keyboard-key--wide {
-  min-width: 240px;
+.keyboard-key--clear {
+  flex: 0 0 auto;
+  width: 110px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.keyboard-key--space {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: #555;
+}
+
+.keyboard-key--enter {
+  flex: 0 0 auto;
+  width: 110px;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.5px;
 }
 
 
