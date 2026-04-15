@@ -13,6 +13,30 @@ GHCR_REPO="${GHCR_REPO:-acorngenetics/aquilla-main}"
 RAW_REPO_URL="https://raw.githubusercontent.com/${GHCR_REPO}/main"
 MEERSTETTER_XMLS=(${MEERSTETTER_XMLS:-"24NOV25.SN1.Config.w.PT1000.cal.1.xml"})
 
+# ── Load existing device config if present (allows re-runs without re-entering values) ──
+if [[ -f /opt/aquila/config/device.env ]]; then
+    echo "  ℹ Found existing /opt/aquila/config/device.env — loading saved values"
+    while IFS='=' read -r key val; do
+        [[ -z "${key}" || "${key}" == \#* ]] && continue
+        # Only set if not already in environment
+        eval "_existing=\"\${${key}:-}\""
+        if [[ -z "${_existing}" ]]; then
+            export "${key}=${val}"
+        fi
+    done < /opt/aquila/config/device.env
+fi
+
+# Load lid heater config if present
+if [[ -f /opt/aquila/config/lid_heater_config.json ]]; then
+    LID_HEATER_LOWER_BOUND="${LID_HEATER_LOWER_BOUND:-$(python3 -c "import json; print(json.load(open('/opt/aquila/config/lid_heater_config.json'))['lower_bound'])" 2>/dev/null || true)}"
+    LID_HEATER_UPPER_BOUND="${LID_HEATER_UPPER_BOUND:-$(python3 -c "import json; print(json.load(open('/opt/aquila/config/lid_heater_config.json'))['upper_bound'])" 2>/dev/null || true)}"
+fi
+
+# Load drawer read_steps if present
+if [[ -f /opt/aquila/config/host_config.json && -n "${DEVICE_HOSTNAME:-}" ]]; then
+    DRAWER_READ_STEPS="${DRAWER_READ_STEPS:-$(python3 -c "import json; c=json.load(open('/opt/aquila/config/host_config.json')); print(c.get('${DEVICE_HOSTNAME}',{}).get('drawer',{}).get('read_steps',''))" 2>/dev/null || true)}"
+fi
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 PHASE=""
 

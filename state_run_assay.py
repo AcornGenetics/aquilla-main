@@ -386,8 +386,9 @@ class AssayInterface():
         Falls back to running exit_kiosk.sh as a subprocess in case the service
         is not yet running.
         """
+        kiosk_control_url = os.getenv("KIOSK_CONTROL_URL", "http://127.0.0.1:9191")
         try:
-            resp = _requests.post("http://127.0.0.1:9191/exit-kiosk", timeout=5)
+            resp = _requests.post(f"{kiosk_control_url}/exit-kiosk", timeout=5)
             if resp.ok:
                 logger.info("kiosk-control: exit-kiosk OK")
                 return
