@@ -8,6 +8,7 @@ services:
     environment:
       DEVICE_ID: "${DEVICE_ID}"
       RUN_MODE: "${RUN_MODE}"
+      KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
       DATA_DIR: "/opt/aquila"
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"

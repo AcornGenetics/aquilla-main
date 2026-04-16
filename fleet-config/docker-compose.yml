@@ -47,6 +47,7 @@ services:
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
       BACKEND_URL: "http://aquila-backend:8090"
+      KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
