@@ -21,7 +21,7 @@ fp = sys.stdout
 
 t0 = time.time()
 
-for i in range ( 10 ):
+for i in range ( 60 ):
     for led_state in [1,0]:
         for k in range ( 10 ):
             time.sleep ( 1.0/59.0 )
