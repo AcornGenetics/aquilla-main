@@ -1,0 +1,25 @@
+{
+    "title": "Basic PCR Test Profile",
+    "fam_label": "Target",
+    "rox_label": "Control",
+    "steps": [
+        {"ramp_rate": 1.6},
+        {"pcr_fanon": 1},
+        {"enable": 0, "duration": 1},
+        {"optics": ""},
+        {"setpoint": 25, "duration": 1},
+        {"setpoint": 95, "duration": 2},
+        {
+            "repeat": [
+                {"setpoint": 95, "duration": 1},
+                {"setpoint": 55, "duration": 2},
+                {"optics": ""},
+                {"setpoint": 55, "duration": 1}
+            ],
+            "cycles": 3
+        },
+        {"setpoint": 25, "duration": 1},
+        {"disable": 0, "duration": 1},
+        {"pcr_fanoff": 0}
+    ]
+}
