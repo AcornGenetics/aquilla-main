@@ -1,0 +1,94 @@
+{
+    "output_dir": "pcr_data",
+    "post_in_gui": "True",
+    "title": "Ryan thermal tests",
+    "steps": [
+        {
+            "disable": 0,
+            "duration": 1,
+            "description": "Record equilibrium without power."
+        },
+        {
+            "ramp_rate": 1.75
+        },
+        {
+            "pcr_fanon": 1
+        },
+        {
+            "enable": 0,
+            "duration": 1,
+            "description": "Turn on and record temperature for a little bit"
+        },
+        {
+            "optics": ""
+        },
+        {
+            "setpoint": 25,
+            "duration": 1,
+            "description": "Presetting temperature"
+        },
+        {
+            "repeat": [
+                {
+                    "setpoint": 38,
+                    "duration": 70,
+                    "description": "38C 70s hold"
+                },
+                {
+                    "setpoint": 60,
+                    "duration": 70,
+                    "description": "60C 70s hold"
+                },
+                {
+                    "setpoint": 100,
+                    "duration": 70,
+                    "description": "100C 70s hold"
+                },
+                {
+                    "setpoint": 60,
+                    "duration": 70,
+                    "description": "60C 70s hold 2"
+                },
+                {
+                    "setpoint": 80,
+                    "duration": 70,
+                    "description": "80C 70s hold 1"
+                },
+                {
+                    "setpoint": 100,
+                    "duration": 70,
+                    "description": "100C 70s hold 2"
+                },
+                {
+                    "setpoint": 80,
+                    "duration": 70,
+                    "description": "80C 70s hold 2"
+                },
+                {
+                    "setpoint": 60,
+                    "duration": 70,
+                    "description": "60C 70s hold 3"
+                },
+                {
+                    "setpoint": 38,
+                    "duration": 70,
+                    "description": "38C 70s hold 3"
+                }
+            ],
+            "cycles": 1
+        },
+        {
+            "ramp_rate": 1.75
+        },
+        {
+            "setpoint": 25,
+            "duration": 10,
+            "description": "Restoring setpoint to RT"
+        },
+        {
+            "disable": 0,
+            "duration": 5,
+            "description": "Turn off and record temperature for a little bit"
+        }
+    ]
+}
