@@ -49,6 +49,18 @@ Aquila PCR system project.
 - Fleet setup: `scripts/setup_fleet_device.sh`
 - Ring helpers: `scripts/setup/device_dev.sh`, `scripts/setup/device_pilot.sh`, `scripts/setup/device_prod.sh`
 
+## Versioning
+
+The device UI displays the software version in the **Help** screen, at the bottom of the Help Topics panel.
+
+To update the version:
+1. Edit `aquila_web/static/help.html` — change the text inside `<p class="help-version">`.
+2. Update this section with the new version number and a brief changelog note.
+
+| Version | Notes |
+|---------|-------|
+| V 1.1.0 | Initial versioned release. Version shown in Help screen. Purple run-start dot removed from Run screen. |
+
 ## Runbook
 - Start backend UI (local): `cd aquila_web && uvicorn main:app --host 127.0.0.1 --port 8090`
 - Start backend UI (simulated): `cd aquila_web && AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=10 uvicorn main:app --host 127.0.0.1 --port 8090`
