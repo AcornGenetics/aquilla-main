@@ -1,6 +1,10 @@
 logs/**/*.log
 logs/**/*.txt
 
+# Ruflo/swarm files
+.swarm/
+ruvector.db
+
 # Swap files. 
 .*.swp
 
