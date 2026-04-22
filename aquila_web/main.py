@@ -796,6 +796,10 @@ async def button_exit():
     global exit_button, sim_exit_pending
     exit_button = True
     logger.info("exit button pressed")
+    try:
+        await _kiosk_post("/exit-kiosk", {})
+    except Exception as e:
+        logger.warning("kiosk-control exit failed: %s", e)
     if DEV_SIMULATE:
         if sim_exit_pending:
             sim_exit_pending = False

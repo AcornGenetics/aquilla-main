@@ -10,6 +10,7 @@ services:
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
+      KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
@@ -21,6 +22,8 @@ services:
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
       - "/dev/gpiomem:/dev/gpiomem"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     privileged: true
     restart: unless-stopped
     labels:
@@ -59,6 +62,8 @@ services:
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
       - "/dev/gpiomem:/dev/gpiomem"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     pid: host
     privileged: true
     depends_on:
@@ -82,6 +87,8 @@ services:
     container_name: aquila-ui
     ports:
       - "8080:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     restart: unless-stopped
