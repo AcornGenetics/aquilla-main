@@ -485,6 +485,7 @@ if [[ ${#MEERSTETTER_XMLS[@]} -gt 0 ]]; then
 fi
 
 curl -fsSL \
+    -H "Authorization: token ${GHCR_TOKEN}" \
     "https://raw.githubusercontent.com/${GHCR_REPO}/main/fleet-config/docker-compose.yml" \
     -o /opt/fleet/docker-compose.yml
 
@@ -493,7 +494,9 @@ docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml pull
 cat > /opt/fleet/update.sh <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-curl -fsSL "https://raw.githubusercontent.com/${GHCR_REPO}/main/fleet-config/docker-compose.yml" \\
+curl -fsSL \\
+    -H "Authorization: token ${GHCR_TOKEN}" \\
+    "https://raw.githubusercontent.com/${GHCR_REPO}/main/fleet-config/docker-compose.yml" \\
     -o /opt/fleet/docker-compose.yml
 docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml pull
 docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml up -d
