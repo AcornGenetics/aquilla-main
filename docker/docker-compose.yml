@@ -1,3 +1,7 @@
+# NOTE: This file is NOT used in any deployment.
+# All devices (dev, pilot, prod) download and run fleet-config/docker-compose.yml
+# via deployment2.sh. This file is a legacy leftover and can be ignored.
+
 services:
   backend:
     image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG:-latest}
@@ -23,6 +27,8 @@ services:
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
       - "/dev/gpiomem:/dev/gpiomem"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     privileged: true
     restart: unless-stopped
 
@@ -32,6 +38,8 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     ports:
       - "8080:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DEVICE_ID: "${DEVICE_ID}"
       RUN_MODE: "${RUN_MODE}"
