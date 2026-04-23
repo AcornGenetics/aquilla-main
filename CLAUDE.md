@@ -54,6 +54,16 @@ npm run lint
 - ALWAYS run tests after making code changes
 - ALWAYS verify build succeeds before committing
 
+## Feature Development Rules (Always Enforced)
+
+- ALWAYS write tests alongside any new feature — no feature is complete without tests
+- Tests go in `tests/` (contract/integration) or `unit_tests/` (pure logic) — never in the root folder
+- After implementing a feature, run the FULL test suite: `pytest tests unit_tests -v`
+- A feature is NOT done until all existing tests still pass AND new tests for the feature pass
+- New API endpoints → add a contract test in `tests/contract/`
+- New pure logic (curve math, validation, etc.) → add a unit test in `unit_tests/`
+- Hardware-dependent behavior → document why it cannot be tested in CI, add a `@pytest.mark.hardware` note
+
 ## Security Rules
 
 - NEVER hardcode API keys, secrets, or credentials in source files

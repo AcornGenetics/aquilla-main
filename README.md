@@ -40,6 +40,34 @@ Aquila PCR system project.
 - Set `PROFILE_BUNDLE` (comma-separated filenames) to copy only specific bundled profiles; listed files are copied even if `PROFILE_DIR` already has other profiles, and existing filenames are not overwritten.
 - Or set `profile_bundle` in `config_files/profile_config.json` (mounted to `/opt/aquila/config/profile_config.json`) to control which bundled profiles are seeded on device.
 
+## Testing
+
+Tests live in two directories:
+- `tests/` — contract and integration tests (FastAPI TestClient, no hardware)
+- `unit_tests/` — pure logic tests (curve math, validation, path handling)
+
+Run the full suite:
+```bash
+pytest tests unit_tests -v
+```
+
+### Markers
+| Marker | Runs in CI | Description |
+|--------|-----------|-------------|
+| `unit` | Yes | No hardware, no network |
+| `contract` | Yes | FastAPI TestClient only |
+| `state` | Yes | State machine safety rules |
+| `integration` | With `DEV_SIMULATE=1` | Simulated full run |
+| `e2e` | With running frontend | Playwright browser tests |
+| `hardware` | No — Pi only | Requires real GPIO/serial hardware |
+
+### Feature Development
+Every new feature must include tests. A feature is not complete until:
+1. New tests are written (`tests/contract/` for API endpoints, `unit_tests/` for logic)
+2. `pytest tests unit_tests -v` passes with no regressions
+
+Hardware-only behavior that cannot be tested in CI should be documented with `@pytest.mark.hardware`.
+
 ## Local Development
 - Backend (FastAPI): run from `aquila_web/` with `uvicorn main:app --host 127.0.0.1 --port 8090`
 - Simulated runs: `AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=10 uvicorn main:app --host 127.0.0.1 --port 8090`
