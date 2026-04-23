@@ -68,7 +68,7 @@ def _load_profile_labels(profile_name: str | None) -> dict:
     profile_dir = resolve_profile_dir()
     if not profile_dir.exists():
         return {}
-    for path in profile_dir.glob("*.json"):
+    for path in profile_dir.rglob("*.json"):
         try:
             with path.open() as f:
                 data = json.load(f)
@@ -796,6 +796,10 @@ async def button_exit():
     global exit_button, sim_exit_pending
     exit_button = True
     logger.info("exit button pressed")
+    try:
+        await _kiosk_post("/exit-kiosk", {})
+    except Exception as e:
+        logger.warning("kiosk-control exit failed: %s", e)
     if DEV_SIMULATE:
         if sim_exit_pending:
             sim_exit_pending = False
@@ -896,7 +900,7 @@ async def list_profiles():
     profile_dir = resolve_profile_dir()
     if not profile_dir.exists():
         return profiles
-    for path in profile_dir.glob("*.json"):
+    for path in profile_dir.rglob("*.json"):
         try:
             with path.open() as f:
                 data = json.load(f)

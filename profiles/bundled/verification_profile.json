@@ -66,7 +66,7 @@
                 "description": "Annealing"
             }
         ],
-        "cycles": 10
+        "cycles": 5
     },
     {
         "ramp_rate": 1.6
