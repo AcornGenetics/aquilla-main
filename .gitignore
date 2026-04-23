@@ -237,6 +237,7 @@ ENV/
 logs/
 results/
 data/
+user/
 
 # Outputs
 *.csv
