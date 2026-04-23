@@ -216,11 +216,7 @@ async function loadRunDetail() {
           <div class="run-detail-kpi__value">${summary.inconclusiveCount}/4</div>
           <div class="run-detail-kpi__label">Inconclusive</div>
         </div>
-        <div class="run-detail-kpi">
-          <div class="run-detail-kpi__value">${avgCq ?? "--"}</div>
-          <div class="run-detail-kpi__label">Avg Ct Value</div>
-        </div>
-        <div class="run-detail-kpi">
+<div class="run-detail-kpi">
           <div class="run-detail-kpi__value run-detail-kpi__value--${qcStatus.toLowerCase()}">${qcStatus}</div>
           <div class="run-detail-kpi__label">QC Status</div>
         </div>

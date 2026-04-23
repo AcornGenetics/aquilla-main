@@ -569,6 +569,19 @@ async function notifyRun(){
 
     setRunWarning("");
 
+    // Re-sync selected profile to backend immediately before run,
+    // in case the dropdown was pre-selected on load without a POST
+    // (e.g. after server restart or navigation).
+    try {
+        await fetch("/profile/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ profile })
+        });
+    } catch (err) {
+        console.error("Failed to sync profile before run:", err);
+    }
+
     try {
         const ret = await fetch("/button/run", {
             method:"POST"

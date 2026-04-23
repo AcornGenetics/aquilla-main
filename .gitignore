@@ -1,10 +1,13 @@
 logs/**/*.log
 logs/**/*.txt
 
+# Ruflo/swarm files
+.swarm/
+ruvector.db
+
 # Swap files / editor backups
 .*.swp
 *~
-
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

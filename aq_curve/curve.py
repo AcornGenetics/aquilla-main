@@ -83,6 +83,8 @@ class Curve:
         position = well + dpos
 
         sub_data = [d for n, d in enumerate(dye_subdata) if ((n % 10) > 5)]
+        if not sub_data:
+            raise ValueError(f"No optics data found for dye '{dye}' in {logfilename!r} — wrong file type?")
         max_cycle = max([int(d[5]) for d in sub_data])
         y0 = [0] * max_cycle
         y1 = [0] * max_cycle
