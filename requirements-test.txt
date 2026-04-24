@@ -1,0 +1,10 @@
+# Test dependencies — no hardware packages, installs on any machine
+pytest
+pytest-asyncio
+httpx
+fastapi
+uvicorn[standard]
+pydantic
+requests
+numpy
+pandas
