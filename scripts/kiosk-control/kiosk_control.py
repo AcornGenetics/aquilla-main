@@ -64,8 +64,8 @@ def _is_allowed(addr: str) -> bool:
 
 
 def _kill_chromium() -> tuple[bool, str]:
-    """Send SIGTERM to every Chromium process; fall back to SIGKILL."""
-    patterns = [CHROMIUM_BIN, "chromium"]
+    """Send SIGTERM to every kiosk browser process (Chromium or kiosk.py WebKit)."""
+    patterns = [CHROMIUM_BIN, "chromium", "kiosk.py"]
     killed_any = False
     for pattern in patterns:
         result = subprocess.run(
@@ -75,9 +75,25 @@ def _kill_chromium() -> tuple[bool, str]:
         if result.returncode == 0:
             killed_any = True
     if not killed_any:
-        # Nothing matched — not necessarily an error
-        return True, "no chromium process found"
-    return True, "chromium terminated"
+        return True, "no kiosk process found"
+    # Launch desktop on the existing X session — no lightdm restart needed.
+    # env vars must be passed explicitly because sudo -u drops the environment.
+    xauth = f"/home/{KIOSK_USER}/.Xauthority"
+    for cmd in [
+        ["pcmanfm", "--desktop"],
+        ["lxpanel", "--profile", "LXDE"],
+        ["nm-applet"],
+    ]:
+        subprocess.Popen(
+            ["sudo", "-u", KIOSK_USER, "env",
+             "DISPLAY=:0",
+             f"XAUTHORITY={xauth}",
+             f"HOME=/home/{KIOSK_USER}",
+             ] + cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    return True, "kiosk terminated"
 
 
 def _start_chromium() -> tuple[bool, str]:
