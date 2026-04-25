@@ -838,6 +838,10 @@ async def button_exit_force():
     global force_exit
     force_exit = True
     logger.info("Force exit requested")
+    try:
+        await _kiosk_post("/exit-kiosk", {})
+    except Exception as e:
+        logger.warning("kiosk-control exit failed: %s", e)
     if DEV_SIMULATE:
         asyncio.create_task(_simulate_exit_confirmed())
     return {"ok": True}
