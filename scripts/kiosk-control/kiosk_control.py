@@ -76,22 +76,16 @@ def _kill_chromium() -> tuple[bool, str]:
             killed_any = True
     if not killed_any:
         return True, "no kiosk process found"
-    # Launch desktop on the existing X session — no lightdm restart needed.
-    # env vars must be passed explicitly because sudo -u drops the environment.
+    # Launch desktop on the existing X session.
+    # Use su -c so the process runs as pi with its own environment.
     xauth = f"/home/{KIOSK_USER}/.Xauthority"
-    for cmd in [
-        ["pcmanfm", "--desktop"],
-        ["lxpanel", "--profile", "LXDE"],
-        ["nm-applet"],
-    ]:
+    desktop_env = f"DISPLAY=:0 XAUTHORITY={xauth} HOME=/home/{KIOSK_USER}"
+    for app in ["pcmanfm --desktop", "lxpanel --profile LXDE", "nm-applet"]:
         subprocess.Popen(
-            ["sudo", "-u", KIOSK_USER, "env",
-             "DISPLAY=:0",
-             f"XAUTHORITY={xauth}",
-             f"HOME=/home/{KIOSK_USER}",
-             ] + cmd,
+            ["su", "-c", f"{desktop_env} {app}", KIOSK_USER],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
     return True, "kiosk terminated"
 
