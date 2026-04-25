@@ -80,7 +80,7 @@ def _kill_chromium() -> tuple[bool, str]:
     # Use su -c so the process runs as pi with its own environment.
     xauth = f"/home/{KIOSK_USER}/.Xauthority"
     desktop_env = f"DISPLAY=:0 XAUTHORITY={xauth} HOME=/home/{KIOSK_USER}"
-    for app in ["pcmanfm --desktop", "lxpanel --profile LXDE", "nm-applet"]:
+    for app in ["pcmanfm --desktop", "lxpanel-pi"]:
         subprocess.Popen(
             ["su", "-c", f"{desktop_env} {app}", KIOSK_USER],
             stdout=subprocess.DEVNULL,
