@@ -197,23 +197,27 @@ unclutter -idle 0.5 &
 # Allow display and compositor to settle before launching Chromium
 sleep 3
 
-chromium \
-  --kiosk http://localhost:8090 \
-  --incognito \
-  --noerrdialogs \
-  --disable-infobars \
-  --disable-session-crashed-bubble \
-  --check-for-update-interval=31536000 \
-  --disable-pinch \
-  --overscroll-history-navigation=0 \
-  --disable-features=TranslateUI \
-  --touch-events=enabled \
-  --enable-touch-drag-drop \
-  --enable-gpu-rasterization \
-  --use-angle=gles \
-  --ozone-platform=x11 \
-  --start-maximized \
-  &
+# If kiosk_disabled flag exists, show desktop instead of kiosk.
+# Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
+if [ ! -f /tmp/kiosk_disabled ]; then
+  chromium \
+    --kiosk http://localhost:8090 \
+    --incognito \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --check-for-update-interval=31536000 \
+    --disable-pinch \
+    --overscroll-history-navigation=0 \
+    --disable-features=TranslateUI \
+    --touch-events=enabled \
+    --enable-touch-drag-drop \
+    --enable-gpu-rasterization \
+    --use-angle=gles \
+    --ozone-platform=x11 \
+    --start-maximized \
+    &
+fi
 EOF
 
 chown -R pi:pi "${PI_HOME}/.config/openbox"
@@ -221,6 +225,7 @@ chown -R pi:pi "${PI_HOME}/.config/openbox"
 AUTOSTART="${PI_HOME}/.config/openbox/autostart"
 run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
 run_test "correct URL (8090)"          "grep -q 'localhost:8090' ${AUTOSTART}"
+run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
 run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
 run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
 run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
@@ -625,6 +630,50 @@ run_test "watchtower webhook responds" \
      -H 'Authorization: Bearer ${WATCHTOWER_TOKEN}' | grep -q 200"
 
 phase_pass "fleet config set, containers running, backend reachable on :8090, watchtower webhook responding"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 11b — Kiosk Control Service
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "11b" "Kiosk Control Service"
+
+KIOSK_RAW="${RAW_REPO_URL}/scripts/kiosk-control"
+curl -fsSL "${KIOSK_RAW}/kiosk_control.py" -o /usr/local/bin/kiosk_control.py
+chmod +x /usr/local/bin/kiosk_control.py
+curl -fsSL "${KIOSK_RAW}/kiosk-control.service" -o /etc/systemd/system/kiosk-control.service
+systemctl daemon-reload
+systemctl enable --now kiosk-control
+
+# Create lxpanel-pi config for desktop WiFi panel (used when kiosk exits)
+mkdir -p "${PI_HOME}/.config/lxpanel-pi/panels"
+cat > "${PI_HOME}/.config/lxpanel-pi/panels/panel" <<'PANELEOF'
+Global {
+  edge=top
+  align=left
+  margin=0
+  widthtype=percent
+  width=100
+  height=36
+  autohide=0
+  background=0
+  iconsize=36
+  monitor=0
+}
+Plugin {
+  type=netman
+}
+Plugin {
+  type=clock
+}
+PANELEOF
+chown -R pi:pi "${PI_HOME}/.config/lxpanel-pi"
+
+run_test "kiosk_control.py installed"       "test -f /usr/local/bin/kiosk_control.py"
+run_test "kiosk-control service enabled"    "systemctl is-enabled kiosk-control | grep -q enabled"
+run_test "kiosk-control service active"     "systemctl is-active kiosk-control | grep -q active"
+run_test "kiosk-control health"             "curl -sf http://127.0.0.1:9191/health | grep -q true"
+run_test "lxpanel-pi config exists"         "test -f ${PI_HOME}/.config/lxpanel-pi/panels/panel"
+
+phase_pass "kiosk-control installed and healthy"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 12 — Tailscale

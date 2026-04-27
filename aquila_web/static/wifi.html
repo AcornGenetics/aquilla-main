@@ -146,6 +146,20 @@
       color: #9ca3af;
       font-size: 15px;
     }
+
+    .wifi-forget-btn {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #fca5a5;
+      background: #fff;
+      color: #dc2626;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .wifi-forget-btn:disabled { color: #fca5a5; border-color: #fecaca; cursor: default; }
   </style>
 </head>
 <body class="app-body">
@@ -262,16 +276,22 @@
     function buildConnectForm(net) {
       const form = document.createElement("div");
       form.className = "wifi-connect-form";
+      const safeId = escId(net.ssid);
+      const safeLabel = escHtml(net.ssid);
       form.innerHTML = `
         ${net.secured ? `
         <div class="wifi-password-row">
-          <input type="password" id="pw-${escId(net.ssid)}" placeholder="Password" autocomplete="off" />
-          <button class="wifi-show-btn" type="button" onclick="togglePw('${escId(net.ssid)}', this)">Show</button>
+          <input type="password" id="pw-${safeId}" placeholder="Password" autocomplete="off" />
+          <button class="wifi-show-btn" type="button" onclick="togglePw('${safeId}', this)">Show</button>
         </div>` : ""}
-        <button class="wifi-connect-btn" type="button" onclick="doConnect('${escId(net.ssid)}', ${net.secured})">
-          Connect to ${escHtml(net.ssid)}
+        <button class="wifi-connect-btn" type="button" id="conn-btn-${safeId}" onclick="doConnect('${safeId}', ${net.secured})">
+          Connect to ${safeLabel}
         </button>
-        <div class="wifi-error" id="err-${escId(net.ssid)}"></div>
+        <div class="wifi-error" id="err-${safeId}"></div>
+        ${net.in_use ? `
+        <button class="wifi-forget-btn" type="button" id="forget-btn-${safeId}" onclick="doForget('${safeId}')">
+          Forget ${safeLabel}
+        </button>` : ""}
       `;
       return form;
     }
@@ -328,6 +348,43 @@
         errEl.classList.add("is-visible");
         btn.disabled = false;
         btn.innerHTML = `Connect to ${escHtml(ssid)}`;
+      }
+    }
+
+    async function doForget(ssidId) {
+      const btn = document.getElementById("forget-btn-" + ssidId);
+      const errEl = document.getElementById("err-" + ssidId);
+      // Recover original SSID from connect button label
+      const connBtn = document.getElementById("conn-btn-" + ssidId);
+      const ssid = connBtn ? connBtn.textContent.replace("Connect to ", "").trim() : ssidId;
+
+      if (!window.confirm(`Forget network "${ssid}"?`)) return;
+
+      errEl.classList.remove("is-visible");
+      btn.disabled = true;
+      btn.textContent = "Forgetting...";
+
+      try {
+        const r = await fetch("/wifi/forget", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ssid }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          await loadStatus();
+          await doScan();
+        } else {
+          errEl.textContent = d.error || "Failed to forget network";
+          errEl.classList.add("is-visible");
+          btn.disabled = false;
+          btn.textContent = `Forget ${escHtml(ssid)}`;
+        }
+      } catch (e) {
+        errEl.textContent = "Request failed — try again";
+        errEl.classList.add("is-visible");
+        btn.disabled = false;
+        btn.textContent = `Forget ${escHtml(ssid)}`;
       }
     }
 
