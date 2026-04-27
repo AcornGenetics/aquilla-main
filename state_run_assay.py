@@ -175,6 +175,14 @@ class AssayInterface():
         self.run_aborted = False
         sr.reset_stop_request()
 
+        # Drain any stale tasks/quit left over from a previous run so the
+        # new executor starts with a clean queue.
+        while not self.message_queue.empty():
+            try:
+                self.message_queue.get_nowait()
+            except Empty:
+                break
+
         stop_event = Event()
         stop_monitor_event = Event()
         stop_thread = Thread(
