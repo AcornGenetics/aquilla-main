@@ -222,10 +222,13 @@ class AssayInterface():
                 t0_sync = set_time()
                 print ( "# Starting log t0 = %f"% t0_sync, file = pcr_fp )
                 actions = thermal_parser( steps )
-                thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
-
-                self.message_queue.put("quit")
-                execution_thread.join()
+                try:
+                    thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
+                finally:
+                    # Drain the executor while files are still open so capture
+                    # threads cannot write to a closed file handle.
+                    self.message_queue.put("quit")
+                    execution_thread.join(timeout=5)
 
         except RunStopped:
             logger.info("Run stopped by user")
@@ -242,15 +245,16 @@ class AssayInterface():
             if stop_thread.is_alive():
                 stop_thread.join(timeout=2)
             if execution_thread.is_alive():
+                # Safety net: executor did not finish within the inner timeout
                 self.message_queue.put("quit")
-                execution_thread.join(timeout=5)
+                execution_thread.join(timeout=2)
             self.hw_deinitialize()
             sr.timer_control("stop")
+            if self.run_aborted:
+                sr.timer_control("reset")
             self.drawer.open()
             sr.update_drawer_state(is_open=True, is_closed=False)
             if self.run_aborted:
-                sr.timer_control( "stop" )
-                sr.timer_control( "reset" )
                 sr.change_screen("1")
             else:
                 try:

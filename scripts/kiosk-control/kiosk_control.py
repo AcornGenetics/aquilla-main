@@ -30,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 # Configuration — edit these to match your deployment
 # ---------------------------------------------------------------------------
 
-LISTEN_HOST = "127.0.0.1"
+LISTEN_HOST = "0.0.0.0"
 LISTEN_PORT = int(os.environ.get("KIOSK_CONTROL_PORT", "9191"))
 
 # URL Chromium should open in kiosk mode.

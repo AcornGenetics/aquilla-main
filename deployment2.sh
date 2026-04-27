@@ -143,6 +143,13 @@ phase_pass "Docker installed and running, pi in docker group"
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 4 "Autologin (X11/Openbox)"
 
+raspi-config nonint do_boot_behaviour B4
+
+# Fix autologin-session in main lightdm.conf (Pi OS sets rpd-labwc by default)
+if [ -f /etc/lightdm/lightdm.conf ]; then
+    sed -i 's/autologin-session=.*/autologin-session=openbox/' /etc/lightdm/lightdm.conf
+fi
+
 mkdir -p /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/autologin.conf <<'EOF'
 [Seat:*]
@@ -150,9 +157,10 @@ autologin-user=pi
 autologin-session=openbox
 EOF
 
-run_test "autologin.conf exists"      "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
-run_test "autologin-user=pi"          "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
-run_test "autologin-session=openbox"  "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
+run_test "autologin.conf exists"           "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
+run_test "autologin-user=pi"               "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
+run_test "autologin-session=openbox"       "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
+run_test "main lightdm.conf not rpd-labwc" "! grep -q 'autologin-session=rpd-labwc' /etc/lightdm/lightdm.conf"
 
 phase_pass "LightDM configured for X11/Openbox autologin"
 
@@ -173,8 +181,11 @@ xset s off
 xset s noblank
 xset -dpms
 
-# Rotate display and match touch matrix (HDMI-2, rotate right)
-xrandr --output HDMI-2 --mode 1024x768 --rate 60 --rotate right
+# Auto-detect connected HDMI output (handles HDMI-2, HDMI-A-2, etc.)
+HDMI_OUT=$(xrandr --query | grep -E "^HDMI.*connected" | head -1 | awk '{print $1}')
+if [ -n "$HDMI_OUT" ]; then
+    xrandr --output "$HDMI_OUT" --mode 1024x768 --rate 60 --rotate right
+fi
 
 xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
   "Coordinate Transformation Matrix" \
@@ -186,23 +197,27 @@ unclutter -idle 0.5 &
 # Allow display and compositor to settle before launching Chromium
 sleep 3
 
-chromium \
-  --kiosk http://localhost:8090 \
-  --incognito \
-  --noerrdialogs \
-  --disable-infobars \
-  --disable-session-crashed-bubble \
-  --check-for-update-interval=31536000 \
-  --disable-pinch \
-  --overscroll-history-navigation=0 \
-  --disable-features=TranslateUI \
-  --touch-events=enabled \
-  --enable-touch-drag-drop \
-  --enable-gpu-rasterization \
-  --use-angle=gles \
-  --ozone-platform=x11 \
-  --start-maximized \
-  &
+# If kiosk_disabled flag exists, show desktop instead of kiosk.
+# Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
+if [ ! -f /tmp/kiosk_disabled ]; then
+  chromium \
+    --kiosk http://localhost:8090 \
+    --incognito \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --check-for-update-interval=31536000 \
+    --disable-pinch \
+    --overscroll-history-navigation=0 \
+    --disable-features=TranslateUI \
+    --touch-events=enabled \
+    --enable-touch-drag-drop \
+    --enable-gpu-rasterization \
+    --use-angle=gles \
+    --ozone-platform=x11 \
+    --start-maximized \
+    &
+fi
 EOF
 
 chown -R pi:pi "${PI_HOME}/.config/openbox"
@@ -210,9 +225,10 @@ chown -R pi:pi "${PI_HOME}/.config/openbox"
 AUTOSTART="${PI_HOME}/.config/openbox/autostart"
 run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
 run_test "correct URL (8090)"          "grep -q 'localhost:8090' ${AUTOSTART}"
+run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
 run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
 run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
-run_test "xrandr present"              "grep -q 'xrandr' ${AUTOSTART}"
+run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
 run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
 run_test "no stale Wayland .desktop"   "test ! -f ${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
 run_test "correct file ownership"      "stat -c '%U' ${AUTOSTART} | grep -q pi"
@@ -616,6 +632,50 @@ run_test "watchtower webhook responds" \
 phase_pass "fleet config set, containers running, backend reachable on :8090, watchtower webhook responding"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phase 11b — Kiosk Control Service
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "11b" "Kiosk Control Service"
+
+KIOSK_RAW="${RAW_REPO_URL}/scripts/kiosk-control"
+curl -fsSL "${KIOSK_RAW}/kiosk_control.py" -o /usr/local/bin/kiosk_control.py
+chmod +x /usr/local/bin/kiosk_control.py
+curl -fsSL "${KIOSK_RAW}/kiosk-control.service" -o /etc/systemd/system/kiosk-control.service
+systemctl daemon-reload
+systemctl enable --now kiosk-control
+
+# Create lxpanel-pi config for desktop WiFi panel (used when kiosk exits)
+mkdir -p "${PI_HOME}/.config/lxpanel-pi/panels"
+cat > "${PI_HOME}/.config/lxpanel-pi/panels/panel" <<'PANELEOF'
+Global {
+  edge=top
+  align=left
+  margin=0
+  widthtype=percent
+  width=100
+  height=36
+  autohide=0
+  background=0
+  iconsize=36
+  monitor=0
+}
+Plugin {
+  type=netman
+}
+Plugin {
+  type=clock
+}
+PANELEOF
+chown -R pi:pi "${PI_HOME}/.config/lxpanel-pi"
+
+run_test "kiosk_control.py installed"       "test -f /usr/local/bin/kiosk_control.py"
+run_test "kiosk-control service enabled"    "systemctl is-enabled kiosk-control | grep -q enabled"
+run_test "kiosk-control service active"     "systemctl is-active kiosk-control | grep -q active"
+run_test "kiosk-control health"             "curl -sf http://127.0.0.1:9191/health | grep -q true"
+run_test "lxpanel-pi config exists"         "test -f ${PI_HOME}/.config/lxpanel-pi/panels/panel"
+
+phase_pass "kiosk-control installed and healthy"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 12 — Tailscale
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 12 "Tailscale"
@@ -675,12 +735,14 @@ phase_pass "Grafana Alloy installed and running"
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 14 "Quiet Boot"
 
-if grep -q "console=tty1" /boot/cmdline.txt; then
-    sed -i 's/console=tty1/console=tty3/' /boot/cmdline.txt
+CMDLINE_FILE="/boot/firmware/cmdline.txt"
+
+if grep -q "console=tty1" "${CMDLINE_FILE}"; then
+    sed -i 's/console=tty1/console=tty3/' "${CMDLINE_FILE}"
 fi
 
-run_test "tty3 in cmdline"     "grep -q 'console=tty3' /boot/cmdline.txt"
-run_test "tty1 not in cmdline" "! grep -q 'console=tty1' /boot/cmdline.txt"
+run_test "tty3 in cmdline"     "grep -q 'console=tty3' ${CMDLINE_FILE}"
+run_test "tty1 not in cmdline" "! grep -q 'console=tty1' ${CMDLINE_FILE}"
 
 phase_pass "quiet boot configured (tty3)"
 
@@ -693,6 +755,12 @@ echo " Deployment complete for device: ${DEVICE_HOSTNAME}"
 echo ""
 echo " IMPORTANT: On first boot, physically push the"
 echo " drawer back to the home sensor before powering on."
+echo ""
+echo " MANUAL STEP REQUIRED after reboot:"
+echo " If the login screen appears instead of the kiosk,"
+echo " run: sudo raspi-config"
+echo " Then: System Options → Boot / Auto Login → Desktop Autologin"
+echo " Then reboot again."
 echo "=================================================="
 echo ""
 echo " Rebooting in 5 seconds... (Ctrl+C to cancel)"

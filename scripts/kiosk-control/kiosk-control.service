@@ -16,7 +16,7 @@ Environment=KIOSK_URL=http://localhost:8090
 Environment=KIOSK_USER=pi
 Environment=CHROMIUM_BIN=chromium
 
-ExecStart=/usr/bin/python3 /home/pi/aquilla-main/scripts/kiosk-control/kiosk_control.py
+ExecStart=/usr/bin/python3 /usr/local/bin/kiosk_control.py
 
 Restart=on-failure
 RestartSec=3

@@ -35,24 +35,28 @@ def _strip_network_block(lines, ssid):
     updated = []
     in_block = False
     block_matches = False
+    block_buf = []
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("network="):
             in_block = True
             block_matches = False
+            block_buf = [line]
+            continue
         if in_block and stripped.startswith("ssid="):
             ssid_value = stripped.split("=", 1)[1].strip().strip('"')
             if ssid_value == ssid:
                 block_matches = True
         if in_block and stripped == "}":
             if not block_matches:
+                updated.extend(block_buf)
                 updated.append(line)
             in_block = False
             block_matches = False
+            block_buf = []
             continue
         if in_block:
-            if not block_matches:
-                updated.append(line)
+            block_buf.append(line)
             continue
         updated.append(line)
     return updated
