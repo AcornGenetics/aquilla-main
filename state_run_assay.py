@@ -235,8 +235,10 @@ class AssayInterface():
                 finally:
                     # Drain the executor while files are still open so capture
                     # threads cannot write to a closed file handle.
+                    # Use a generous timeout: a 40-cycle run with optics can
+                    # take several seconds per capture position.
                     self.message_queue.put("quit")
-                    execution_thread.join(timeout=5)
+                    execution_thread.join(timeout=60)
 
         except RunStopped:
             logger.info("Run stopped by user")
@@ -249,9 +251,6 @@ class AssayInterface():
             sr.change_screen("-1")
             raise ( e )
         finally:
-            stop_monitor_event.set()
-            if stop_thread.is_alive():
-                stop_thread.join(timeout=2)
             if execution_thread.is_alive():
                 # Safety net: executor did not finish within the inner timeout
                 self.message_queue.put("quit")
@@ -261,6 +260,12 @@ class AssayInterface():
             if self.run_aborted:
                 sr.timer_control("reset")
             self.drawer.open()
+            # Stop monitor only after drawer is open — keeps the stop button
+            # functional during teardown motor movement (which can take
+            # 30-90 s if the drawer missed steps and needs to re-home).
+            stop_monitor_event.set()
+            if stop_thread.is_alive():
+                stop_thread.join(timeout=2)
             sr.update_drawer_state(is_open=True, is_closed=False)
             if self.run_aborted:
                 sr.change_screen("1")
@@ -287,8 +292,9 @@ class AssayInterface():
         self.meer.setTargetObjectTemperature ( 25.0 )
         self.meer.output_stage_enable ( 0 )
 
-        #self.lid_heater_stop_event.set()
-        #self.lid_thread.join( timeout = 5 )
+        self.lid_heater_stop_event.set()
+        if hasattr(self, "lid_thread") and self.lid_thread.is_alive():
+            self.lid_thread.join( timeout = 5 )
 
 
     def end( self ):

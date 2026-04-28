@@ -66,6 +66,8 @@ services:
       - "host.docker.internal:host-gateway"
     pid: host
     privileged: true
+    healthcheck:
+      disable: true
     depends_on:
       - backend
     restart: unless-stopped
