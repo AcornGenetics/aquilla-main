@@ -414,9 +414,11 @@ function acknowledgeRunComplete() {
 // Connect to WebSocket backend
 const host = window.location.host;
 const wsUrl = `ws://${host}/ws`;
-const socket = new WebSocket( wsUrl ); // adjust URL if needed
 
-socket.onmessage = function(event) {
+let socket;
+let wsReconnectTimer = null;
+
+function wsHandleMessage(event) {
   try {
     const panel = JSON.parse(event.data);
     console.log("Elapsed secs:", panel.elapsed);
@@ -509,7 +511,7 @@ socket.onmessage = function(event) {
             targetPath = "/complete";
             console.log("COMPLETE PATH", targetPath);
         }
-        
+
         if (targetPath !== window.location.pathname){
             currentScreen = screen;
             window.location.href = targetPath;
@@ -526,19 +528,32 @@ socket.onmessage = function(event) {
   } catch (e) {
     console.error("Invalid panel data", e);
   }
-};
+}
 
-socket.onopen = function() {
-  console.log("WebSocket connection established.");
-};
+function connectWebSocket() {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
+  if (socket) {
+    socket.onclose = null;
+    socket.close();
+  }
+  socket = new WebSocket(wsUrl);
+  socket.onmessage = wsHandleMessage;
+  socket.onopen = function() {
+    console.log("WebSocket connection established.");
+  };
+  socket.onerror = function(error) {
+    console.error("WebSocket error:", error);
+  };
+  socket.onclose = function() {
+    console.warn("WebSocket connection closed. Reconnecting in 2s...");
+    wsReconnectTimer = setTimeout(connectWebSocket, 2000);
+  };
+}
 
-socket.onerror = function(error) {
-  console.error("WebSocket error:", error);
-};
-
-socket.onclose = function() {
-  console.warn("WebSocket connection closed.");
-};
+connectWebSocket();
 
 async function notifyRun(){
     if (runButton && runButton.disabled) {
