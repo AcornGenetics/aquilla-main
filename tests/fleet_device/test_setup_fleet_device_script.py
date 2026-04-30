@@ -16,6 +16,13 @@ def test_setup_fleet_device_generates_watchtower_token() -> None:
     assert "WATCHTOWER_HTTP_API_TOKEN" in script_text
 
 
+def test_setup_fleet_device_locks_down_device_env() -> None:
+    script_text = Path("scripts/setup_fleet_device.sh").read_text()
+
+    assert "sudo chown root:root /opt/aquila/config/device.env" in script_text
+    assert "sudo chmod 600 /opt/aquila/config/device.env" in script_text
+
+
 def test_setup_fleet_device_starts_compose() -> None:
     script_text = Path("scripts/setup_fleet_device.sh").read_text()
 
@@ -27,3 +34,14 @@ def test_ring_setup_scripts_exist() -> None:
     assert Path("scripts/setup/device_dev.sh").exists()
     assert Path("scripts/setup/device_pilot.sh").exists()
     assert Path("scripts/setup/device_prod.sh").exists()
+
+
+def test_ring_setup_scripts_lock_down_device_env() -> None:
+    for script in (
+        Path("scripts/setup/device_dev.sh"),
+        Path("scripts/setup/device_pilot.sh"),
+        Path("scripts/setup/device_prod.sh"),
+    ):
+        script_text = script.read_text()
+        assert "sudo chown root:root /opt/aquila/config/device.env" in script_text
+        assert "sudo chmod 600 /opt/aquila/config/device.env" in script_text

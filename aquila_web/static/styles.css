@@ -955,6 +955,20 @@ a:active {
   font-weight: 600;
 }
 
+.keyboard-key--shift {
+  flex: 0 0 auto;
+  width: 78px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.keyboard-key--shift.is-active {
+  background: #1f2937;
+  border-color: #1f2937;
+  color: #fff;
+  box-shadow: 0 2px 0 #111827;
+}
+
 .keyboard-key--clear {
   flex: 0 0 auto;
   width: 110px;

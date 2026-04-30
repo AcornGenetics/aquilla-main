@@ -25,6 +25,13 @@ def test_deployment1_script_has_docker_support() -> None:
     assert "docker-compose-plugin" in script_text
 
 
+def test_deployment2_locks_down_device_env() -> None:
+    script_text = Path("deployment2.sh").read_text()
+
+    assert "chown root:root /opt/aquila/config/device.env" in script_text
+    assert "chmod 600 /opt/aquila/config/device.env" in script_text
+
+
 def test_kiosk_control_installer_installs_python_entrypoint() -> None:
     script_text = Path("scripts/kiosk-control/install.sh").read_text()
     service_text = Path("scripts/kiosk-control/kiosk-control.service").read_text()
