@@ -13,6 +13,8 @@ data/
 .claude/
 .claude-flow/
 .swarm/
+.hive/
+.hive-mind/
 .mcp.json
 ruvector.db
 
