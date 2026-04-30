@@ -315,6 +315,8 @@ GHCR_USERNAME=${GHCR_USER}
 GHCR_TOKEN=${GHCR_TOKEN}
 AQ_SRC_BASEDIR=/opt/aquila
 EOF
+chown root:root /opt/aquila/config/device.env
+chmod 600 /opt/aquila/config/device.env
 
 # fleet .env (Compose variable substitution)
 cat > /opt/fleet/.env <<EOF

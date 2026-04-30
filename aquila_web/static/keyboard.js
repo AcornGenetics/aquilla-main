@@ -14,6 +14,7 @@ let keyboardPadding = 0;
 let lastPhysicalKey = null;
 let lastPhysicalKeyTime = 0;
 let suppressMouseEvents = false;
+let isUppercase = false;
 
 function safeSetSelectionRange(input, start, end) {
   if (!input || typeof input.setSelectionRange !== "function") return;
@@ -91,9 +92,17 @@ function buildKeyboard() {
   keyboard.appendChild(row0);
 
   // Letter rows
-  KEY_ROWS.slice(1).forEach((row) => {
+  KEY_ROWS.slice(1).forEach((row, rowIndex) => {
     const rowEl = document.createElement("div");
     rowEl.className = "keyboard-row";
+    if (rowIndex === 2) {
+      const shiftBtn = document.createElement("button");
+      shiftBtn.type = "button";
+      shiftBtn.className = "keyboard-key keyboard-key--shift";
+      shiftBtn.textContent = "Shift";
+      shiftBtn.dataset.value = "shift";
+      rowEl.appendChild(shiftBtn);
+    }
     row.forEach((key) => {
       const keyEl = document.createElement("button");
       keyEl.type = "button";
@@ -133,6 +142,22 @@ function buildKeyboard() {
   keyboard.appendChild(actionRow);
 
   document.body.appendChild(keyboard);
+  updateKeyboardCase();
+}
+
+function updateKeyboardCase() {
+  const keyboard = document.querySelector(KEYBOARD_SELECTOR);
+  if (!keyboard) return;
+  keyboard.querySelectorAll(".keyboard-key").forEach((keyEl) => {
+    const value = keyEl.dataset.value || "";
+    if (/^[a-z]$/.test(value)) {
+      keyEl.textContent = isUppercase ? value.toUpperCase() : value;
+    }
+    if (value === "shift") {
+      keyEl.classList.toggle("is-active", isUppercase);
+      keyEl.setAttribute("aria-pressed", isUppercase ? "true" : "false");
+    }
+  });
 }
 
 function updateInputValue(value, replace = false) {
@@ -153,11 +178,19 @@ function handleKeyPress(value) {
   if (!activeInput) return;
   activeInput.focus();
 
-  if (value !== "backspace" && value !== "clear" && value.length === 1) {
+  if (value === "shift") {
+    isUppercase = !isUppercase;
+    updateKeyboardCase();
+    return;
+  }
+
+  const outputValue = isUppercase && /^[a-z]$/.test(value) ? value.toUpperCase() : value;
+
+  if (value !== "backspace" && value !== "clear" && outputValue.length === 1) {
     const inputType = (activeInput.getAttribute("type") || "").toLowerCase();
     if (inputType === "number") {
       const current = activeInput.value || "";
-      const candidate = current + value;
+      const candidate = current + outputValue;
       const valid = candidate === "" || candidate === "-" || candidate === "."
                     || !Number.isNaN(Number(candidate));
       if (!valid) return;
@@ -203,7 +236,7 @@ function handleKeyPress(value) {
       hideKeyboard();
       return;
     default:
-      updateInputValue(value);
+      updateInputValue(outputValue);
   }
 }
 

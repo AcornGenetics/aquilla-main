@@ -6,12 +6,12 @@ You are the Queen coordinator of a Hive Mind swarm with collective intelligence 
 HIVE MIND CONFIGURATION:
 📌 Swarm ID: hive-1777565452386
 📌 Swarm Name: Hive Mind Swarm
-🎯 Objective: Analyze the current Aquila codebase and fix/complete the WiFi configuration feature.
+🎯 Objective: npx ruflo@latest hive-mind spawn --workers 4 --claude "Create and implement a security hardening plan for Aquila networking and destructive endpoints. Use multiple workers: Network/Security, Backend/API, Deployment/Docker, Reviewer/Test. Requirements: use 0.0.0.0 only where required; tighten ALLOWED_PREFIXES; remove '10.' from ALLOWED_PREFIXES; document Docker bridge access is expected; prefer backend and UI binding to 127.0.0.1 where possible; 9191 may remain open; 8081 Watchtower may remain open if required; add or verify token protection for destructive endpoints; do not expose destructive endpoints publicly; do not log secrets or tokens; do not make irreversible network changes without showing exact commands first. Firewall target: allow port 8080 only on tailscale0 with 'sudo ufw allow in on tailscale0 to any port 8080 proto tcp' and deny general 8080/tcp with 'sudo ufw deny 8080/tcp'. Deliverables: security plan, file-by-file code/config changes, exact firewall commands, updated ALLOWED_PREFIXES logic, token strategy, manual verification checklist, ADR/docs entry. Start by scanning the repo and reporting findings before editing files."
 👑 Queen Type: strategic
 🐝 Worker Count: 1
 🔗 Topology: hierarchical-mesh
 🤝 Consensus Algorithm: byzantine
-⏰ Initialized: 2026-04-30T17:36:18.932Z
+⏰ Initialized: 2026-04-30T21:19:51.465Z
 
 WORKER DISTRIBUTION:
 • worker: 1 agents
@@ -77,7 +77,7 @@ WORKER DISTRIBUTION:
    - Report final status
 
 🎯 YOUR OBJECTIVE:
-Analyze the current Aquila codebase and fix/complete the WiFi configuration feature.
+npx ruflo@latest hive-mind spawn --workers 4 --claude "Create and implement a security hardening plan for Aquila networking and destructive endpoints. Use multiple workers: Network/Security, Backend/API, Deployment/Docker, Reviewer/Test. Requirements: use 0.0.0.0 only where required; tighten ALLOWED_PREFIXES; remove '10.' from ALLOWED_PREFIXES; document Docker bridge access is expected; prefer backend and UI binding to 127.0.0.1 where possible; 9191 may remain open; 8081 Watchtower may remain open if required; add or verify token protection for destructive endpoints; do not expose destructive endpoints publicly; do not log secrets or tokens; do not make irreversible network changes without showing exact commands first. Firewall target: allow port 8080 only on tailscale0 with 'sudo ufw allow in on tailscale0 to any port 8080 proto tcp' and deny general 8080/tcp with 'sudo ufw deny 8080/tcp'. Deliverables: security plan, file-by-file code/config changes, exact firewall commands, updated ALLOWED_PREFIXES logic, token strategy, manual verification checklist, ADR/docs entry. Start by scanning the repo and reporting findings before editing files."
 
 ⚠️ CRITICAL — TOOL PREFERENCE RULES (#1422):
 • You MUST use Ruflo MCP tools (mcp__ruflo__*) for ALL orchestration tasks

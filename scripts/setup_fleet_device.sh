@@ -64,6 +64,8 @@ fi
 
 sudo sed -i "s/^WATCHTOWER_HTTP_API_TOKEN=.*/WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN}/" \
   /opt/aquila/config/device.env
+sudo chown root:root /opt/aquila/config/device.env
+sudo chmod 600 /opt/aquila/config/device.env
 
 echo "Starting fleet services..."
 sudo docker compose --env-file /opt/aquila/config/device.env -f /opt/fleet/docker-compose.yml up -d
