@@ -2,8 +2,6 @@
 docs/
 .swarm/
 ruvector.db
-tests/
-unit_tests/
 pcr_curve_tests/
 logs/
 data/
