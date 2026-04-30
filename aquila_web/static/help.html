@@ -336,7 +336,7 @@
           list.innerHTML = '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:15px;">No networks found</div>';
           return;
         }
-        d.networks.forEach(net => {
+        d.networks.forEach((net, index) => {
           const row = document.createElement("div");
           row.style.cssText = "display:flex;align-items:center;gap:12px;padding:13px 16px;background:#fff;border-bottom:1px solid #e5e7eb;cursor:pointer;";
           if (net.in_use) row.style.background = "#f0f4f8";
@@ -346,7 +346,7 @@
             ${net.secured ? '<span style="font-size:13px;color:#9ca3af;">🔒</span>' : ''}
             ${net.in_use ? '<span style="color:#22c55e;font-weight:700;">✓</span>' : ''}
           `;
-          const form = wifiBuildForm(net);
+          const form = wifiBuildForm(net, index);
           row.addEventListener("click", () => wifiToggleForm(row, form));
           list.appendChild(row);
           list.appendChild(form);
@@ -363,10 +363,11 @@
       }
     }
 
-    function wifiBuildForm(net) {
+    function wifiBuildForm(net, index) {
       const form = document.createElement("div");
       form.style.cssText = "display:none;padding:12px 16px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;";
-      const id = wifiEscId(net.ssid);
+      form.dataset.ssid = net.ssid;
+      const id = `wifi-inline-${index}`;
       form.innerHTML = `
         ${net.secured ? `
         <div style="display:flex;gap:8px;margin-bottom:10px;">
@@ -375,7 +376,7 @@
           <button type="button" onclick="wifiTogglePw('${id}',this)"
             style="padding:10px 12px;border:1px solid #d1d9e0;border-radius:8px;background:#fff;font-size:14px;cursor:pointer;color:#4b5563;">Show</button>
         </div>` : ""}
-        <button type="button" id="wcon-${id}" onclick="wifiDoConnect('${id}','${wifiEscHtml(net.ssid)}',${net.secured})"
+        <button type="button" id="wcon-${id}" onclick="wifiDoConnect('${id}',${net.secured})"
           style="width:100%;padding:11px;border-radius:8px;border:none;background:var(--icon-dark-green);color:var(--icon-acorn-green);font-size:15px;font-weight:600;cursor:pointer;">
           Connect to ${wifiEscHtml(net.ssid)}
         </button>
@@ -403,10 +404,12 @@
       btn.textContent = showing ? "Show" : "Hide";
     }
 
-    async function wifiDoConnect(id, ssid, secured) {
+    async function wifiDoConnect(id, secured) {
       const pwInput = document.getElementById("wpw-" + id);
       const errEl = document.getElementById("werr-" + id);
       const btn = document.getElementById("wcon-" + id);
+      const form = errEl.closest("div[data-ssid]");
+      const ssid = form ? form.dataset.ssid : id;
       const password = pwInput ? pwInput.value : "";
       errEl.style.display = "none";
       btn.disabled = true;

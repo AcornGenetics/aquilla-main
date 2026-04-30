@@ -143,12 +143,22 @@ phase_pass "Docker installed and running, pi in docker group"
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 4 "Autologin (X11/Openbox)"
 
+# raspi-config sets graphical target and enables LightDM autologin, but on
+# Bookworm it writes autologin-session=rpd-labwc (Wayland) into lightdm.conf.
+# We run it first for its side-effects, then overwrite lightdm.conf completely
+# so no Wayland session entries survive to conflict with X11/Openbox.
 raspi-config nonint do_boot_behaviour B4
 
-# Fix autologin-session in main lightdm.conf (Pi OS sets rpd-labwc by default)
-if [ -f /etc/lightdm/lightdm.conf ]; then
-    sed -i 's/autologin-session=.*/autologin-session=openbox/' /etc/lightdm/lightdm.conf
-fi
+# Disable the Wayland compositor services so they don't race with X11
+systemctl disable --now wayfire.service labwc.service 2>/dev/null || true
+
+# Overwrite main lightdm.conf wholesale to purge the rpd-labwc entry raspi-config just wrote
+cat > /etc/lightdm/lightdm.conf <<'EOF'
+[Seat:*]
+autologin-user=pi
+autologin-session=openbox
+user-session=openbox
+EOF
 
 mkdir -p /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/autologin.conf <<'EOF'
@@ -161,8 +171,9 @@ run_test "autologin.conf exists"           "test -f /etc/lightdm/lightdm.conf.d/
 run_test "autologin-user=pi"               "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-session=openbox"       "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "main lightdm.conf not rpd-labwc" "! grep -q 'autologin-session=rpd-labwc' /etc/lightdm/lightdm.conf"
+run_test "lightdm enabled"                 "systemctl is-enabled lightdm | grep -q enabled"
 
-phase_pass "LightDM configured for X11/Openbox autologin"
+phase_pass "LightDM configured for X11/Openbox autologin (Wayland compositor disabled)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 5 — Chromium Kiosk (Openbox autostart)

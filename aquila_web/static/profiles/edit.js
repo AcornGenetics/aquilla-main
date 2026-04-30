@@ -1,3 +1,11 @@
+const esc = (str) =>
+  String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 const params = new URLSearchParams(window.location.search);
 const profileId = params.get("id") || params.get("profile");
 const profileName = params.get("name");
@@ -146,7 +154,7 @@ const renderSteps = () => {
     durationField.dataset.visibleFor = "setpoint,enable,disable";
     durationField.innerHTML = `
       <label for="duration-${step.id}">Step ${index + 1} Duration (HH:MM:SS)</label>
-      <input id="duration-${step.id}" type="text" value="${step.duration}" />
+      <input id="duration-${step.id}" type="text" value="${esc(step.duration)}" />
     `;
 
     const rampRateField = document.createElement("div");
@@ -162,7 +170,7 @@ const renderSteps = () => {
     descriptionField.dataset.visibleFor = "setpoint,ramp_rate,enable,disable,pcr_fanon,pcr_fanoff";
     descriptionField.innerHTML = `
       <label for="desc-${step.id}">Description</label>
-      <input id="desc-${step.id}" type="text" value="${step.description}" />
+      <input id="desc-${step.id}" type="text" value="${esc(step.description)}" />
     `;
 
     const actions = document.createElement("div");
@@ -272,8 +280,8 @@ const renderSummary = () => {
         .map(
           (item) => `
         <div>
-          <span class="profile-summary-label">${item.label}</span>
-          <span class="profile-summary-value">${item.value}</span>
+          <span class="profile-summary-label">${esc(item.label)}</span>
+          <span class="profile-summary-value">${esc(String(item.value))}</span>
         </div>
       `
         )

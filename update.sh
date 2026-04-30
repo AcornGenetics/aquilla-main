@@ -22,8 +22,15 @@ if [[ -d "${BASE_DIR}/.git" ]]; then
 fi
 
 if [[ -f "${BASE_DIR}/config_files/wifi.json" ]]; then
-  echo "Applying Wi-Fi config from config_files/wifi.json"
-  sudo python3 "${BASE_DIR}/scripts/apply_wifi.py" || true
+  if grep -Eq '"ssid"[[:space:]]*:[[:space:]]*"[^"]+"' "${BASE_DIR}/config_files/wifi.json" \
+    && grep -Eq '"(psk|password)"[[:space:]]*:[[:space:]]*"[^"]+"' "${BASE_DIR}/config_files/wifi.json"; then
+    echo "Applying Wi-Fi config from config_files/wifi.json"
+    if ! sudo python3 "${BASE_DIR}/scripts/apply_wifi.py"; then
+      echo "WARNING: Wi-Fi config apply failed; continuing update."
+    fi
+  else
+    echo "Skipping Wi-Fi config: config_files/wifi.json has no SSID/password."
+  fi
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
