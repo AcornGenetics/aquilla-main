@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 import re
-from aq_curve.curve import Curve
+from aq_curve.analysis_service import AnalysisService
 
 logger = logging.getLogger( __name__ )
 logger.setLevel("WARNING")
@@ -50,6 +50,7 @@ BUNDLED_PROFILE_DIR = DEFAULT_PROFILE_DIR / "bundled"
 LOCAL_BUNDLED_PROFILE_DIR = LOCAL_PROFILE_DIR / "bundled"
 
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+_analysis = AnalysisService(RESULTS_DIR)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 app.mount("/plots", StaticFiles(directory=str(PLOTS_DIR)), name="plots")
 
@@ -385,11 +386,9 @@ async def _simulate_run(profile_name: str) -> None:
         state_change_event.set()
         state_change_event.clear()
         return
-    curve_runner = Curve(src_basedir=str(RESULTS_DIR))
-    curve_runner.results_to_json(str(optics_path), results_file.name)
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
     labels = _load_profile_labels(profile_name)
-    generate_optics_plot(str(optics_path), str(plot_path), labels=labels)
+    _analysis.process_run(str(optics_path), results_file.name, str(plot_path), labels=labels)
     detected_summary = _summarize_results_from_file(results_file)
 
     results_path = str(results_file.resolve())
@@ -1215,8 +1214,6 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.warning("websocket failed") 
 
     logger.info ( "Websocket ended" )
-from aq_curve.main import results_to_json
-from aq_lib.plot_utils import generate_optics_plot
 
 # ---------------------------------------------------------------------------
 # WiFi — proxy to kiosk-control host service

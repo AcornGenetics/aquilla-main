@@ -21,7 +21,7 @@ from aq_lib.config_module import Config
 from aq_lib.utils import load_json
 from aq_lib.utils import LogFileName
 from aq_lib.utils import LOGGING_CONFIG
-from aq_lib.plot_utils import generate_optics_plot
+from aq_curve.plot_utils import generate_optics_plot
 from aq_lib.regulate import lid_heater_worker
 from config import get_src_basedir
 import aq_lib.state_requests as sr
