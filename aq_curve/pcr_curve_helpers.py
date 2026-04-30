@@ -53,10 +53,12 @@ def get_threshold(ydata, baseline_slice):
     if threshold_value is not None:
         threshold = float(threshold_value)
     else:
-        delta_value = os.getenv("PCR_THRESHOLD_DELTA")
-        if delta_value is None:
-            delta_value = config.get_float("PCR_THRESHOLD_DELTA")
-        threshold = baseline_mean + float(delta_value)
+        fraction_value = os.getenv("PCR_THRESHOLD_FRACTION")
+        if fraction_value is None:
+            fraction_value = config.get_float("PCR_THRESHOLD_FRACTION")
+        fraction = float(fraction_value)
+        signal_range = max(float(np.max(ydata)) - baseline_mean, 0.0) if len(ydata) > 0 else 0.0
+        threshold = baseline_mean + fraction * signal_range
     return threshold, baseline_mean
 
 
@@ -109,6 +111,17 @@ def compute_r2(xdata, ydata):
     return 1 - ss_res / ss_tot
 
 
+def interpolate_ct(xdata, ydata, threshold, start_idx):
+    """Linearly interpolate the exact threshold crossing before start_idx."""
+    if start_idx == 0:
+        return float(xdata[0])
+    x0, x1 = float(xdata[start_idx - 1]), float(xdata[start_idx])
+    y0, y1 = float(ydata[start_idx - 1]), float(ydata[start_idx])
+    if y1 <= y0:
+        return x0
+    return x0 + (threshold - y0) / (y1 - y0) * (x1 - x0)
+
+
 def compute_cq(xdata, ydata, threshold, min_consecutive, skip_cycles=7):
     if skip_cycles:
         mask = xdata > skip_cycles
@@ -119,4 +132,4 @@ def compute_cq(xdata, ydata, threshold, min_consecutive, skip_cycles=7):
     start = sustained_rise_index(ydata, threshold, min_consecutive)
     if start is None:
         return None
-    return float(xdata[start])
+    return interpolate_ct(xdata, ydata, threshold, start)
