@@ -8,3 +8,5 @@ pydantic
 requests
 numpy
 pandas
+playwright
+pytest-playwright
