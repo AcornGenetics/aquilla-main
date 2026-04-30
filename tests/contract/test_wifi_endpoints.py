@@ -8,6 +8,7 @@ Run with:
     pytest tests/contract/test_wifi_endpoints.py -m contract -v
 """
 import pytest
+from pathlib import Path
 from unittest.mock import patch, AsyncMock
 
 
@@ -21,6 +22,19 @@ def test_wifi_page_returns_200(client):
     response = client.get("/wifi")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+
+
+@pytest.mark.contract
+def test_wifi_page_preserves_original_ssid_in_dom_dataset():
+    """Connect/forget must not reconstruct SSIDs from labels or sanitized IDs."""
+    html = "\n".join([
+        Path("aquila_web/static/wifi.html").read_text(),
+        Path("aquila_web/static/help.html").read_text(),
+    ])
+
+    assert "form.dataset.ssid" in html
+    assert '.textContent.replace("Connect to ", "")' not in html
+    assert "wifiDoConnect('${id}','${wifiEscHtml(net.ssid)}'" not in html
 
 
 # ---------------------------------------------------------------------------

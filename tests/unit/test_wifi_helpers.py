@@ -267,6 +267,7 @@ class TestApplyWifiConfig:
 
         with patch.object(apply_wifi, "CONFIG_PATH", wifi_json), \
              patch.object(apply_wifi, "WPA_SUPPLICANT_PATH", wpa_conf), \
+             patch("apply_wifi.shutil.which", return_value=None), \
              patch("apply_wifi.subprocess.run") as mock_run:
             apply_wifi.apply_wifi_config()
 
@@ -306,6 +307,7 @@ class TestApplyWifiConfig:
 
         with patch.object(apply_wifi, "CONFIG_PATH", wifi_json), \
              patch.object(apply_wifi, "WPA_SUPPLICANT_PATH", wpa_conf), \
+             patch("apply_wifi.shutil.which", return_value=None), \
              patch("apply_wifi.subprocess.run"):
             apply_wifi.apply_wifi_config()
 
@@ -313,3 +315,25 @@ class TestApplyWifiConfig:
         assert content.count('ssid="TestNet"') == 1
         assert 'psk="newpass"' in content
         assert 'psk="oldpass"' not in content
+
+    def test_uses_nmcli_when_networkmanager_available(self, tmp_path):
+        wifi_json = tmp_path / "wifi.json"
+        wifi_json.write_text(json.dumps({"ssid": "TestNet", "psk": "testpass"}))
+
+        with patch.object(apply_wifi, "CONFIG_PATH", wifi_json), \
+             patch("apply_wifi.shutil.which", return_value="/usr/bin/nmcli"), \
+             patch("apply_wifi.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            apply_wifi.apply_wifi_config()
+
+        mock_run.assert_any_call(
+            ["nmcli", "general", "status"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        mock_run.assert_any_call(["nmcli", "connection", "delete", "TestNet"], check=False)
+        mock_run.assert_any_call(
+            ["nmcli", "device", "wifi", "connect", "TestNet", "password", "testpass"],
+            check=True,
+        )

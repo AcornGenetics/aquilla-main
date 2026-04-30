@@ -3,6 +3,8 @@ logs/**/*.txt
 
 # Ruflo/swarm files
 .swarm/
+.hive/
+.hive-mind/
 ruvector.db
 
 # Swap files / editor backups

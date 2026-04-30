@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -29,6 +30,26 @@ def _read_wpa_lines():
 def _write_wpa_lines(lines):
     content = "\n".join(lines) + "\n"
     WPA_SUPPLICANT_PATH.write_text(content, encoding="utf-8")
+
+
+def _networkmanager_available():
+    if not shutil.which("nmcli"):
+        return False
+    result = subprocess.run(
+        ["nmcli", "general", "status"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _apply_nmcli(ssid, psk):
+    subprocess.run(["nmcli", "connection", "delete", ssid], check=False)
+    subprocess.run(
+        ["nmcli", "device", "wifi", "connect", ssid, "password", psk],
+        check=True,
+    )
 
 
 def _strip_network_block(lines, ssid):
@@ -78,6 +99,10 @@ def _ensure_header(lines, country):
 
 def apply_wifi_config():
     ssid, psk, country = _load_config()
+    if _networkmanager_available():
+        _apply_nmcli(ssid, psk)
+        return
+
     lines = _read_wpa_lines()
     lines = _ensure_header(lines, country)
     lines = _strip_network_block(lines, ssid)

@@ -249,7 +249,7 @@
           list.innerHTML = '<div class="wifi-empty">No networks found</div>';
           return;
         }
-        d.networks.forEach(net => {
+        d.networks.forEach((net, index) => {
           const row = document.createElement("div");
           row.className = "wifi-network-row";
           if (net.in_use) row.classList.add("is-selected");
@@ -259,7 +259,7 @@
             ${net.secured ? '<span class="wifi-network-lock">🔒</span>' : ''}
             ${net.in_use ? '<span class="wifi-network-check">✓</span>' : ''}
           `;
-          const form = buildConnectForm(net);
+          const form = buildConnectForm(net, index);
           row.addEventListener("click", () => toggleForm(row, form, net));
           list.appendChild(row);
           list.appendChild(form);
@@ -273,10 +273,11 @@
       }
     }
 
-    function buildConnectForm(net) {
+    function buildConnectForm(net, index) {
       const form = document.createElement("div");
       form.className = "wifi-connect-form";
-      const safeId = escId(net.ssid);
+      form.dataset.ssid = net.ssid;
+      const safeId = `wifi-net-${index}`;
       const safeLabel = escHtml(net.ssid);
       form.innerHTML = `
         ${net.secured ? `
@@ -319,7 +320,8 @@
       const pwInput = document.getElementById("pw-" + ssidId);
       const errEl = document.getElementById("err-" + ssidId);
       const btn = errEl.previousElementSibling;
-      const ssid = pwInput ? pwInput.closest(".wifi-connect-form").querySelector(".wifi-connect-btn").textContent.replace("Connect to ", "").trim() : ssidId;
+      const form = errEl.closest(".wifi-connect-form");
+      const ssid = form ? form.dataset.ssid : ssidId;
       const password = pwInput ? pwInput.value : "";
 
       errEl.classList.remove("is-visible");
@@ -354,9 +356,8 @@
     async function doForget(ssidId) {
       const btn = document.getElementById("forget-btn-" + ssidId);
       const errEl = document.getElementById("err-" + ssidId);
-      // Recover original SSID from connect button label
-      const connBtn = document.getElementById("conn-btn-" + ssidId);
-      const ssid = connBtn ? connBtn.textContent.replace("Connect to ", "").trim() : ssidId;
+      const form = errEl.closest(".wifi-connect-form");
+      const ssid = form ? form.dataset.ssid : ssidId;
 
       if (!window.confirm(`Forget network "${ssid}"?`)) return;
 

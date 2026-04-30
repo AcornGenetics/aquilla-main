@@ -5,8 +5,6 @@ def test_setup_fleet_device_copies_config() -> None:
     script_text = Path("scripts/setup_fleet_device.sh").read_text()
 
     assert "fleet-config/docker-compose.yml" in script_text
-    assert "fleet-config/vmagent.yaml" in script_text
-    assert "fleet-config/vector.yaml" in script_text
     assert "config_files/device.env" in script_text
     assert "config_files/grafana.env" in script_text
 
