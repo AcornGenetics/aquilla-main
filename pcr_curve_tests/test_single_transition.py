@@ -43,7 +43,7 @@ def test_minor_dip_within_tolerance_passes(monkeypatch):
       dip_threshold  = 0.0352 * 0.95 ≈ 0.0334
     0.034 ∈ [0.0334, 0.0352) → tolerance zone → group stays open → 1 transition.
     """
-    monkeypatch.setenv("PCR_THRESHOLD_DELTA", "0.05")
+    monkeypatch.setenv("PCR_THRESHOLD_FRACTION", "0.1")
     monkeypatch.setenv("PCR_SUSTAINED_CYCLES", "3")
     monkeypatch.setenv("PCR_PEAK_FRACTION", "0.3")
     monkeypatch.setenv("PCR_TRANSITION_DIP_TOLERANCE", "0.05")
@@ -69,7 +69,7 @@ def test_large_dip_outside_tolerance_counts_as_new_transition(monkeypatch):
       dip_threshold  = 0.0364 * 0.95 ≈ 0.0345
     0.030 < 0.0345 → below tolerance → group breaks → 2 transitions → check fails.
     """
-    monkeypatch.setenv("PCR_THRESHOLD_DELTA", "0.05")
+    monkeypatch.setenv("PCR_THRESHOLD_FRACTION", "0.1")
     monkeypatch.setenv("PCR_SUSTAINED_CYCLES", "3")
     monkeypatch.setenv("PCR_PEAK_FRACTION", "0.3")
     monkeypatch.setenv("PCR_TRANSITION_DIP_TOLERANCE", "0.05")
