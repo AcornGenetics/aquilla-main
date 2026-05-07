@@ -167,11 +167,35 @@ autologin-user=pi
 autologin-session=openbox
 EOF
 
+# Fix double-load of modesetting driver (dixRegisterPrivateKey crash on Pi):
+# fbdev acts as a fallback that keeps X alive until card1 activates via udev hotplug,
+# which triggers a second modesetting load. Removing fbdev prevents the fallback.
+# ServerFlags must live in /etc/X11/xorg.conf (not xorg.conf.d) to take effect.
+sudo apt remove --purge -y xserver-xorg-video-fbdev 2>/dev/null || true
+
+mkdir -p /etc/X11/xorg.conf.d
+cat > /etc/X11/xorg.conf.d/99-v3d.conf <<'EOF'
+Section "OutputClass"
+  Identifier "vc4"
+  MatchDriver "vc4"
+  Driver "modesetting"
+  Option "PrimaryGPU" "true"
+EndSection
+EOF
+
+tee /etc/X11/xorg.conf > /dev/null <<'EOF'
+Section "ServerFlags"
+  Option "AutoAddGPU" "false"
+EndSection
+EOF
+
 run_test "autologin.conf exists"           "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-user=pi"               "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-session=openbox"       "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "main lightdm.conf not rpd-labwc" "! grep -q 'autologin-session=rpd-labwc' /etc/lightdm/lightdm.conf"
 run_test "lightdm enabled"                 "systemctl is-enabled lightdm | grep -q enabled"
+run_test "xorg.conf has AutoAddGPU off"    "grep -q 'AutoAddGPU' /etc/X11/xorg.conf"
+run_test "fbdev not installed"            "! dpkg -l xserver-xorg-video-fbdev 2>/dev/null | grep -q '^ii'"
 
 phase_pass "LightDM configured for X11/Openbox autologin (Wayland compositor disabled)"
 
@@ -589,41 +613,41 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-# echo "  Running Meerstetter first-time tuning..."
-# if ! docker exec \
-#     -e CONFIG_DIR=/opt/aquila/config \
-#     aquila-app \
-#     python3 - <<'PY'
-# from aq_lib.config_module import Config
-# from aq_lib.meerstetter import MeerStetter
-#
-# config = Config()
-# device_type = int(config.pcr["device_type"])
-# pid = int(config.pcr["pid"], 16)
-# vid = int(config.pcr["vid"], 16)
-# device = MeerStetter.find_meer(vid, pid, device_type)
-# if not device:
-#     raise SystemExit("Meerstetter device not found")
-#
-# meer = MeerStetter(device, baudrate=57600, timeout=1)
-# meer.set_parid_long(108, 1, 0)
-# meer.read(100)
-# meer.set_parid_long(2000, 1, 1)
-# meer.set_parid_float(3002, 3.0)
-# meer.set_parid_float(3010, 80.0)
-# meer.set_parid_float(3011, 5.0)
-# meer.set_parid_float(3012, 4.0)
-# meer.set_parid_float(3013, 0.0)
-# meer.set_parid_float(3030, 9.0)
-# meer.set_parid_float(3033, 73.0)
-# meer.set_parid_float(3040, 1.0)
-# meer.set_parid_long(108, 1, 1)
-# meer.close()
-# print("Meerstetter tuning applied")
-# PY
-# then
-#     phase_fail "Meerstetter tuning failed"
-# fi
+echo "  Running Meerstetter first-time tuning..."
+if ! docker exec \
+    -e CONFIG_DIR=/opt/aquila/config \
+    aquila-app \
+    python3 - <<'PY'
+from aq_lib.config_module import Config
+from aq_lib.meerstetter import MeerStetter
+
+config = Config()
+device_type = int(config.pcr["device_type"])
+pid = int(config.pcr["pid"], 16)
+vid = int(config.pcr["vid"], 16)
+device = MeerStetter.find_meer(vid, pid, device_type)
+if not device:
+    raise SystemExit("Meerstetter device not found")
+
+meer = MeerStetter(device, baudrate=57600, timeout=1)
+meer.set_parid_long(108, 1, 0)
+meer.read(100)
+meer.set_parid_long(2000, 1, 1)
+meer.set_parid_float(3002, 3.0)
+meer.set_parid_float(3010, 80.0)
+meer.set_parid_float(3011, 5.0)
+meer.set_parid_float(3012, 4.0)
+meer.set_parid_float(3013, 0.0)
+meer.set_parid_float(3030, 9.0)
+meer.set_parid_float(3033, 73.0)
+meer.set_parid_float(3040, 1.0)
+meer.set_parid_long(108, 1, 1)
+meer.close()
+print("Meerstetter tuning applied")
+PY
+then
+    phase_fail "Meerstetter tuning failed"
+fi
 
 WATCHTOWER_TOKEN=$(grep WATCHTOWER_HTTP_API_TOKEN /opt/aquila/config/device.env | cut -d= -f2)
 
@@ -760,7 +784,38 @@ run_test "tty1 not in cmdline" "! grep -q 'console=tty1' ${CMDLINE_FILE}"
 phase_pass "quiet boot configured (tty3)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phase 15 — Complete
+# Phase 15 — Security Hardening
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start 15 "Security Hardening"
+
+# Lock config directory — only root can read or list it
+chmod 700 /opt/aquila/config
+chmod 600 /opt/aquila/config/device.env
+find /opt/aquila/config -name "*.json" -exec chmod 600 {} \;
+
+# Restrict pi's sudo to safe operational commands only.
+# Access to root (and config) is via Tailscale SSH authenticated
+# through the owner's Tailscale account — not local sudo.
+deluser pi sudo 2>/dev/null || true
+cat > /etc/sudoers.d/pi-restricted <<'EOF'
+pi ALL=(ALL) NOPASSWD: /usr/bin/docker compose *
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart aquila-stack
+pi ALL=(ALL) NOPASSWD: /bin/systemctl status aquila-stack
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart kiosk-control
+pi ALL=(ALL) NOPASSWD: /bin/systemctl status kiosk-control
+EOF
+chmod 440 /etc/sudoers.d/pi-restricted
+
+run_test "config dir root-only"        "stat -c '%a' /opt/aquila/config | grep -q 700"
+run_test "device.env root-only"        "stat -c '%a' /opt/aquila/config/device.env | grep -q 600"
+run_test "pi not in sudo group"        "! groups pi | grep -qw sudo"
+run_test "pi-restricted sudoers exists" "test -f /etc/sudoers.d/pi-restricted"
+run_test "sudoers file valid"          "visudo -cf /etc/sudoers.d/pi-restricted"
+
+phase_pass "config locked to root, pi sudo restricted to operational commands"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 16 — Complete
 # ═══════════════════════════════════════════════════════════════════════════════
 echo ""
 echo "=================================================="
