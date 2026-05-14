@@ -114,6 +114,16 @@ raspi-config nonint do_spi 0
 run_test "I2C enabled in boot config" "grep -q 'dtparam=i2c_arm=on' /boot/firmware/config.txt"
 run_test "SPI enabled in boot config" "grep -q 'dtparam=spi=on' /boot/firmware/config.txt"
 run_test "/dev/i2c-1 exists"          "test -e /dev/i2c-1"
+
+if [[ ! -e /dev/spidev0.0 ]]; then
+    echo ""
+    echo "  /dev/spidev0.0 not yet present — reboot required to load SPI kernel module."
+    echo "  Rebooting in 5 seconds... Re-run deployment2.sh after reboot to continue from Phase 3."
+    touch /tmp/aquila_spi_reboot_pending
+    sleep 5
+    reboot
+fi
+
 run_test "/dev/spidev0.0 exists"      "test -e /dev/spidev0.0"
 
 phase_pass "I2C and SPI enabled, /dev/i2c-1 and /dev/spidev0.0 present"
@@ -707,7 +717,18 @@ chown -R pi:pi "${PI_HOME}/.config/lxpanel-pi"
 run_test "kiosk_control.py installed"       "test -f /usr/local/bin/kiosk_control.py"
 run_test "kiosk-control service enabled"    "systemctl is-enabled kiosk-control | grep -q enabled"
 run_test "kiosk-control service active"     "systemctl is-active kiosk-control | grep -q active"
-run_test "kiosk-control health"             "curl -sf http://127.0.0.1:9191/health | grep -q true"
+
+echo "  Waiting for kiosk-control to become healthy..."
+KIOSK_HEALTHY=false
+for i in $(seq 1 10); do
+    if curl -sf http://127.0.0.1:9191/health 2>/dev/null | grep -q true; then
+        KIOSK_HEALTHY=true
+        break
+    fi
+    sleep 1
+done
+[[ "${KIOSK_HEALTHY}" == "true" ]] || phase_fail "kiosk-control health (not responding on :9191 after 10s)"
+echo "  ✓ kiosk-control health"
 run_test "lxpanel-pi config exists"         "test -f ${PI_HOME}/.config/lxpanel-pi/panels/panel"
 
 phase_pass "kiosk-control installed and healthy"
