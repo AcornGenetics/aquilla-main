@@ -712,9 +712,12 @@ async def button_open():
     global drawer_open, drawer_close, drawer_task
     if DEV_SIMULATE:
         if drawer_task and not drawer_task.done():
-            drawer_task.cancel()
+            return {"ok": True}
         drawer_task = asyncio.create_task(_simulate_drawer("open"))
     else:
+        if drawer_state_open or drawer_open:
+            logger.info("Drawer open ignored — already open or movement pending")
+            return {"ok": True}
         drawer_open = True
         drawer_close = False
     logger.info("Drawer open pressed")
@@ -725,9 +728,12 @@ async def button_close():
     global drawer_open, drawer_close, drawer_task
     if DEV_SIMULATE:
         if drawer_task and not drawer_task.done():
-            drawer_task.cancel()
+            return {"ok": True}
         drawer_task = asyncio.create_task(_simulate_drawer("close"))
     else:
+        if drawer_state_closed or drawer_close:
+            logger.info("Drawer close ignored — already closed or movement pending")
+            return {"ok": True}
         drawer_close = True
         drawer_open = False
     logger.info("Drawer close pressed")
