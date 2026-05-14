@@ -217,7 +217,7 @@ xset s noblank
 xset -dpms
 
 # Auto-detect connected HDMI output (handles HDMI-2, HDMI-A-2, etc.)
-HDMI_OUT=$(xrandr --query | grep -E "^HDMI.*connected" | head -1 | awk '{print $1}')
+HDMI_OUT=$(xrandr --query | grep -E "^HDMI.* connected" | head -1 | awk '{print $1}')
 if [ -n "$HDMI_OUT" ]; then
     xrandr --output "$HDMI_OUT" --mode 1024x768 --rate 60 --rotate right
 fi
