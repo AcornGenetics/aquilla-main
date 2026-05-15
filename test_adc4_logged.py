@@ -86,7 +86,7 @@ t0 = time.time()
 scan_count = 0
 #for position in range(0,4) if dye == "rox" else range(2,6):
 #for x in range ( axis.positions[1]-500, axis.positions[1]+100, 10 ):
-for x in range ( 0, axis.positions[5]+100, 20 ):
+for x in range ( 0, min( axis.positions[5]+100, AXIS_MAX_STEPS ), 20 ):
     scan_count += 1
     axis.move_abs_wo_home_flag( x )
     time.sleep ( 0.1 )
