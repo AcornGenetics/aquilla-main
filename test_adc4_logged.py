@@ -17,6 +17,7 @@ from aq_lib.utils import LOGGING_CONFIG
 logging.config.dictConfig( LOGGING_CONFIG )
 logger = logging.getLogger( "aquila.optics" )
 
+AXIS_MAX_STEPS = 2160  # Physical axis limit for this unit
 
 def log(msg):
     """Print to stderr for motor diagnostics"""
