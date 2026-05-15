@@ -140,4 +140,6 @@ log(f"Total positions: {scan_count}")
 log(f"Final axis position: {axis.position}")
 log(f"Finished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
+axis.home()
+time.sleep(0.1)
 #drawer.open()
