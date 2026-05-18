@@ -218,6 +218,11 @@ phase_start 5 "Chromium Kiosk (Openbox autostart)"
 rm -f "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
 rm -f "${PI_HOME}/.config/labwc/autostart"
 
+# Install boot splash page
+curl -fsSL \
+    "${RAW_REPO_URL}/aquila_web/static/splash.html" \
+    -o /opt/aquila/splash.html
+
 mkdir -p "${PI_HOME}/.config/openbox"
 
 cat > "${PI_HOME}/.config/openbox/autostart" <<'EOF'
@@ -246,7 +251,7 @@ sleep 3
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
 if [ ! -f /tmp/kiosk_disabled ]; then
   chromium \
-    --kiosk http://localhost:8090 \
+    --kiosk file:///opt/aquila/splash.html \
     --incognito \
     --noerrdialogs \
     --disable-infobars \
@@ -260,6 +265,8 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --enable-gpu-rasterization \
     --use-angle=gles \
     --ozone-platform=x11 \
+    --disable-web-security \
+    --allow-file-access-from-files \
     --start-maximized \
     &
 fi
@@ -269,7 +276,8 @@ chown -R pi:pi "${PI_HOME}/.config/openbox"
 
 AUTOSTART="${PI_HOME}/.config/openbox/autostart"
 run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
-run_test "correct URL (8090)"          "grep -q 'localhost:8090' ${AUTOSTART}"
+run_test "splash page installed"       "test -f /opt/aquila/splash.html"
+run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
 run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
 run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
 run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
@@ -308,6 +316,7 @@ mkdir -p /opt/aquila/logs/plots
 mkdir -p /opt/aquila/logs/pcr
 mkdir -p /opt/aquila/logs/optics
 mkdir -p /opt/aquila/logs/lid_heater
+mkdir -p /opt/aquila/tests
 mkdir -p /opt/fleet
 
 run_test "/opt/aquila/config"           "test -d /opt/aquila/config"
@@ -318,6 +327,7 @@ run_test "/opt/aquila/logs/plots"       "test -d /opt/aquila/logs/plots"
 run_test "/opt/aquila/logs/pcr"         "test -d /opt/aquila/logs/pcr"
 run_test "/opt/aquila/logs/optics"      "test -d /opt/aquila/logs/optics"
 run_test "/opt/aquila/logs/lid_heater"  "test -d /opt/aquila/logs/lid_heater"
+run_test "/opt/aquila/tests"            "test -d /opt/aquila/tests"
 run_test "/opt/fleet"                   "test -d /opt/fleet"
 
 phase_pass "all persistent directories created"
@@ -563,6 +573,8 @@ curl -fsSL \\
     -o /opt/fleet/docker-compose.yml
 docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml pull
 docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml up -d
+# Ensure required host directories exist after every update
+mkdir -p /opt/aquila/tests
 EOF
 chmod +x /opt/fleet/update.sh
 
@@ -805,35 +817,20 @@ run_test "tty1 not in cmdline" "! grep -q 'console=tty1' ${CMDLINE_FILE}"
 phase_pass "quiet boot configured (tty3)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phase 15 — Security Hardening
+# Phase 15 — Download Security Script
 # ═══════════════════════════════════════════════════════════════════════════════
-phase_start 15 "Security Hardening"
+phase_start 15 "Download Security Script"
 
-# Lock config directory — only root can read or list it
-chmod 700 /opt/aquila/config
-chmod 600 /opt/aquila/config/device.env
-find /opt/aquila/config -name "*.json" -exec chmod 600 {} \;
+curl -fsSL \
+    -H "Authorization: token ${GHCR_TOKEN}" \
+    "${RAW_REPO_URL}/scripts/setup/security.sh" \
+    -o /opt/aquila/security.sh
+chmod +x /opt/aquila/security.sh
 
-# Restrict pi's sudo to safe operational commands only.
-# Access to root (and config) is via Tailscale SSH authenticated
-# through the owner's Tailscale account — not local sudo.
-deluser pi sudo 2>/dev/null || true
-cat > /etc/sudoers.d/pi-restricted <<'EOF'
-pi ALL=(ALL) NOPASSWD: /usr/bin/docker compose *
-pi ALL=(ALL) NOPASSWD: /bin/systemctl restart aquila-stack
-pi ALL=(ALL) NOPASSWD: /bin/systemctl status aquila-stack
-pi ALL=(ALL) NOPASSWD: /bin/systemctl restart kiosk-control
-pi ALL=(ALL) NOPASSWD: /bin/systemctl status kiosk-control
-EOF
-chmod 440 /etc/sudoers.d/pi-restricted
+run_test "security.sh downloaded"   "test -f /opt/aquila/security.sh"
+run_test "security.sh executable"   "test -x /opt/aquila/security.sh"
 
-run_test "config dir root-only"        "stat -c '%a' /opt/aquila/config | grep -q 700"
-run_test "device.env root-only"        "stat -c '%a' /opt/aquila/config/device.env | grep -q 600"
-run_test "pi not in sudo group"        "! groups pi | grep -qw sudo"
-run_test "pi-restricted sudoers exists" "test -f /etc/sudoers.d/pi-restricted"
-run_test "sudoers file valid"          "visudo -cf /etc/sudoers.d/pi-restricted"
-
-phase_pass "config locked to root, pi sudo restricted to operational commands"
+phase_pass "security.sh saved to /opt/aquila/security.sh — run it manually when testing is complete"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 16 — Complete
@@ -850,6 +847,10 @@ echo " If the login screen appears instead of the kiosk,"
 echo " run: sudo raspi-config"
 echo " Then: System Options → Boot / Auto Login → Desktop Autologin"
 echo " Then reboot again."
+echo ""
+echo " SECURITY: When testing is complete, lock down the"
+echo " device by running:"
+echo "   sudo bash /opt/aquila/security.sh"
 echo "=================================================="
 echo ""
 echo " Rebooting in 5 seconds... (Ctrl+C to cancel)"
