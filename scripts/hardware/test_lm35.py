@@ -1,6 +1,6 @@
 
 
-from adc_class import OpticalRead
+from aq_lib.adc_class import OpticalRead
 import time
 
 adc = OpticalRead()

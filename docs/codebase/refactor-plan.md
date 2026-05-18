@@ -68,7 +68,7 @@ aquilla-main/
 │   │   ├── led/            # ← from root
 │   │   ├── beam_breaks/    # ← from root
 │   │   └── motor_test/     # ← from root
-│   ├── hardware tests/     # ← sequenced hardware verification scripts
+│   ├── hardware_tests/     # ← sequenced hardware verification scripts
 │   │   ├── led_current_verification.py   # run back to back with FAM / ROX
 │   │   ├── raster_detailed_log_centered.py  # run back to back with TE blanks of FAM / ROX
 │   │   ├── motor_drawer.py
@@ -92,9 +92,15 @@ aquilla-main/
 │   ├── integration/        # simulated full runs (DEV_SIMULATE=1)
 │   ├── state/              # state machine safety tests
 │   ├── unit/               # ← merge of unit_tests/ + root unit tests
-│   │   ├── test_force_stop.py
-│   │   ├── test_meer_log_stop.py
-│   │   ├── test_results_to_json_path.py
+│   │   ├── analysis/       # already exists
+│   │   ├── config/         # already exists
+│   │   ├── hardware/       # already exists
+│   │   ├── test_consecutive_runs.py
+│   │   ├── test_wifi_helpers.py
+│   │   ├── test_force_stop.py          # ← from unit_tests/
+│   │   ├── test_meer_log_stop.py       # ← from unit_tests/
+│   │   ├── test_pcr_threshold_and_ct.py # ← from unit_tests/
+│   │   ├── test_results_to_json_path.py # ← from unit_tests/
 │   │   ├── test_curve.py               # ← from root
 │   │   ├── test_result_consistency.py  # ← from root
 │   │   └── test_state_request.py       # ← from root
@@ -128,7 +134,7 @@ Move files only. Zero risk.
 | Move to `docs/` | `deployment.txt`, `deployment1.txt`, `deployment2_plan.md`, `deployment2_tests.md`, `device-log-plan.md`, `kiosk-touch-fix.md`, `wifi-config.md`, `update.txt` |
 | Move to `scripts/deploy/` | `deployment1.sh`, `deployment2.sh`, `deployment2_verify.sh`, `exit_kiosk.sh`, `update_kiosk_x11.sh`, `update.sh` |
 | Move to `scripts/hardware/` | `test_axis.py`, `test_fan.py`, `test_drawer.py`, `test_connection.py`, `test_lm35.py`, `test_positions.py`, `test_exit.py`, `toggle_pin.py`, `motor_disable.py`, `get_params.py`, `optics_read.py`, `pcr_meer_off.py`, `led_off.py`, `led_on.py`, `adc/`, `led/`, `beam_breaks/`, `motor_test/` |
-| Move to `scripts/hardware tests/` | `led_current_verification.py` (run back to back with FAM/ROX), `raster_detailed_log_centered.py` (run back to back with TE blanks of FAM/ROX), `motor_drawer.py`, `motor_axis.py`, `test_adc4_logged.py`, `run_lid_heater.py`, `lod_verification_all.py` |
+| Move to `scripts/hardware_tests/` | `led_current_verification.py` (run back to back with FAM/ROX), `raster_detailed_log_centered.py` (run back to back with TE blanks of FAM/ROX), `motor_drawer.py`, `motor_axis.py`, `test_adc4_logged.py`, `run_lid_heater.py`, `lod_verification_all.py` |
 | Move to `scripts/tools/` | `PCR_plot.py`, `Raster.py`, `diagnostic_sweep.py`, `melt_curve.py`, `convert_results_to_fake_run.py`, `meer_ss.py` |
 | Move to `config_files/` | `aquila_app.service` |
 | Delete | `cmdline.txt`, `config.txt` (device-local, gitignored, never needed in repo) |
@@ -141,10 +147,22 @@ Move test files, update `pytest.ini`. No production code changes.
 | Action | Files |
 |--------|-------|
 | Move to `tests/contract/` | `test_bundled_profiles.py` |
-| Move to `tests/unit/` | contents of `unit_tests/`, `test_curve.py`, `test_result_consistency.py`, `test_state_request.py` |
+| Move to `tests/unit/` | `test_force_stop.py`, `test_meer_log_stop.py`, `test_pcr_threshold_and_ct.py`, `test_results_to_json_path.py` (from `unit_tests/`), `test_curve.py`, `test_result_consistency.py`, `test_state_request.py` (from root) |
 | Move to `tests/pcr_curve/` | contents of `pcr_curve_tests/` |
 | Delete dirs | `unit_tests/`, `pcr_curve_tests/` |
 | Update `pytest.ini` | `testpaths = tests` (single entry) |
+
+### Phase 1.5 — Unaccounted root directories (decide before Phase 2)
+
+Three directories in root have no disposition yet:
+
+| Directory | Recommendation |
+|-----------|---------------|
+| `server_web/` | Confirm whether this duplicates or extends `aquila_web/`. Move into `aquila_web/` if it's part of that bounded context, or add to target structure as a top-level dir if independent. |
+| `data/` | Likely runtime output — add to `.gitignore` if not already, and note it in the target structure as excluded from moves. |
+| `logs/` | Same as `data/` — runtime artifact, should be gitignored and left in place. |
+
+---
 
 ### Phase 3 — Move class files into `aq_lib/` (15 import changes across 13 files)
 Move `fan_class.py`, `adc_class.py`, `led_class.py` into `aq_lib/`.
@@ -178,6 +196,8 @@ Move `fan_class.py`, `adc_class.py`, `led_class.py` into `aq_lib/`.
 | `melt_curve.py:19` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
 
 Note: line numbers above reflect pre-move positions. After files are relocated to `scripts/hardware/` and `scripts/tools/`, the import paths change but the fix is the same.
+
+**PYTHONPATH requirement:** Scripts moved into `scripts/` subdirectories must be run from the repo root for `aq_lib` to resolve, e.g. `python scripts/hardware/optics_read.py`. Running from inside the subdirectory will fail. Add `export PYTHONPATH="$REPO_ROOT"` to any wrapper or document this at the top of each script.
 
 ### Phase 4 — Clean profiles/
 Delete old test/dev profile JSONs from `profiles/` root. Only `profiles/bundled/` should contain files.
