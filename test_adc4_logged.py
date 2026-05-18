@@ -17,6 +17,7 @@ from aq_lib.utils import LOGGING_CONFIG
 logging.config.dictConfig( LOGGING_CONFIG )
 logger = logging.getLogger( "aquila.optics" )
 
+AXIS_MAX_STEPS = 2160  # Physical axis limit for this unit
 
 def log(msg):
     """Print to stderr for motor diagnostics"""
@@ -85,7 +86,7 @@ t0 = time.time()
 scan_count = 0
 #for position in range(0,4) if dye == "rox" else range(2,6):
 #for x in range ( axis.positions[1]-500, axis.positions[1]+100, 10 ):
-for x in range ( 0, axis.positions[5]+100, 20 ):
+for x in range ( 0, min( axis.positions[5]+100, AXIS_MAX_STEPS ), 20 ):
     scan_count += 1
     axis.move_abs_wo_home_flag( x )
     time.sleep ( 0.1 )
@@ -139,4 +140,6 @@ log(f"Total positions: {scan_count}")
 log(f"Final axis position: {axis.position}")
 log(f"Finished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
+axis.home()
+time.sleep(0.1)
 #drawer.open()
