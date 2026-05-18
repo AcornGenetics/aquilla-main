@@ -49,7 +49,7 @@ aquilla-main/
 │   │   ├── exit_kiosk.sh
 │   │   ├── update_kiosk_x11.sh
 │   │   └── update.sh
-│   ├── hardware/           # ← GPIO/serial debug scripts from root + mini-dirs
+│   ├── hardware tests/           # ← GPIO/serial debug scripts from root + mini-dirs
 │   │   ├── test_axis.py
 │   │   ├── test_drawer.py
 │   │   ├── test_fan.py
