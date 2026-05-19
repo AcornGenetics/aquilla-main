@@ -63,6 +63,7 @@ def check_log_phase_linearity(curve_data, curve):
     xdata, y_corrected, _ = curve_data
     threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
+    cq = compute_cq(xdata, y_corrected, threshold, min_consecutive)
     start = sustained_rise_index(y_corrected, threshold, min_consecutive)
     if start is None:
         return False
@@ -75,7 +76,13 @@ def check_log_phase_linearity(curve_data, curve):
     if len(log_segment) < 2:
         return True
     r2 = compute_r2(x_segment, log_segment)
-    min_r2 = config.get_float("PCR_LOG_PHASE_R2_MIN")
+    late_threshold = config.get_float("PCR_LATE_CQ_THRESHOLD")
+    if cq is not None and cq >= late_threshold:
+        min_r2 = config.get_float("PCR_LATE_R2_MIN")
+    elif cq is not None and cq >= 30:
+        min_r2 = config.get_float("PCR_LOG_PHASE_R2_MID")
+    else:
+        min_r2 = config.get_float("PCR_LOG_PHASE_R2_MIN")
     return r2 >= min_r2
 
 
@@ -83,7 +90,8 @@ def check_monotonic_rise(curve_data, curve):
     _, y_corrected, _ = curve_data
     threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
-    max_drop = config.get_float("PCR_MAX_DROP")
+    signal_range = float(np.max(y_corrected)) - float(np.min(y_corrected))
+    max_drop = config.get_float("PCR_MAX_DROP_RELATIVE") * signal_range
     start = sustained_rise_index(y_corrected, threshold, min_consecutive)
     if start is None:
         return False
@@ -105,7 +113,47 @@ def check_no_late_drift(curve_data, curve):
 
 
 def check_negative_drop(curve_data, curve):
-    return True
+    _, y_corrected, _ = curve_data
+    window = config.get_int("PCR_NEGATIVE_DROP_WINDOW")
+    signal_range = float(np.max(y_corrected)) - float(np.min(y_corrected))
+    min_val = float(np.min(y_corrected[-window:]))
+    drop_min = config.get_float("PCR_NEGATIVE_DROP_MIN")
+    return min_val >= drop_min * signal_range
+
+
+def check_no_mountain_shape(curve_data, curve):
+    _, y_corrected, _ = curve_data
+    threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
+    min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
+    rise_index = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    if rise_index is None:
+        return True
+    rise_segment = y_corrected[rise_index:]
+    peak_offset = int(np.argmax(rise_segment))
+    peak_signal = float(rise_segment[peak_offset])
+    end_signal = float(np.mean(y_corrected[-3:]))
+    if peak_signal <= 0:
+        return True
+    drop_ratio = (peak_signal - end_signal) / peak_signal
+    peak_cycle = rise_index + peak_offset
+    total_cycles = len(y_corrected)
+    threshold_ratio = config.get_float("PCR_MOUNTAIN_DROP_RATIO")
+    return not (drop_ratio > threshold_ratio and peak_cycle < total_cycles - 8)
+
+
+def check_end_above_midpoint(curve_data, curve):
+    _, y_corrected, _ = curve_data
+    threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
+    min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
+    rise_index = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    if rise_index is None:
+        return True
+    rise_len = len(y_corrected) - rise_index
+    midpoint_idx = rise_index + rise_len // 2
+    midpoint_signal = float(y_corrected[midpoint_idx])
+    end_signal = float(np.mean(y_corrected[-5:]))
+    fraction = config.get_float("PCR_END_MIDPOINT_FRACTION")
+    return end_signal >= midpoint_signal * fraction
 
 
 def check_sigmoidal_profile(curve_data, curve):
@@ -122,16 +170,14 @@ def check_sigmoidal_profile(curve_data, curve):
     start = sustained_rise_index(y_corrected, threshold, min_consecutive)
     if start is None:
         return False
-    slope = np.polyfit(
-        xdata[start:],
-        y_corrected[start:],
-        1,
-    )[0]
-    return slope > 0
+    slope = float(np.polyfit(xdata[start:], y_corrected[start:], 1)[0])
+    signal_range = float(np.max(y_corrected)) - float(np.min(y_corrected))
+    post_rise_min = config.get_float("PCR_POST_RISE_SLOPE_MIN")
+    return slope >= post_rise_min * signal_range
 
 
 def check_signal_range(curve_data, curve):
-    _, _, y_raw = curve_data
+    _, y_corrected, y_raw = curve_data
     start, end = curve.baseline_slice
     baseline_values = y_raw[start:end]
     baseline_mean = float(np.mean(baseline_values))
@@ -144,7 +190,10 @@ def check_signal_range(curve_data, curve):
         return False
     amplitude_fraction = (peak - baseline_mean) / peak
     fold_change = peak / baseline_mean
-    return amplitude_fraction >= min_peak_fraction or fold_change >= min_fold
+    relative_ok = amplitude_fraction >= min_peak_fraction or fold_change >= min_fold
+    min_abs_signal = config.get_float("PCR_MIN_ABS_SIGNAL")
+    abs_ok = float(np.max(y_corrected)) >= min_abs_signal
+    return relative_ok and abs_ok
 
 
 def check_single_transition(curve_data, curve):
@@ -367,15 +416,36 @@ def _find_log_phase_end(y_corrected, start):
     min_points = config.get_int("PCR_LOG_PHASE_SLOPE_MIN_POINTS")
     if max_slope <= 0:
         return min(start + min_points, len(y_corrected) - 1)
-    threshold = max_slope * flatten_fraction
-    end = len(y_corrected) - 1
+    flatten_threshold = max_slope * flatten_fraction
+    # Skip slow inhibitor-suppressed initial rise; only include cycles with slope >= 10% of peak
+    min_slope = max_slope * config.get_float("PCR_LOG_PHASE_MIN_SLOPE")
+    genuine_start = start
     for idx in range(start, len(diffs)):
-        if idx - start >= min_points and diffs[idx] < threshold:
+        if diffs[idx] >= min_slope:
+            genuine_start = idx
+            break
+    end = len(y_corrected) - 1
+    for idx in range(genuine_start, len(diffs)):
+        if idx - genuine_start >= min_points and diffs[idx] < flatten_threshold:
             end = idx
             break
     if end <= start:
         end = min(start + min_points, len(y_corrected) - 1)
     return end
+
+
+def check_late_cq_tier(curve_data, curve, cq):
+    xdata, y_corrected, _ = curve_data
+    cq_idx = max(0, int(round(cq)) - 1)
+    window_before = y_corrected[max(0, cq_idx - 2):cq_idx + 1]
+    if len(window_before) == 0:
+        return False
+    base_signal = float(np.max(window_before))
+    if base_signal <= 0:
+        return False
+    after_idx = min(cq_idx + 5, len(y_corrected) - 1)
+    fold = float(y_corrected[after_idx]) / base_signal
+    return fold >= config.get_float("PCR_LATE_FOLD_MIN")
 
 
 def _run_check(check, curve_data, curve):
@@ -394,6 +464,8 @@ def check_signal_basics(curve_data, curve):
         check_monotonic_rise,
         check_no_late_drift,
         check_negative_drop,
+        check_no_mountain_shape,
+        check_end_above_midpoint,
         check_sigmoidal_profile,
         check_signal_range,
         check_single_transition,
@@ -424,6 +496,7 @@ def check_biphasic_basics(curve_data, curve):
 
 def evaluate_curve(curve, log_name, dye, well):
     curve_data = get_curve_data(curve, log_name, dye, well)
+    xdata, y_corrected, _ = curve_data
     results = {
         "check_threshold_crossing": _run_check(
             check_threshold_crossing,
@@ -435,28 +508,49 @@ def evaluate_curve(curve, log_name, dye, well):
     results.update(typical_results)
     biphasic_results = check_biphasic_basics(curve_data, curve)
     results.update(biphasic_results)
+
     threshold_pass = results["check_threshold_crossing"]
-    negative_drop_ok = results.get("check_negative_drop", True)
+    mountain_shape_detected = not (
+        typical_results.get("check_no_mountain_shape", True)
+        and typical_results.get("check_end_above_midpoint", True)
+    )
     baseline_fail = any(
         not typical_results.get(name, False)
         for name in ("check_baseline_length", "check_baseline_stability")
     )
-    other_fail = any(
-        not passed
-        for name, passed in typical_results.items()
-    )
+    other_fail = any(not passed for passed in typical_results.values())
     typical_pass = not curve.test_run and threshold_pass and not (baseline_fail or other_fail)
     biphasic_pass = (
         not curve.test_run
         and threshold_pass
         and all(biphasic_results.values())
     )
-    if not threshold_pass:
+
+    threshold_val, _ = get_threshold(y_corrected, curve.baseline_slice)
+    min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
+    cq = compute_cq(xdata, y_corrected, threshold_val, min_consecutive)
+    late_threshold = config.get_float("PCR_LATE_CQ_THRESHOLD")
+
+    signal_range_pass = typical_results.get("check_signal_range", True)
+    if not threshold_pass or not signal_range_pass:
         status = "undetected"
+    elif mountain_shape_detected:
+        status = "undetected"
+    elif cq is not None and cq >= late_threshold:
+        late_ok = _run_check(
+            lambda cd, c: check_late_cq_tier(cd, c, cq),
+            curve_data,
+            curve,
+        )
+        if late_ok and (typical_pass or biphasic_pass):
+            status = "detected"
+        else:
+            status = "inconclusive"
     elif typical_pass or biphasic_pass:
         status = "detected"
     else:
         status = "inconclusive"
+
     return {
         "status": status,
         "threshold_pass": threshold_pass,

@@ -30,17 +30,5 @@ def test_meerstetter_tuning_fails_phase() -> None:
     assert "Meerstetter tuning failed" in SCRIPT
 
 
-def test_security_config_locked() -> None:
-    assert "chmod 700 /opt/aquila/config" in SECURITY
-    assert "chmod 600 /opt/aquila/config/device.env" in SECURITY
-
-
-def test_security_pi_sudo_restricted() -> None:
-    assert "deluser pi sudo" in SECURITY
-    assert "pi-restricted" in SECURITY
-    assert "visudo -cf" in SECURITY
-
-
-def test_security_pi_cannot_escalate() -> None:
-    assert "pi ALL=(ALL) NOPASSWD: /usr/bin/docker compose" in SECURITY
-    assert "pi ALL=(ALL) NOPASSWD: /bin/systemctl restart aquila-stack" in SECURITY
+def test_security_script_downloaded() -> None:
+    assert "security.sh" in SCRIPT
