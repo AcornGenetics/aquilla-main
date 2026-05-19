@@ -177,7 +177,7 @@ def check_sigmoidal_profile(curve_data, curve):
 
 
 def check_signal_range(curve_data, curve):
-    _, _, y_raw = curve_data
+    _, y_corrected, y_raw = curve_data
     start, end = curve.baseline_slice
     baseline_values = y_raw[start:end]
     baseline_mean = float(np.mean(baseline_values))
@@ -190,7 +190,10 @@ def check_signal_range(curve_data, curve):
         return False
     amplitude_fraction = (peak - baseline_mean) / peak
     fold_change = peak / baseline_mean
-    return amplitude_fraction >= min_peak_fraction or fold_change >= min_fold
+    relative_ok = amplitude_fraction >= min_peak_fraction or fold_change >= min_fold
+    min_abs_signal = config.get_float("PCR_MIN_ABS_SIGNAL")
+    abs_ok = float(np.max(y_corrected)) >= min_abs_signal
+    return relative_ok and abs_ok
 
 
 def check_single_transition(curve_data, curve):
@@ -528,7 +531,8 @@ def evaluate_curve(curve, log_name, dye, well):
     cq = compute_cq(xdata, y_corrected, threshold_val, min_consecutive)
     late_threshold = config.get_float("PCR_LATE_CQ_THRESHOLD")
 
-    if not threshold_pass:
+    signal_range_pass = typical_results.get("check_signal_range", True)
+    if not threshold_pass or not signal_range_pass:
         status = "undetected"
     elif mountain_shape_detected:
         status = "undetected"
