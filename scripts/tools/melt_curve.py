@@ -15,8 +15,8 @@ from aq_lib.utils import load_json
 from aq_lib.utils import LogFileName
 from aq_lib.utils import LOGGING_CONFIG
 
-from fan_class import Fan
-from adc_class import OpticalRead
+from aq_lib.fan_class import Fan
+from aq_lib.adc_class import OpticalRead
 from aq_lib.motor_class import Axis, Drawer
 
 logging.config.dictConfig( LOGGING_CONFIG )

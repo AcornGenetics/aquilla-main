@@ -1,6 +1,6 @@
 import sys
-from adc_class import OpticalRead
-from led_class import LED
+from aq_lib.adc_class import OpticalRead
+from aq_lib.led_class import LED
 import time
 from aq_lib.motor_class import Axis, Drawer
 

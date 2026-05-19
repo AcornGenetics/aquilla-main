@@ -27,8 +27,8 @@ try:
     import RPi.GPIO as GPIO
     from aq_lib.motor_class import Axis, Drawer
     from aq_lib.config_module import Config
-    from adc_class import OpticalRead
-    from led_class import LED
+    from aq_lib.adc_class import OpticalRead
+    from aq_lib.led_class import LED
     HARDWARE_AVAILABLE = True
     
     # Load config
