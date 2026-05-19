@@ -1,6 +1,7 @@
 from pathlib import Path
 
-SCRIPT = Path("deployment2.sh").read_text()
+SCRIPT = Path("scripts/deploy/deployment2.sh").read_text()
+SECURITY = Path("scripts/setup/security.sh").read_text()
 
 
 def test_meerstetter_xml_downloaded() -> None:
