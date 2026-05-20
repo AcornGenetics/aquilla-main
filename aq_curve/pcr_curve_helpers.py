@@ -89,10 +89,20 @@ def get_plateau_start_index(ydata, plateau_fraction):
     return int(indices[0]) if len(indices) else None
 
 
-def get_log_phase_indices(ydata, threshold, plateau_fraction, min_consecutive):
+def get_log_phase_indices(ydata, threshold, plateau_fraction, min_consecutive, min_slope_fraction=0.10):
     start = sustained_rise_index(ydata, threshold, min_consecutive)
     if start is None:
         return None
+    diffs = np.diff(ydata)
+    rise_diffs = diffs[start:]
+    if len(rise_diffs) > 0:
+        max_slope = float(np.max(rise_diffs))
+        if max_slope > 0:
+            min_slope = max_slope * min_slope_fraction
+            for offset, d in enumerate(rise_diffs):
+                if d >= min_slope:
+                    start = start + offset
+                    break
     plateau_start = get_plateau_start_index(ydata, plateau_fraction)
     if plateau_start is None:
         plateau_start = len(ydata) - 1
