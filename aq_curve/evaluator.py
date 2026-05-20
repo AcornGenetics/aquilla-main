@@ -10,6 +10,24 @@ from aq_curve.pcr_curve_helpers import (
 )
 
 
+def _spike_only_crossings(y_corrected, threshold):
+    """Return True if every threshold crossing is caused by an isolated spike rather than sustained rise."""
+    diffs = np.abs(np.diff(y_corrected))
+    median_diff = float(np.median(diffs))
+    if median_diff == 0:
+        return False
+    multiplier = config.get_float("PCR_SPIKE_MULTIPLIER")
+    spike_mask = diffs > median_diff * multiplier
+    above = y_corrected >= threshold
+    crossing_indices = [i + 1 for i in range(len(above) - 1) if not above[i] and above[i + 1]]
+    if not crossing_indices:
+        return False
+    for idx in crossing_indices:
+        if not spike_mask[idx - 1]:
+            return False
+    return True
+
+
 def check_threshold_crossing(curve_data, curve):
     _, y_corrected, _ = curve_data
     threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
@@ -20,7 +38,12 @@ def check_threshold_crossing(curve_data, curve):
 def check_threshold_oscillation(curve_data, curve):
     _, y_corrected, _ = curve_data
     threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
-    crossings = count_threshold_crossings(y_corrected, threshold)
+    min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
+    rise_index = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    if rise_index is None:
+        return True
+    post_rise = y_corrected[rise_index:]
+    crossings = count_threshold_crossings(post_rise, threshold)
     return crossings <= 1
 
 
@@ -108,8 +131,8 @@ def check_no_late_drift(curve_data, curve):
         y_corrected[-late_cycles:],
         1,
     )[0]
-    max_drift = config.get_float("PCR_LATE_DRIFT_MAX")
-    return float(slope) <= max_drift
+    neg_drift_min = config.get_float("PCR_LATE_NEGATIVE_DRIFT_MIN")
+    return float(slope) >= -neg_drift_min
 
 
 def check_negative_drop(curve_data, curve):
@@ -532,6 +555,8 @@ def evaluate_curve(curve, log_name, dye, well):
     late_threshold = config.get_float("PCR_LATE_CQ_THRESHOLD")
 
     signal_range_pass = typical_results.get("check_signal_range", True)
+    if threshold_pass and _spike_only_crossings(y_corrected, threshold_val):
+        threshold_pass = False
     if not threshold_pass or not signal_range_pass:
         status = "undetected"
     elif mountain_shape_detected:
