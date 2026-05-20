@@ -117,9 +117,10 @@ services:
     environment:
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_HTTP_API_UPDATE: "true"
+      WATCHTOWER_NO_AUTO_UPDATE: "true"
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_CONFIG_FILE: "/config.json"
-    command: --label-enable --http-api-update --cleanup --api-version 1.54 --interval 300
+    command: --label-enable --http-api-update --no-auto-update --cleanup --api-version 1.54
     restart: unless-stopped
     logging:
       driver: json-file
