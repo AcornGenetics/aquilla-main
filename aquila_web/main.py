@@ -1278,3 +1278,171 @@ async def wifi_forget(body: WifiForget):
         return await _kiosk_post("/wifi/forget", {"ssid": body.ssid})
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# OTA Update — manual approval flow
+# ---------------------------------------------------------------------------
+
+import base64
+
+WATCHTOWER_URL = os.getenv("WATCHTOWER_URL", "http://aquila-watchtower:8080")
+WATCHTOWER_TOKEN = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
+_OTA_GHCR_USER = os.getenv("GHCR_USERNAME", "")
+_OTA_GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
+_OTA_GHCR_REPO = os.getenv("GHCR_REPO", "acorngenetics/aquilla-main")
+_OTA_IMAGE_TAG = os.getenv("IMAGE_TAG", "")   # dev | pilot | prod — set by device.env
+_OTA_POLL_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL", "300"))  # seconds
+
+_update_available: bool = False
+_update_dismissed: bool = False
+_update_status: str = "idle"   # idle | checking | available | updating | error
+_update_error: str | None = None
+_update_last_checked: str | None = None
+_startup_image_digest: str | None = None
+
+
+async def _ghcr_bearer_token(user: str, token: str, repo: str) -> str | None:
+    """Exchange Basic credentials for a short-lived GHCR Bearer token."""
+    cred = base64.b64encode(f"{user}:{token}".encode()).decode()
+    owner = repo.split("/")[0]
+    name = "/".join(repo.split("/")[1:]) or repo
+    url = f"https://ghcr.io/token?service=ghcr.io&scope=repository:{owner}/{name}:pull"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(url, headers={"Authorization": f"Basic {cred}"})
+        if r.status_code == 200:
+            return r.json().get("token")
+    except Exception:
+        pass
+    return None
+
+
+async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> str | None:
+    """Return the manifest digest for a GHCR image tag without pulling it."""
+    bearer = await _ghcr_bearer_token(user, token, repo)
+    if bearer is None:
+        return None
+    owner = repo.split("/")[0]
+    name = "/".join(repo.split("/")[1:]) or repo
+    url = f"https://ghcr.io/v2/{owner}/{name}/manifests/{tag}"
+    headers = {
+        "Authorization": f"Bearer {bearer}",
+        "Accept": (
+            "application/vnd.oci.image.index.v1+json,"
+            "application/vnd.docker.distribution.manifest.list.v2+json,"
+            "application/vnd.docker.distribution.manifest.v2+json"
+        ),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.head(url, headers=headers, follow_redirects=True)
+        return r.headers.get("docker-content-digest")
+    except Exception:
+        return None
+
+
+async def _do_check_update() -> None:
+    global _update_available, _update_status, _update_error, _update_last_checked, _startup_image_digest
+    _update_status = "checking"
+    try:
+        if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
+            _update_status = "idle"
+            _update_error = "Registry credentials or IMAGE_TAG not configured"
+            return
+        latest = await _ghcr_manifest_digest(
+            _OTA_GHCR_REPO, _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN
+        )
+        _update_last_checked = datetime.utcnow().isoformat() + "Z"
+        if latest is None:
+            _update_status = "idle"
+            _update_error = "Registry unreachable or credentials invalid"
+            return
+        if _startup_image_digest is None:
+            _startup_image_digest = latest
+            _update_status = "idle"
+            _update_error = None
+            return
+        if latest != _startup_image_digest:
+            _update_available = True
+            _update_status = "available"
+        else:
+            _update_available = False
+            _update_status = "idle"
+        _update_error = None
+    except Exception as e:
+        _update_status = "error"
+        _update_error = str(e)
+
+
+@app.get("/update/status")
+async def get_update_status():
+    return {
+        "available": _update_available,
+        "dismissed": _update_dismissed,
+        "status": _update_status,
+        "error": _update_error,
+        "last_checked": _update_last_checked,
+    }
+
+
+@app.post("/update/check")
+async def trigger_update_check():
+    if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
+        return {"ok": False, "error": "Registry credentials or IMAGE_TAG not configured"}
+    asyncio.create_task(_do_check_update())
+    return {"ok": True, "message": "checking"}
+
+
+@app.post("/update/apply")
+async def apply_update():
+    global _update_status, _update_error
+    _update_status = "updating"
+    headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(f"{WATCHTOWER_URL}/v1/update", headers=headers)
+        if r.status_code == 200:
+            _update_status = "updating"
+            return {"ok": True, "message": "Update triggered — containers will restart shortly."}
+        _update_status = "error"
+        _update_error = f"Watchtower returned HTTP {r.status_code}"
+        return {"ok": False, "error": _update_error}
+    except Exception as e:
+        _update_status = "error"
+        _update_error = str(e)
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/update/dismiss")
+async def dismiss_update():
+    global _update_dismissed
+    _update_dismissed = True
+    return {"ok": True}
+
+
+@app.post("/update/reset")
+async def reset_update_state():
+    """Test/dev helper — resets all update state."""
+    global _update_available, _update_dismissed, _update_status, _update_error
+    global _update_last_checked, _startup_image_digest
+    _update_available = False
+    _update_dismissed = False
+    _update_status = "idle"
+    _update_error = None
+    _update_last_checked = None
+    _startup_image_digest = None
+    return {"ok": True}
+
+
+async def _background_update_poller() -> None:
+    """Poll GHCR every UPDATE_CHECK_INTERVAL seconds. Never pulls the image."""
+    while True:
+        if _OTA_GHCR_TOKEN and _OTA_IMAGE_TAG:
+            await _do_check_update()
+        await asyncio.sleep(_OTA_POLL_INTERVAL)
+
+
+@app.on_event("startup")
+async def start_background_update_poller() -> None:
+    asyncio.create_task(_background_update_poller())
