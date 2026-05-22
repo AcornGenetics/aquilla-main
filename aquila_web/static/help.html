@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Help</title>
-  <link rel="stylesheet" href="/static/styles.css?v=211" />
+  <link rel="stylesheet" href="/static/styles.css?v=210" />
   <link rel="stylesheet" href="/static/icon-colors.css?v=1" />
   <style>
     .help-sub {
@@ -164,7 +164,6 @@
           <button class="help-tab" data-target="tab-profiles">Profiles</button>
           <button class="help-tab" data-target="tab-detail">Run Detail</button>
           <button class="help-tab" data-target="tab-wifi">Wi-Fi &amp; System</button>
-          <button class="help-tab" data-target="tab-updates" id="tab-updates-btn" style="position:relative;">Updates<span id="updates-tab-dot" style="display:none;position:absolute;top:4px;right:6px;width:7px;height:7px;border-radius:50%;background:#dc2626;"></span></button>
         </div>
 
         <div class="help-scroll">
@@ -258,21 +257,12 @@
 
             </div>
 
-            <!-- Updates -->
-            <div class="help-section" id="tab-updates">
-              <h2>Software Updates</h2>
-              <p>Updates are applied only when you choose to. Nothing is downloaded or restarted automatically.</p>
-              <div id="update-status-area" style="margin-top:16px;">
-                <p style="color:#6b7280;font-size:15px;">Open this tab to check for updates.</p>
-              </div>
-            </div>
-
           </div><!-- /.help-card -->
         </div><!-- /.help-scroll -->
 
         <!-- Footer -->
         <div class="help-footer" style="padding-bottom:16px;">
-          <span class="help-footer__meta" id="help-version-info">V 1.2.5</span>
+          <span class="help-footer__meta" id="help-version-info">V 1.1.3</span>
           <button class="help-exit-btn" onclick="notifyExitForce()">Exit GUI</button>
         </div>
 
@@ -290,119 +280,8 @@
         tab.classList.add("is-active");
         document.getElementById(tab.dataset.target).classList.add("is-active");
         if (tab.dataset.target === "tab-wifi") loadWifiStatus();
-        if (tab.dataset.target === "tab-updates") openUpdateTab();
       });
     });
-
-    // ── OTA Updates ──────────────────────────────────────────────
-    let _updateCheckPollTimer = null;
-
-    async function openUpdateTab() {
-      const area = document.getElementById("update-status-area");
-      const r = await fetch("/update/status").catch(() => null);
-      const data = r ? await r.json().catch(() => null) : null;
-      if (data && (data.available || data.status === "available")) {
-        renderUpdateStatus(data);
-        return;
-      }
-      if (data && data.status === "updating") {
-        renderUpdateStatus(data);
-        return;
-      }
-      area.innerHTML = '<p style="color:#6b7280;font-size:15px;">Checking for updates…</p>';
-      const cr = await fetch("/update/check", { method: "POST" }).catch(() => null);
-      if (!cr || !cr.ok) {
-        const cd = cr ? await cr.json().catch(() => ({})) : {};
-        renderUpdateStatus({ status: "error", error: cd.error || "Check request failed" });
-        return;
-      }
-      _pollUpdateStatus(0);
-    }
-
-    function _pollUpdateStatus(attempt) {
-      if (_updateCheckPollTimer) clearTimeout(_updateCheckPollTimer);
-      if (attempt > 20) {
-        renderUpdateStatus({ status: "error", error: "Check timed out" });
-        return;
-      }
-      _updateCheckPollTimer = setTimeout(async () => {
-        const r = await fetch("/update/status").catch(() => null);
-        const data = r ? await r.json().catch(() => null) : null;
-        if (!data || data.status === "checking") {
-          _pollUpdateStatus(attempt + 1);
-        } else {
-          renderUpdateStatus(data);
-        }
-      }, 1500);
-    }
-
-    function renderUpdateStatus(data) {
-      const area = document.getElementById("update-status-area");
-      const dot = document.getElementById("updates-tab-dot");
-      if (data.available || data.status === "available") {
-        if (dot) dot.style.display = "block";
-        area.innerHTML = `
-          <p style="font-size:15px;color:#1a1c1c;line-height:1.6;margin:0 0 18px;">
-            A software update is available. Do you want to update now?
-          </p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <button id="update-now-btn"
-              style="padding:10px 22px;border-radius:8px;border:none;background:var(--icon-dark-green);color:var(--icon-acorn-green);font-size:15px;font-weight:600;cursor:pointer;"
-              onclick="applyUpdate()">Update Now</button>
-            <button
-              style="padding:10px 22px;border-radius:8px;border:1.5px solid #cbd5e1;background:transparent;font-size:15px;color:#475569;cursor:pointer;"
-              onclick="dismissUpdate()">Later</button>
-          </div>
-        `;
-      } else if (data.status === "updating") {
-        area.innerHTML = '<p style="font-size:15px;color:#1a1c1c;">Downloading update… the device will restart automatically when complete.</p>';
-      } else if (data.status === "error") {
-        area.innerHTML = `
-          <p style="color:#dc2626;font-size:15px;">Could not check for updates: ${_escHtml(data.error || "unknown error")}</p>
-          <button onclick="openUpdateTab()"
-            style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;font-size:14px;cursor:pointer;color:#374151;">Try again</button>
-        `;
-      } else {
-        if (dot) dot.style.display = "none";
-        let html = '<p style="color:#16a34a;font-size:15px;font-weight:600;">✓ Software is up to date.</p>';
-        if (data.last_checked) html += `<p style="font-size:12px;color:#6b7280;margin-top:6px;">Last checked: ${_escHtml(data.last_checked.replace("T"," ").replace("Z"," UTC"))}</p>`;
-        area.innerHTML = html;
-      }
-    }
-
-    async function applyUpdate() {
-      const btn = document.getElementById("update-now-btn");
-      if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
-      const area = document.getElementById("update-status-area");
-      const r = await fetch("/update/apply", { method: "POST" }).catch(() => null);
-      const d = r ? await r.json().catch(() => ({})) : {};
-      if (d.ok) {
-        area.innerHTML = '<p style="font-size:15px;color:#1a1c1c;">Downloading update… the device will restart automatically when complete.</p>';
-        document.querySelectorAll(".help-badge").forEach(b => b.remove());
-      } else {
-        area.innerHTML = `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(d.error || "unknown error")}</p>`;
-      }
-    }
-
-    async function dismissUpdate() {
-      await fetch("/update/dismiss", { method: "POST" }).catch(() => {});
-      document.getElementById("update-status-area").innerHTML =
-        '<p style="color:#6b7280;font-size:15px;">Update reminder dismissed. You can check again by reopening this tab.</p>';
-      const dot = document.getElementById("updates-tab-dot");
-      if (dot) dot.style.display = "none";
-      document.querySelectorAll(".help-badge").forEach(b => b.remove());
-    }
-
-    function _escHtml(str) {
-      return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    }
-
-    // Show tab dot if update is already known available on page load
-    fetch("/update/status").then(r => r.ok ? r.json() : null).then(data => {
-      if (!data || !data.available || data.dismissed) return;
-      const dot = document.getElementById("updates-tab-dot");
-      if (dot) dot.style.display = "block";
-    }).catch(() => {});
 
     // ── WiFi ──────────────────────────────────────────────
     let wifiSelectedForm = null;

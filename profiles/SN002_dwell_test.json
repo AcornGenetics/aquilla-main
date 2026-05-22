@@ -1,0 +1,66 @@
+{
+"output_dir": "pcr_data",
+"steps": [
+    {
+        "disable": 0,
+        "duration": 1,
+        "description": "Record equilabrion without power."
+    },
+    {
+        "ramp_rate": 1.6
+    },
+    {  
+        "pcr_fanon" : 1
+    },
+    {
+        "enable": 0, 
+        "duration": 1,
+        "description": "Turn on and record temperature for a little bit"
+    },
+    {
+	"optics":""
+    },
+    {
+        "setpoint": 25,
+        "duration": 1,
+        "description": "Presetting temperature"
+    },
+    {
+        "setpoint": 95,
+        "duration": 600,
+        "description": "Presetting temperature"
+    },
+    {
+        "setpoint": 60,
+        "duration": 600,
+        "description": "Presetting temperature"
+    },
+    {
+        "setpoint": 37,
+        "duration": 600,
+        "description": "Presetting temperature"
+    },
+    {
+        "ramp_rate": 1
+    },
+    {
+        "setpoint": 40,
+        "duration": 20,
+        "description": "Initial cooling"
+    },
+    {
+        "setpoint": 25,
+        "duration": 10,
+        "description": "Restoring setpoint to RT"
+    },
+    {
+        "disable": 0,
+        "duration": 5,
+        "description": "Turn off and record temperature for a little bit"
+    },
+
+    { 
+        "pcr_fanoff" : 0
+    }
+]
+}

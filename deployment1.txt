@@ -1,0 +1,144 @@
+A.2. Create ssh
+        mkdir .ssh
+        copy ssh from other pi ( id_rsa, id_rsa.pub and authorized_keys )
+    In this example we copy from 192.168.244.94
+                >get id_rsa.pub from 250 then go
+                > pi@rasp5:~/.ssh $ scp 192.168.244.94:.ssh/id* .
+                > The authenticity of host '192.168.244.94 (192.168.244.94)' can't be established.
+                > ED25519 key fingerprint is SHA.56:7Zr+Yyy3YE+BolnVi0t37Zc3kvmfO14/VPVGw3BmHxw.
+                > This key is not known by any other names.
+                > Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+                > Warning: Permanently added '192.168.244.94' (ED25519) to the list of known hosts.
+                > pi@192.168.244.94's password:
+                > id_rsa                                        100% 2602    72.2KB/s   00:00
+                > id_rsa.pub                                    100%  568    19.7KB/s   00:00
+                > pi@rasp5:~/.ssh $ scp 192.168.244.94:.ssh/auth* .
+                > authorized_keys                               100%  568    35.1KB/s   00:00
+                > pi@rasp5:~/.ssh $ scp 192.168.244.94:.ssh/config .
+
+Run deployment1.sh to complete following steps.
+
+A.2b. Upgrade
+
+    a. sudo apt-get update
+    b. sudo apt-get upgrade
+
+A.2b. Install git
+
+    a. sudo apt install git
+
+A.3. Clone repo
+
+A.4. Install developer tools
+        a. sudo apt-get install screen vim pylint python3-dev
+
+A.5 Setup env
+
+    go into aquilla-main directory: cd aquilla-main
+        python -m venv venv
+    sudo ln -s venv/bin .
+        source bin/activate
+
+A.6 Install pip requirements
+
+    python3 -m pip install update  [optional]
+        vi requirements.txt
+    python3 -m pip install -r requirements.txt
+
+A.7 Install x-server and browser
+   sudo apt install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit openbox xterm unclutter
+   sudo apt install -y python3 python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
+
+   --ENABLE INTERFACES--
+   sudo raspi-config nonint do_i2c 0    (required for lid temperature sensor)
+   sudo raspi-config nonint do_spi 0    (required for optical ADC)
+
+   --AUTOLOGIN (Wayland / rpd-labwc) --
+   NOTE: Current Pi OS uses rpd-labwc (Wayland), NOT rpd-x (X11).
+   sudo mkdir -p /etc/lightdm/lightdm.conf.d
+   sudo nano /etc/lightdm/lightdm.conf.d/autologin.conf
+   [Seat:*]
+   autologin-user=pi
+   autologin-session=rpd-labwc
+
+   cp ~/aquilla-main/server_web/kiosk.py ~/
+
+   --KIOSK (Wayland / Chromium) --
+   NOTE: Use Chromium via XDG autostart, not kiosk.py + openbox autostart.
+         kiosk.py is kept as a fallback only.
+   mkdir -p ~/.config/autostart
+   Create ~/.config/autostart/chromium-kiosk.desktop:
+       [Desktop Entry]
+       Type=Application
+       Exec=chromium --kiosk --noerrdialogs --disable-infobars --ozone-platform=wayland --password-store=basic http://localhost:8090
+       Hidden=false
+       NoDisplay=false
+       Name=Chromium Kiosk
+   NOTE: No quotes around URL. --password-store=basic requires two dashes.
+
+   --DISPLAY ROTATION (Wayland) --
+   NOTE: xrandr does NOT work on Wayland. Use kanshi instead.
+         Output name on this device is HDMI-A-2 (not HDMI-2 or HDMI-A-1).
+   sudo apt install -y kanshi
+   mkdir -p ~/.config/kanshi
+   Create ~/.config/kanshi/config (use 4 spaces, not single line):
+       profile {
+           output HDMI-A-2 enable mode 1024x768@60.004 position 0,0 transform 270
+       }
+
+       profile {
+           output HDMI-A-1 enable mode 1024x768@60.004 position 0,0 transform 270
+       }
+
+   mkdir -p ~/.config/labwc
+   Create ~/.config/labwc/autostart:
+       kanshi &
+       sleep 3 && DISPLAY=:0 python3 /home/pi/kiosk.py &
+
+   --ADD DEVICE TO HOST CONFIG--
+   NOTE: deployment1.sh auto-adds the device hostname to config_files/host_config.json
+         using a standard template. Drawer/axis positions may need tuning per device.
+
+   --SERVICES--
+   NOTE: serve.service is NOT used — no Astro dist exists. Disable it if present.
+   sudo systemctl disable --now serve.service  (if previously enabled)
+
+   sudo cp ~/aquilla-main/aquila_app.service /etc/systemd/system/
+   sudo systemctl enable aquila_app.service
+   sudo systemctl start aquila_app.service
+
+   sudo cp ~/aquilla-main/aquila_web/aquila_web.service /etc/systemd/system/
+   sudo systemctl enable aquila_web.service
+   sudo systemctl start aquila_web.service
+
+   --FIRST BOOT NOTE--
+   On first boot, physically push the drawer back to the home sensor before
+   powering on, or the drawer homing routine will fail and the drawer won't open.
+   After the first run, the firmware leaves the drawer open and future boots
+   will home correctly on their own.
+
+   to check errors: sudo journalctl -u aquila_app.service -n 50 --no-pager
+
+   sudo reboot now
+
+A.9 Docker + Watchtower (optional)
+    a. Install Docker
+        curl -fsSL https://get.docker.com | sh
+        sudo usermod -aG docker pi
+        sudo apt-get install -y docker-compose-plugin
+    b. Log out/in or run newgrp docker
+    c. Login to GHCR (for private images)
+        echo '<PAT>' | docker login ghcr.io -u <github_user> --password-stdin
+    d. Run containers
+        cd ~/aquilla-main
+        docker compose -f docker/docker-compose.yml up -d
+    e. Start Watchtower (label-based)
+        docker run -d --name watchtower --restart unless-stopped \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v /home/pi/.docker/config.json:/config.json \
+          containrrr/watchtower --label-enable --cleanup --interval 300
+
+   After reboot, run: python3 ~/aquilla-main/scripts/check_service_paths.py
+
+A.8 Quiet login
+   /boot/cmdline.txt change console=tty1 to tty3

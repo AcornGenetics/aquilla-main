@@ -1,7 +1,6 @@
 from pathlib import Path
 
-SCRIPT = Path("scripts/deploy/deployment2.sh").read_text()
-SECURITY = Path("scripts/setup/security.sh").read_text()
+SCRIPT = Path("deployment2.sh").read_text()
 
 
 def test_meerstetter_xml_downloaded() -> None:
@@ -30,5 +29,17 @@ def test_meerstetter_tuning_fails_phase() -> None:
     assert "Meerstetter tuning failed" in SCRIPT
 
 
-def test_security_script_downloaded() -> None:
-    assert "security.sh" in SCRIPT
+def test_security_config_locked() -> None:
+    assert "chmod 700 /opt/aquila/config" in SCRIPT
+    assert "chmod 600 /opt/aquila/config/device.env" in SCRIPT
+
+
+def test_security_pi_sudo_restricted() -> None:
+    assert "deluser pi sudo" in SCRIPT
+    assert "pi-restricted" in SCRIPT
+    assert "visudo -cf" in SCRIPT
+
+
+def test_security_pi_cannot_escalate() -> None:
+    assert "pi ALL=(ALL) NOPASSWD: /usr/bin/docker compose" in SCRIPT
+    assert "pi ALL=(ALL) NOPASSWD: /bin/systemctl restart aquila-stack" in SCRIPT
