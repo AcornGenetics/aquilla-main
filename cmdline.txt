@@ -1,0 +1,1 @@
+console=tty1 root=PARTUUID=9c538892-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=US video=HDMI-A-2:1024x768M@60,rotate=270
