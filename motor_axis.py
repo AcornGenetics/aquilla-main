@@ -42,13 +42,11 @@ try:
     
     # Load actual config
     config = Config()
-    AXIS_WELL_ONE = config.axis["well_one"]           # 300 - first position
-    AXIS_WELL_SPACING = config.axis["well_spacing"]   # 359 - spacing between wells
+    AXIS_POSITIONS = config.axis["positions"]
+    AXIS_WELL_ONE = AXIS_POSITIONS[0]
+    AXIS_WELL_SPACING = AXIS_POSITIONS[1] - AXIS_POSITIONS[0]
     AXIS_HOME_STEPS = config.axis["home_steps"]       # 2500 - used for homing (overshoots, stops at flag)
-    
-    # Calculate positions: [300, 659, 1018, 1377, 1736, 2095]
-    AXIS_POSITIONS = [AXIS_WELL_ONE + AXIS_WELL_SPACING * i for i in range(6)]
-    
+
     AXIS_MIN_STEPS = 0                                 # Home position
     AXIS_MAX_STEPS = AXIS_POSITIONS[5] + 100          # ~2195 - a bit past last position
     STEP_DELAY = 0.001
