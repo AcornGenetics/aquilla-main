@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def test_update_script_has_watchtower_support() -> None:
-    script_text = Path("update.sh").read_text()
+    script_text = Path("scripts/deploy/update.sh").read_text()
 
     assert "WATCHTOWER_ENABLE" in script_text
     assert "WATCHTOWER_INTERVAL" in script_text
@@ -10,7 +10,7 @@ def test_update_script_has_watchtower_support() -> None:
 
 
 def test_update_script_does_not_silently_ignore_wifi_apply_failures() -> None:
-    script_text = Path("update.sh").read_text()
+    script_text = Path("scripts/deploy/update.sh").read_text()
 
     assert "Skipping Wi-Fi config" in script_text
     assert "WARNING: Wi-Fi config apply failed" in script_text
@@ -18,7 +18,7 @@ def test_update_script_does_not_silently_ignore_wifi_apply_failures() -> None:
 
 
 def test_deployment1_script_has_docker_support() -> None:
-    script_text = Path("deployment1.sh").read_text()
+    script_text = Path("scripts/deploy/deployment1.sh").read_text()
 
     assert "INSTALL_DOCKER" in script_text
     assert "curl -fsSL https://get.docker.com" in script_text
@@ -26,7 +26,7 @@ def test_deployment1_script_has_docker_support() -> None:
 
 
 def test_deployment2_locks_down_device_env() -> None:
-    script_text = Path("deployment2.sh").read_text()
+    script_text = Path("scripts/deploy/deployment2.sh").read_text()
 
     assert "chown root:root /opt/aquila/config/device.env" in script_text
     assert "chmod 600 /opt/aquila/config/device.env" in script_text

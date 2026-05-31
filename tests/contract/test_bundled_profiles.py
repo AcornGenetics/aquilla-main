@@ -73,13 +73,16 @@ def _get_profiles_dir() -> Path:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
-def bundled_test_profile():
+def bundled_test_profile(client):
     """
     Create a throw-away profile in <profiles_dir>/bundled/ for the duration of
     the test module, then clean it up.
+
+    Depends on `client` so the app is imported first; then we read profile_dir
+    directly from the running module to put the file in the right place.
     """
-    profiles_dir = _get_profiles_dir()
-    bundled_dir = profiles_dir / "bundled"
+    from aquila_web import main as web_main
+    bundled_dir = web_main.profile_dir / "bundled"
     bundled_dir.mkdir(parents=True, exist_ok=True)
 
     profile_path = bundled_dir / TEST_PROFILE_FILENAME
