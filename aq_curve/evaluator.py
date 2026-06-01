@@ -145,7 +145,7 @@ def check_negative_drop(curve_data, curve):
 
 
 def check_no_mountain_shape(curve_data, curve):
-    _, y_corrected, _ = curve_data
+    xdata, y_corrected, _ = curve_data
     threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
     rise_index = sustained_rise_index(y_corrected, threshold, min_consecutive)
@@ -160,7 +160,12 @@ def check_no_mountain_shape(curve_data, curve):
     drop_ratio = (peak_signal - end_signal) / peak_signal
     peak_cycle = rise_index + peak_offset
     total_cycles = len(y_corrected)
-    threshold_ratio = config.get_float("PCR_MOUNTAIN_DROP_RATIO")
+    cq = compute_cq(xdata, y_corrected, threshold, min_consecutive)
+    late_threshold = config.get_float("PCR_LATE_CQ_THRESHOLD")
+    if cq is not None and cq >= late_threshold:
+        threshold_ratio = config.get_float("PCR_MOUNTAIN_DROP_RATIO_LATE")
+    else:
+        threshold_ratio = config.get_float("PCR_MOUNTAIN_DROP_RATIO")
     return not (drop_ratio > threshold_ratio and peak_cycle < total_cycles - 8)
 
 
@@ -466,9 +471,15 @@ def check_late_cq_tier(curve_data, curve, cq):
     base_signal = float(np.max(window_before))
     if base_signal <= 0:
         return False
-    after_idx = min(cq_idx + 5, len(y_corrected) - 1)
-    fold = float(y_corrected[after_idx]) / base_signal
-    return fold >= config.get_float("PCR_LATE_FOLD_MIN")
+    # Per-cycle fold from Cq to Cq+2: genuine amplification doubles each cycle
+    # (~4× over 2 cycles), while background noise shows ~1.1×/cycle (~2.2× over 2)
+    after_idx = min(cq_idx + 2, len(y_corrected) - 1)
+    if after_idx <= cq_idx:
+        return False
+    fold_2 = float(y_corrected[after_idx]) / base_signal
+    cycles_elapsed = after_idx - cq_idx
+    per_cycle_fold = fold_2 ** (1.0 / cycles_elapsed)
+    return per_cycle_fold >= config.get_float("PCR_LATE_PER_CYCLE_FOLD_MIN")
 
 
 def _run_check(check, curve_data, curve):
