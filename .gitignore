@@ -251,7 +251,6 @@ pcr_curve_tests/tmp/
 
 # Device-local config
 cmdline.txt
-config.txt
 
 # Ruflo / AI tool runtime
 ruvector.db
