@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>WiFi Settings</title>
-  <link rel="stylesheet" href="/static/styles.css?v=209" />
+  <link rel="stylesheet" href="/static/styles.css?v=211" />
   <style>
     .wifi-page { padding: 24px 28px; max-width: 680px; }
 
@@ -146,6 +146,20 @@
       color: #9ca3af;
       font-size: 15px;
     }
+
+    .wifi-forget-btn {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #fca5a5;
+      background: #fff;
+      color: #dc2626;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .wifi-forget-btn:disabled { color: #fca5a5; border-color: #fecaca; cursor: default; }
   </style>
 </head>
 <body class="app-body">
@@ -235,7 +249,7 @@
           list.innerHTML = '<div class="wifi-empty">No networks found</div>';
           return;
         }
-        d.networks.forEach(net => {
+        d.networks.forEach((net, index) => {
           const row = document.createElement("div");
           row.className = "wifi-network-row";
           if (net.in_use) row.classList.add("is-selected");
@@ -245,7 +259,7 @@
             ${net.secured ? '<span class="wifi-network-lock">🔒</span>' : ''}
             ${net.in_use ? '<span class="wifi-network-check">✓</span>' : ''}
           `;
-          const form = buildConnectForm(net);
+          const form = buildConnectForm(net, index);
           row.addEventListener("click", () => toggleForm(row, form, net));
           list.appendChild(row);
           list.appendChild(form);
@@ -259,19 +273,26 @@
       }
     }
 
-    function buildConnectForm(net) {
+    function buildConnectForm(net, index) {
       const form = document.createElement("div");
       form.className = "wifi-connect-form";
+      form.dataset.ssid = net.ssid;
+      const safeId = `wifi-net-${index}`;
+      const safeLabel = escHtml(net.ssid);
       form.innerHTML = `
         ${net.secured ? `
         <div class="wifi-password-row">
-          <input type="password" id="pw-${escId(net.ssid)}" placeholder="Password" autocomplete="off" />
-          <button class="wifi-show-btn" type="button" onclick="togglePw('${escId(net.ssid)}', this)">Show</button>
+          <input type="password" id="pw-${safeId}" placeholder="Password" autocomplete="off" />
+          <button class="wifi-show-btn" type="button" onclick="togglePw('${safeId}', this)">Show</button>
         </div>` : ""}
-        <button class="wifi-connect-btn" type="button" onclick="doConnect('${escId(net.ssid)}', ${net.secured})">
-          Connect to ${escHtml(net.ssid)}
+        <button class="wifi-connect-btn" type="button" id="conn-btn-${safeId}" onclick="doConnect('${safeId}', ${net.secured})">
+          Connect to ${safeLabel}
         </button>
-        <div class="wifi-error" id="err-${escId(net.ssid)}"></div>
+        <div class="wifi-error" id="err-${safeId}"></div>
+        ${net.in_use ? `
+        <button class="wifi-forget-btn" type="button" id="forget-btn-${safeId}" onclick="doForget('${safeId}')">
+          Forget ${safeLabel}
+        </button>` : ""}
       `;
       return form;
     }
@@ -299,7 +320,8 @@
       const pwInput = document.getElementById("pw-" + ssidId);
       const errEl = document.getElementById("err-" + ssidId);
       const btn = errEl.previousElementSibling;
-      const ssid = pwInput ? pwInput.closest(".wifi-connect-form").querySelector(".wifi-connect-btn").textContent.replace("Connect to ", "").trim() : ssidId;
+      const form = errEl.closest(".wifi-connect-form");
+      const ssid = form ? form.dataset.ssid : ssidId;
       const password = pwInput ? pwInput.value : "";
 
       errEl.classList.remove("is-visible");
@@ -331,6 +353,42 @@
       }
     }
 
+    async function doForget(ssidId) {
+      const btn = document.getElementById("forget-btn-" + ssidId);
+      const errEl = document.getElementById("err-" + ssidId);
+      const form = errEl.closest(".wifi-connect-form");
+      const ssid = form ? form.dataset.ssid : ssidId;
+
+      if (!window.confirm(`Forget network "${ssid}"?`)) return;
+
+      errEl.classList.remove("is-visible");
+      btn.disabled = true;
+      btn.textContent = "Forgetting...";
+
+      try {
+        const r = await fetch("/wifi/forget", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ssid }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          await loadStatus();
+          await doScan();
+        } else {
+          errEl.textContent = d.error || "Failed to forget network";
+          errEl.classList.add("is-visible");
+          btn.disabled = false;
+          btn.textContent = `Forget ${escHtml(ssid)}`;
+        }
+      } catch (e) {
+        errEl.textContent = "Request failed — try again";
+        errEl.classList.add("is-visible");
+        btn.disabled = false;
+        btn.textContent = `Forget ${escHtml(ssid)}`;
+      }
+    }
+
     function escHtml(str) {
       return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
@@ -345,7 +403,7 @@
 
     loadStatus();
   </script>
-  <script src="/static/keyboard.js?v=13"></script>
+  <script src="/static/keyboard.js?v=14"></script>
   <script src="/static/nav.js?v=1"></script>
 </body>
 </html>

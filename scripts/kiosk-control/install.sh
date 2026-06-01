@@ -4,12 +4,17 @@
 set -euo pipefail
 
 BASE_DIR="${AQ_SRC_BASEDIR:-/home/pi/aquilla-main}"
+SCRIPT_SRC="${BASE_DIR}/scripts/kiosk-control/kiosk_control.py"
+SCRIPT_DEST="/usr/local/bin/kiosk_control.py"
 SERVICE_SRC="${BASE_DIR}/scripts/kiosk-control/kiosk-control.service"
 SERVICE_DEST="/etc/systemd/system/kiosk-control.service"
 
 echo "=== Installing kiosk-control ==="
 
-# --- 1. No extra Python packages needed (uses stdlib http.server only) ---
+# --- 1. Install the Python entrypoint ---
+echo "Installing kiosk_control.py..."
+sudo cp "${SCRIPT_SRC}" "${SCRIPT_DEST}"
+sudo chmod +x "${SCRIPT_DEST}"
 
 # --- 2. Install the systemd unit ---
 echo "Installing systemd service..."

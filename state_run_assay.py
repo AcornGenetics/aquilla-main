@@ -21,15 +21,15 @@ from aq_lib.config_module import Config
 from aq_lib.utils import load_json
 from aq_lib.utils import LogFileName
 from aq_lib.utils import LOGGING_CONFIG
-from aq_lib.plot_utils import generate_optics_plot
+from aq_curve.plot_utils import generate_optics_plot
 from aq_lib.regulate import lid_heater_worker
 from config import get_src_basedir
 import aq_lib.state_requests as sr
 from aq_lib.motor_class import Axis, Drawer
 
 from aq_curve.main import results_to_json
-from fan_class import Fan
-from adc_class import OpticalRead
+from aq_lib.fan_class import Fan
+from aq_lib.adc_class import OpticalRead
 
 logging.config.dictConfig( LOGGING_CONFIG )
 logger = logging.getLogger( "aquila" )
@@ -175,6 +175,14 @@ class AssayInterface():
         self.run_aborted = False
         sr.reset_stop_request()
 
+        # Drain any stale tasks/quit left over from a previous run so the
+        # new executor starts with a clean queue.
+        while not self.message_queue.empty():
+            try:
+                self.message_queue.get_nowait()
+            except Empty:
+                break
+
         stop_event = Event()
         stop_monitor_event = Event()
         stop_thread = Thread(
@@ -222,10 +230,15 @@ class AssayInterface():
                 t0_sync = set_time()
                 print ( "# Starting log t0 = %f"% t0_sync, file = pcr_fp )
                 actions = thermal_parser( steps )
-                thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
-
-                self.message_queue.put("quit")
-                execution_thread.join()
+                try:
+                    thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
+                finally:
+                    # Drain the executor while files are still open so capture
+                    # threads cannot write to a closed file handle.
+                    # Use a generous timeout: a 40-cycle run with optics can
+                    # take several seconds per capture position.
+                    self.message_queue.put("quit")
+                    execution_thread.join(timeout=60)
 
         except RunStopped:
             logger.info("Run stopped by user")
@@ -238,19 +251,23 @@ class AssayInterface():
             sr.change_screen("-1")
             raise ( e )
         finally:
+            if execution_thread.is_alive():
+                # Safety net: executor did not finish within the inner timeout
+                self.message_queue.put("quit")
+                execution_thread.join(timeout=2)
+            self.hw_deinitialize()
+            sr.timer_control("stop")
+            if self.run_aborted:
+                sr.timer_control("reset")
+            self.drawer.open()
+            # Stop monitor only after drawer is open — keeps the stop button
+            # functional during teardown motor movement (which can take
+            # 30-90 s if the drawer missed steps and needs to re-home).
             stop_monitor_event.set()
             if stop_thread.is_alive():
                 stop_thread.join(timeout=2)
-            if execution_thread.is_alive():
-                self.message_queue.put("quit")
-                execution_thread.join(timeout=5)
-            self.hw_deinitialize()
-            sr.timer_control("stop")
-            self.drawer.open()
             sr.update_drawer_state(is_open=True, is_closed=False)
             if self.run_aborted:
-                sr.timer_control( "stop" )
-                sr.timer_control( "reset" )
                 sr.change_screen("1")
             else:
                 try:
@@ -275,8 +292,9 @@ class AssayInterface():
         self.meer.setTargetObjectTemperature ( 25.0 )
         self.meer.output_stage_enable ( 0 )
 
-        #self.lid_heater_stop_event.set()
-        #self.lid_thread.join( timeout = 5 )
+        self.lid_heater_stop_event.set()
+        if hasattr(self, "lid_thread") and self.lid_thread.is_alive():
+            self.lid_thread.join( timeout = 5 )
 
 
     def end( self ):
@@ -386,8 +404,9 @@ class AssayInterface():
         Falls back to running exit_kiosk.sh as a subprocess in case the service
         is not yet running.
         """
+        kiosk_control_url = os.getenv("KIOSK_CONTROL_URL", "http://127.0.0.1:9191")
         try:
-            resp = _requests.post("http://127.0.0.1:9191/exit-kiosk", timeout=5)
+            resp = _requests.post(f"{kiosk_control_url}/exit-kiosk", timeout=5)
             if resp.ok:
                 logger.info("kiosk-control: exit-kiosk OK")
                 return

@@ -1,3 +1,11 @@
+const esc = (str) =>
+  String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 const TUBE_NAME_KEY = "aqTubeNames";
 const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
 
@@ -167,19 +175,19 @@ async function loadRunDetail() {
         <div class="run-detail-meta">
           <div>
             <div class="run-detail-label">Date</div>
-            <div class="run-detail-value">${entry.timestamp || "--"}</div>
+            <div class="run-detail-value">${esc(entry.timestamp || "--")}</div>
           </div>
           <div>
             <div class="run-detail-label">Profile</div>
-            <div class="run-detail-value">${entry.profile || "--"}</div>
+            <div class="run-detail-value">${esc(entry.profile || "--")}</div>
           </div>
           <div>
             <div class="run-detail-label">Run Name</div>
-            <div class="run-detail-value">${entry.run_name || "--"}</div>
+            <div class="run-detail-value">${esc(entry.run_name || "--")}</div>
           </div>
           <div>
             <div class="run-detail-label">Result</div>
-            <div class="run-detail-value">${resultText}</div>
+            <div class="run-detail-value">${esc(resultText)}</div>
           </div>
         </div>
         <div class="run-detail-pills">
@@ -193,7 +201,7 @@ async function loadRunDetail() {
                 labelDetail = "Inconclusive";
               }
               const label = `${tubeNames[index]}: ${labelDetail}`;
-              return `<span class="run-detail-pill run-detail-pill--${status}">${label}</span>`;
+              return `<span class="run-detail-pill run-detail-pill--${status}">${esc(label)}</span>`;
             })
             .join("")}
         </div>
@@ -203,7 +211,7 @@ async function loadRunDetail() {
         <div class="run-detail-card__subheader">Real-time qPCR fluorescence data</div>
         <div class="run-detail-graph">
           ${entry.graph_path
-            ? `<img src="${entry.graph_path}" alt="Run graph" />`
+            ? `<img src="${esc(entry.graph_path)}" alt="Run graph" />`
             : "No graph available"}
         </div>
       </section>
@@ -216,11 +224,7 @@ async function loadRunDetail() {
           <div class="run-detail-kpi__value">${summary.inconclusiveCount}/4</div>
           <div class="run-detail-kpi__label">Inconclusive</div>
         </div>
-        <div class="run-detail-kpi">
-          <div class="run-detail-kpi__value">${avgCq ?? "--"}</div>
-          <div class="run-detail-kpi__label">Avg Ct Value</div>
-        </div>
-        <div class="run-detail-kpi">
+<div class="run-detail-kpi">
           <div class="run-detail-kpi__value run-detail-kpi__value--${qcStatus.toLowerCase()}">${qcStatus}</div>
           <div class="run-detail-kpi__label">QC Status</div>
         </div>

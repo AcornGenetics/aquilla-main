@@ -12,12 +12,12 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 import re
-from aq_curve.curve import Curve
+from aq_curve.analysis_service import AnalysisService
 
 logger = logging.getLogger( __name__ )
 logger.setLevel("WARNING")
 
-app = FastAPI()
+app = FastAPI(redirect_slashes=False)
 static_dir = Path(__file__).parent / "static"
 
 state_change_event = asyncio.Event()
@@ -50,6 +50,7 @@ BUNDLED_PROFILE_DIR = DEFAULT_PROFILE_DIR / "bundled"
 LOCAL_BUNDLED_PROFILE_DIR = LOCAL_PROFILE_DIR / "bundled"
 
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+_analysis = AnalysisService(RESULTS_DIR)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 app.mount("/plots", StaticFiles(directory=str(PLOTS_DIR)), name="plots")
 
@@ -68,7 +69,7 @@ def _load_profile_labels(profile_name: str | None) -> dict:
     profile_dir = resolve_profile_dir()
     if not profile_dir.exists():
         return {}
-    for path in profile_dir.glob("*.json"):
+    for path in profile_dir.rglob("*.json"):
         try:
             with path.open() as f:
                 data = json.load(f)
@@ -385,11 +386,9 @@ async def _simulate_run(profile_name: str) -> None:
         state_change_event.set()
         state_change_event.clear()
         return
-    curve_runner = Curve(src_basedir=str(RESULTS_DIR))
-    curve_runner.results_to_json(str(optics_path), results_file.name)
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
     labels = _load_profile_labels(profile_name)
-    generate_optics_plot(str(optics_path), str(plot_path), labels=labels)
+    _analysis.process_run(str(optics_path), results_file.name, str(plot_path), labels=labels)
     detected_summary = _summarize_results_from_file(results_file)
 
     results_path = str(results_file.resolve())
@@ -713,9 +712,12 @@ async def button_open():
     global drawer_open, drawer_close, drawer_task
     if DEV_SIMULATE:
         if drawer_task and not drawer_task.done():
-            drawer_task.cancel()
+            return {"ok": True}
         drawer_task = asyncio.create_task(_simulate_drawer("open"))
     else:
+        if drawer_state_open or drawer_open:
+            logger.info("Drawer open ignored — already open or movement pending")
+            return {"ok": True}
         drawer_open = True
         drawer_close = False
     logger.info("Drawer open pressed")
@@ -726,9 +728,12 @@ async def button_close():
     global drawer_open, drawer_close, drawer_task
     if DEV_SIMULATE:
         if drawer_task and not drawer_task.done():
-            drawer_task.cancel()
+            return {"ok": True}
         drawer_task = asyncio.create_task(_simulate_drawer("close"))
     else:
+        if drawer_state_closed or drawer_close:
+            logger.info("Drawer close ignored — already closed or movement pending")
+            return {"ok": True}
         drawer_close = True
         drawer_open = False
     logger.info("Drawer close pressed")
@@ -796,6 +801,10 @@ async def button_exit():
     global exit_button, sim_exit_pending
     exit_button = True
     logger.info("exit button pressed")
+    try:
+        await _kiosk_post("/exit-kiosk", {})
+    except Exception as e:
+        logger.warning("kiosk-control exit failed: %s", e)
     if DEV_SIMULATE:
         if sim_exit_pending:
             sim_exit_pending = False
@@ -834,6 +843,10 @@ async def button_exit_force():
     global force_exit
     force_exit = True
     logger.info("Force exit requested")
+    try:
+        await _kiosk_post("/exit-kiosk", {})
+    except Exception as e:
+        logger.warning("kiosk-control exit failed: %s", e)
     if DEV_SIMULATE:
         asyncio.create_task(_simulate_exit_confirmed())
     return {"ok": True}
@@ -845,6 +858,7 @@ async def exit_force_reset():
     return {"ok": True}
 
 @app.get("/button_status")
+@app.get("/button_status/")
 async def button_status():
     return {
         "run_requested": run_requested,
@@ -896,7 +910,7 @@ async def list_profiles():
     profile_dir = resolve_profile_dir()
     if not profile_dir.exists():
         return profiles
-    for path in profile_dir.glob("*.json"):
+    for path in profile_dir.rglob("*.json"):
         try:
             with path.open() as f:
                 data = json.load(f)
@@ -909,7 +923,7 @@ async def list_profiles():
             created_at = data.get("createdAt") or int(path.stat().st_ctime * 1000)
             modified_at = data.get("modifiedAt") or int(path.stat().st_mtime * 1000)
             profiles.append({
-                "id": path.name,
+                "id": str(path.relative_to(profile_dir)),
                 "name": data.get("name"),
                 "label": data.get("name"),
                 "createdAt": created_at,
@@ -920,7 +934,7 @@ async def list_profiles():
             created_at = int(path.stat().st_ctime * 1000)
             modified_at = int(path.stat().st_mtime * 1000)
             profiles.append({
-                "id": path.name,
+                "id": str(path.relative_to(profile_dir)),
                 "name": data.get("title", path.stem),
                 "label": data.get("title", path.stem),
                 "createdAt": created_at,
@@ -1207,8 +1221,6 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.warning("websocket failed") 
 
     logger.info ( "Websocket ended" )
-from aq_curve.main import results_to_json
-from aq_lib.plot_utils import generate_optics_plot
 
 # ---------------------------------------------------------------------------
 # WiFi — proxy to kiosk-control host service
@@ -1266,3 +1278,171 @@ async def wifi_forget(body: WifiForget):
         return await _kiosk_post("/wifi/forget", {"ssid": body.ssid})
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# OTA Update — manual approval flow
+# ---------------------------------------------------------------------------
+
+import base64
+
+WATCHTOWER_URL = os.getenv("WATCHTOWER_URL", "http://aquila-watchtower:8080")
+WATCHTOWER_TOKEN = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
+_OTA_GHCR_USER = os.getenv("GHCR_USERNAME", "")
+_OTA_GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
+_OTA_GHCR_REPO = os.getenv("GHCR_REPO", "acorngenetics/aquilla-main")
+_OTA_IMAGE_TAG = os.getenv("IMAGE_TAG", "")   # dev | pilot | prod — set by device.env
+_OTA_POLL_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL", "300"))  # seconds
+
+_update_available: bool = False
+_update_dismissed: bool = False
+_update_status: str = "idle"   # idle | checking | available | updating | error
+_update_error: str | None = None
+_update_last_checked: str | None = None
+_startup_image_digest: str | None = None
+
+
+async def _ghcr_bearer_token(user: str, token: str, repo: str) -> str | None:
+    """Exchange Basic credentials for a short-lived GHCR Bearer token."""
+    cred = base64.b64encode(f"{user}:{token}".encode()).decode()
+    owner = repo.split("/")[0]
+    name = "/".join(repo.split("/")[1:]) or repo
+    url = f"https://ghcr.io/token?service=ghcr.io&scope=repository:{owner}/{name}:pull"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(url, headers={"Authorization": f"Basic {cred}"})
+        if r.status_code == 200:
+            return r.json().get("token")
+    except Exception:
+        pass
+    return None
+
+
+async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> str | None:
+    """Return the manifest digest for a GHCR image tag without pulling it."""
+    bearer = await _ghcr_bearer_token(user, token, repo)
+    if bearer is None:
+        return None
+    owner = repo.split("/")[0]
+    name = "/".join(repo.split("/")[1:]) or repo
+    url = f"https://ghcr.io/v2/{owner}/{name}/manifests/{tag}"
+    headers = {
+        "Authorization": f"Bearer {bearer}",
+        "Accept": (
+            "application/vnd.oci.image.index.v1+json,"
+            "application/vnd.docker.distribution.manifest.list.v2+json,"
+            "application/vnd.docker.distribution.manifest.v2+json"
+        ),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.head(url, headers=headers, follow_redirects=True)
+        return r.headers.get("docker-content-digest")
+    except Exception:
+        return None
+
+
+async def _do_check_update() -> None:
+    global _update_available, _update_status, _update_error, _update_last_checked, _startup_image_digest
+    _update_status = "checking"
+    try:
+        if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
+            _update_status = "idle"
+            _update_error = "Registry credentials or IMAGE_TAG not configured"
+            return
+        latest = await _ghcr_manifest_digest(
+            _OTA_GHCR_REPO, _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN
+        )
+        _update_last_checked = datetime.utcnow().isoformat() + "Z"
+        if latest is None:
+            _update_status = "idle"
+            _update_error = "Registry unreachable or credentials invalid"
+            return
+        if _startup_image_digest is None:
+            _startup_image_digest = latest
+            _update_status = "idle"
+            _update_error = None
+            return
+        if latest != _startup_image_digest:
+            _update_available = True
+            _update_status = "available"
+        else:
+            _update_available = False
+            _update_status = "idle"
+        _update_error = None
+    except Exception as e:
+        _update_status = "error"
+        _update_error = str(e)
+
+
+@app.get("/update/status")
+async def get_update_status():
+    return {
+        "available": _update_available,
+        "dismissed": _update_dismissed,
+        "status": _update_status,
+        "error": _update_error,
+        "last_checked": _update_last_checked,
+    }
+
+
+@app.post("/update/check")
+async def trigger_update_check():
+    if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
+        return {"ok": False, "error": "Registry credentials or IMAGE_TAG not configured"}
+    asyncio.create_task(_do_check_update())
+    return {"ok": True, "message": "checking"}
+
+
+@app.post("/update/apply")
+async def apply_update():
+    global _update_status, _update_error
+    _update_status = "updating"
+    headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(f"{WATCHTOWER_URL}/v1/update", headers=headers)
+        if r.status_code == 200:
+            _update_status = "updating"
+            return {"ok": True, "message": "Update triggered — containers will restart shortly."}
+        _update_status = "error"
+        _update_error = f"Watchtower returned HTTP {r.status_code}"
+        return {"ok": False, "error": _update_error}
+    except Exception as e:
+        _update_status = "error"
+        _update_error = str(e)
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/update/dismiss")
+async def dismiss_update():
+    global _update_dismissed
+    _update_dismissed = True
+    return {"ok": True}
+
+
+@app.post("/update/reset")
+async def reset_update_state():
+    """Test/dev helper — resets all update state."""
+    global _update_available, _update_dismissed, _update_status, _update_error
+    global _update_last_checked, _startup_image_digest
+    _update_available = False
+    _update_dismissed = False
+    _update_status = "idle"
+    _update_error = None
+    _update_last_checked = None
+    _startup_image_digest = None
+    return {"ok": True}
+
+
+async def _background_update_poller() -> None:
+    """Poll GHCR every UPDATE_CHECK_INTERVAL seconds. Never pulls the image."""
+    while True:
+        if _OTA_GHCR_TOKEN and _OTA_IMAGE_TAG:
+            await _do_check_update()
+        await asyncio.sleep(_OTA_POLL_INTERVAL)
+
+
+@app.on_event("startup")
+async def start_background_update_poller() -> None:
+    asyncio.create_task(_background_update_poller())

@@ -414,9 +414,11 @@ function acknowledgeRunComplete() {
 // Connect to WebSocket backend
 const host = window.location.host;
 const wsUrl = `ws://${host}/ws`;
-const socket = new WebSocket( wsUrl ); // adjust URL if needed
 
-socket.onmessage = function(event) {
+let socket;
+let wsReconnectTimer = null;
+
+function wsHandleMessage(event) {
   try {
     const panel = JSON.parse(event.data);
     console.log("Elapsed secs:", panel.elapsed);
@@ -509,7 +511,7 @@ socket.onmessage = function(event) {
             targetPath = "/complete";
             console.log("COMPLETE PATH", targetPath);
         }
-        
+
         if (targetPath !== window.location.pathname){
             currentScreen = screen;
             window.location.href = targetPath;
@@ -526,19 +528,32 @@ socket.onmessage = function(event) {
   } catch (e) {
     console.error("Invalid panel data", e);
   }
-};
+}
 
-socket.onopen = function() {
-  console.log("WebSocket connection established.");
-};
+function connectWebSocket() {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
+  if (socket) {
+    socket.onclose = null;
+    socket.close();
+  }
+  socket = new WebSocket(wsUrl);
+  socket.onmessage = wsHandleMessage;
+  socket.onopen = function() {
+    console.log("WebSocket connection established.");
+  };
+  socket.onerror = function(error) {
+    console.error("WebSocket error:", error);
+  };
+  socket.onclose = function() {
+    console.warn("WebSocket connection closed. Reconnecting in 2s...");
+    wsReconnectTimer = setTimeout(connectWebSocket, 2000);
+  };
+}
 
-socket.onerror = function(error) {
-  console.error("WebSocket error:", error);
-};
-
-socket.onclose = function() {
-  console.warn("WebSocket connection closed.");
-};
+connectWebSocket();
 
 async function notifyRun(){
     if (runButton && runButton.disabled) {
@@ -568,6 +583,19 @@ async function notifyRun(){
     }
 
     setRunWarning("");
+
+    // Re-sync selected profile to backend immediately before run,
+    // in case the dropdown was pre-selected on load without a POST
+    // (e.g. after server restart or navigation).
+    try {
+        await fetch("/profile/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ profile })
+        });
+    } catch (err) {
+        console.error("Failed to sync profile before run:", err);
+    }
 
     try {
         const ret = await fetch("/button/run", {
@@ -672,28 +700,14 @@ async function notifyDrawerClose(){
 }
 
 async function notifyExit(){
-    // Step 1: Tell the backend the exit button was pressed (native flow).
+    // Tells the backend the exit button was pressed.
+    // The backend forwards the kill signal to the host kiosk-control service
+    // via _kiosk_post("/exit-kiosk"). The nginx proxy also handles
+    // /kiosk-control/ directly as a fallback for the Docker deployment.
     try {
         await fetch("/button/exit", { method: "POST" });
     } catch (err) {
         console.warn("notifyExit backend signal failed", err);
-    }
-
-    // Step 2: Call the host-side kiosk-control service via the nginx proxy.
-    // This works in the Docker deployment (/kiosk-control/ is proxied to
-    // host.docker.internal:9191 by nginx). In the native deployment this
-    // endpoint will 404, which is fine — the backend handles it above.
-    try {
-        const resp = await fetch("/kiosk-control/exit-kiosk", {
-            method: "POST",
-            signal: AbortSignal.timeout(5000),
-        });
-        if (!resp.ok) {
-            console.warn("kiosk-control exit returned", resp.status);
-        }
-    } catch (err) {
-        // Expected in native mode — kiosk-control proxy is not present.
-        console.info("kiosk-control not available (native mode or proxy missing)", err.message);
     }
 }
 

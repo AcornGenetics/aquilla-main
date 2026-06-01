@@ -124,14 +124,23 @@ def reset_stop_request() -> None:
     except requests.exceptions.RequestException as e:
         logger.exception("Error resetting stop request: %s", e)
 
+_stop_poll_failures = 0
+_STOP_POLL_FAILURE_LIMIT = 10
+
 def check_stop_request() -> bool:
+    global _stop_poll_failures
     url = f"{BACKEND_URL}/button_status/"
     try:
         ret = requests.get(url, timeout=5)
         ret.raise_for_status()
         data = ret.json()
+        _stop_poll_failures = 0
     except Exception as e:
-        logger.warning("Error polling stop request", e)
+        _stop_poll_failures += 1
+        logger.warning("Error polling stop request (%d/%d): %s", _stop_poll_failures, _STOP_POLL_FAILURE_LIMIT, e)
+        if _stop_poll_failures >= _STOP_POLL_FAILURE_LIMIT:
+            logger.error("Backend unreachable for %d consecutive polls — forcing stop", _stop_poll_failures)
+            return True
         return False
     return bool(data.get("stop_requested"))
 
@@ -199,7 +208,13 @@ def wait_for_button(include_run_complete_ack: bool = False):
         elif include_run_complete_ack and data.get("run_complete_ack"):
             logger.info("Run complete acknowledged")
             return data
-
+        elif data.get("stop_requested"):
+            logger.info("Stop requested during end wait — treating as run complete")
+            try:
+                requests.post(f"{BACKEND_URL}/stop/reset", timeout=5)
+            except Exception as e:
+                logger.warning("Error resetting stop request: %s", e)
+            return data
 
         time.sleep(0.5)
 

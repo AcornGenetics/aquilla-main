@@ -82,7 +82,11 @@ class Curve:
 
         position = well + dpos
 
+        # Intentionally uses 4 readings per cycle (indices 6–9 of each group of 10).
+        # The reference notebook uses 5; Aquila hardware outputs 4 valid LED-on readings.
         sub_data = [d for n, d in enumerate(dye_subdata) if ((n % 10) > 5)]
+        if not sub_data:
+            raise ValueError(f"No optics data found for dye '{dye}' in {logfilename!r} — wrong file type?")
         max_cycle = max([int(d[5]) for d in sub_data])
         y0 = [0] * max_cycle
         y1 = [0] * max_cycle

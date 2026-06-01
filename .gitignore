@@ -1,9 +1,15 @@
 logs/**/*.log
 logs/**/*.txt
 
-# Swap files. 
-.*.swp
+# Ruflo/swarm files
+.swarm/
+.hive/
+.hive-mind/
+ruvector.db
 
+# Swap files / editor backups
+.*.swp
+*~
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -233,6 +239,7 @@ ENV/
 logs/
 results/
 data/
+user/
 
 # Outputs
 *.csv
@@ -244,4 +251,9 @@ pcr_curve_tests/tmp/
 
 # Device-local config
 cmdline.txt
-config.txt
+
+# Ruflo / AI tool runtime
+ruvector.db
+.swarm/
+.claude/
+.claude-flow/

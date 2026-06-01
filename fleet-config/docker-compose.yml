@@ -10,6 +10,8 @@ services:
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
+      KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
+      WATCHTOWER_URL: "http://aquila-watchtower:8080"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
@@ -21,6 +23,8 @@ services:
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
       - "/dev/gpiomem:/dev/gpiomem"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     privileged: true
     restart: unless-stopped
     labels:
@@ -47,6 +51,7 @@ services:
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
       BACKEND_URL: "http://aquila-backend:8090"
+      KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
@@ -58,8 +63,12 @@ services:
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
       - "/dev/gpiomem:/dev/gpiomem"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     pid: host
     privileged: true
+    healthcheck:
+      disable: true
     depends_on:
       - backend
     restart: unless-stopped
@@ -81,6 +90,8 @@ services:
     container_name: aquila-ui
     ports:
       - "8080:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     restart: unless-stopped
@@ -108,11 +119,10 @@ services:
       WATCHTOWER_HTTP_API_UPDATE: "true"
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_CONFIG_FILE: "/config.json"
-    command: --label-enable --http-api-update --http-api-periodic-polls --cleanup --api-version 1.54 --interval 300
+    command: --label-enable --http-api-update --cleanup --api-version 1.54 --interval 300
     restart: unless-stopped
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-
