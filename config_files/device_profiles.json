@@ -1,0 +1,23 @@
+{
+    "sn01": {
+        "profile_group": "all"
+    },
+    "sn02": {
+        "profile_group": "duke"
+    },
+    "sn03": {
+        "profile_group": "classic"
+    },
+    "sn04": {
+        "profile_group": "classic"
+    },
+    "sn05": {
+        "profile_group": "duke"
+    },
+    "sn06": {
+        "profile_group": "classic"
+    },
+    "sn07": {
+        "profile_group": "classic"
+    }
+}
