@@ -1538,17 +1538,15 @@ a:active {
 }
 
 .run-detail-pill--detected {
-  background-color: #fc6002;
+  background-color: #2f6e32;
 }
 
 .run-detail-pill--inconclusive {
-  background-color: #f2c97d;
-  color: #1f2937;
+  background-color: #f59e0b;
 }
 
 .run-detail-pill--not-detected {
-  background-color: #c2f282;
-  color: #1f2937;
+  background-color: #94a3b8;
 }
 
 .run-detail-kpis {

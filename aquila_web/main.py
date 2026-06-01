@@ -17,7 +17,7 @@ from aq_curve.analysis_service import AnalysisService
 logger = logging.getLogger( __name__ )
 logger.setLevel("WARNING")
 
-app = FastAPI(redirect_slashes=False)
+app = FastAPI()
 static_dir = Path(__file__).parent / "static"
 
 state_change_event = asyncio.Event()
@@ -858,7 +858,6 @@ async def exit_force_reset():
     return {"ok": True}
 
 @app.get("/button_status")
-@app.get("/button_status/")
 async def button_status():
     return {
         "run_requested": run_requested,
