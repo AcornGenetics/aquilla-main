@@ -287,6 +287,25 @@ a:active {
   transform: translateY(0);
 }
 
+.help-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+  border: 1.5px solid #f8fafc;
+}
+
 .help-content {
   max-width: 680px;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
