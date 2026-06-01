@@ -922,7 +922,7 @@ async def list_profiles():
             created_at = data.get("createdAt") or int(path.stat().st_ctime * 1000)
             modified_at = data.get("modifiedAt") or int(path.stat().st_mtime * 1000)
             profiles.append({
-                "id": path.name,
+                "id": str(path.relative_to(profile_dir)),
                 "name": data.get("name"),
                 "label": data.get("name"),
                 "createdAt": created_at,
@@ -933,7 +933,7 @@ async def list_profiles():
             created_at = int(path.stat().st_ctime * 1000)
             modified_at = int(path.stat().st_mtime * 1000)
             profiles.append({
-                "id": path.name,
+                "id": str(path.relative_to(profile_dir)),
                 "name": data.get("title", path.stem),
                 "label": data.get("title", path.stem),
                 "createdAt": created_at,
