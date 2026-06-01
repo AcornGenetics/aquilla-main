@@ -1330,7 +1330,10 @@ _update_dismissed: bool = False
 _update_status: str = "idle"   # idle | checking | available | updating | error
 _update_error: str | None = None
 _update_last_checked: str | None = None
-_startup_image_digest: str | None = None
+# Digest of the image actually running — injected at deploy time via RUNNING_IMAGE_DIGEST env var.
+# Falls back to the first GHCR poll result if not set (old behaviour).
+_startup_image_digest: str | None = os.getenv("RUNNING_IMAGE_DIGEST") or None
+_latest_ghcr_digest: str | None = None  # most recent digest fetched from GHCR
 
 
 async def _ghcr_bearer_token(user: str, token: str, repo: str) -> str | None:
@@ -1374,7 +1377,7 @@ async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> s
 
 
 async def _do_check_update() -> None:
-    global _update_available, _update_status, _update_error, _update_last_checked, _startup_image_digest
+    global _update_available, _update_status, _update_error, _update_last_checked, _startup_image_digest, _latest_ghcr_digest
     _update_status = "checking"
     try:
         if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
@@ -1389,6 +1392,7 @@ async def _do_check_update() -> None:
             _update_status = "idle"
             _update_error = "Registry unreachable or credentials invalid"
             return
+        _latest_ghcr_digest = latest
         if _startup_image_digest is None:
             _startup_image_digest = latest
             _update_status = "idle"
@@ -1427,7 +1431,7 @@ async def trigger_update_check():
 
 @app.post("/update/apply")
 async def apply_update():
-    global _update_status, _update_error
+    global _update_status, _update_error, _startup_image_digest, _update_available
     if current_item.screen == "running":
         return JSONResponse(
             status_code=409,
@@ -1439,6 +1443,11 @@ async def apply_update():
         async with httpx.AsyncClient(timeout=60.0) as client:
             r = await client.post(f"{WATCHTOWER_URL}/v1/update", headers=headers)
         if r.status_code == 200:
+            # Advance the baseline so the poller doesn't re-flag the same update
+            # after watchtower restarts the containers.
+            if _latest_ghcr_digest:
+                _startup_image_digest = _latest_ghcr_digest
+                _update_available = False
             _update_status = "updating"
             return {"ok": True, "message": "Update triggered — containers will restart shortly."}
         _update_status = "error"

@@ -12,6 +12,7 @@ services:
       CONFIG_DIR: "/opt/aquila/config"
       KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
       WATCHTOWER_URL: "http://aquila-watchtower:8080"
+      RUNNING_IMAGE_DIGEST: "${RUNNING_IMAGE_DIGEST:-}"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
