@@ -543,6 +543,17 @@ else
     echo "Warning: /boot/firmware/config.txt not found, skipping boot config update."
 fi
 
+# Ensure HDMI-2 force hotplug is set — prevents intermittent dark screen when
+# the display is slow to send its EDID during boot
+if [[ -f "/boot/firmware/config.txt" ]]; then
+    if ! grep -q "hdmi_force_hotplug:1=1" /boot/firmware/config.txt; then
+        echo "hdmi_force_hotplug:1=1" >> /boot/firmware/config.txt
+    fi
+fi
+
+run_test "hdmi_force_hotplug:1=1 in config.txt" \
+    "grep -q 'hdmi_force_hotplug:1=1' /boot/firmware/config.txt"
+
 if [[ ${#MEERSTETTER_XMLS[@]} -gt 0 ]]; then
     mkdir -p /opt/aquila/config/meerstetter
     for xml_name in "${MEERSTETTER_XMLS[@]}"; do
