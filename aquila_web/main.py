@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi import WebSocket
@@ -1428,6 +1428,11 @@ async def trigger_update_check():
 @app.post("/update/apply")
 async def apply_update():
     global _update_status, _update_error
+    if current_item.screen == "running":
+        return JSONResponse(
+            status_code=409,
+            content={"ok": False, "error": "Cannot update during an active run. Stop the run first."},
+        )
     _update_status = "updating"
     headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
     try:
