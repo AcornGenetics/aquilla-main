@@ -904,12 +904,40 @@ async def run_status_reset():
     logger.info("Run button reset, profile reset")
     return{"ok":True}
 
+def resolve_device_profiles() -> "set[str] | None":
+    import socket
+    hostname = os.getenv("DEVICE_HOSTNAME") or socket.gethostname()
+    device_profiles_path = BASE_DIR / "config_files" / "device_profiles.json"
+    profile_groups_path = BASE_DIR / "config_files" / "profile_groups.json"
+    try:
+        device_profiles = json.loads(device_profiles_path.read_text())
+    except Exception:
+        logger.warning("Could not load device_profiles.json; showing all profiles")
+        return None
+    device_entry = device_profiles.get(hostname)
+    if device_entry is None:
+        return None
+    try:
+        profile_groups = json.loads(profile_groups_path.read_text())
+    except Exception:
+        logger.warning("Could not load profile_groups.json; showing all profiles")
+        return None
+    group_name = device_entry.get("profile_group")
+    group_value = profile_groups.get(group_name)
+    if group_value is None:
+        return None
+    allowed = list(group_value)
+    allowed.extend(device_entry.get("extra_profiles", []))
+    return set(allowed)
+
+
 @app.get("/profiles")
 async def list_profiles():
     profiles = []
     profile_dir = resolve_profile_dir()
     if not profile_dir.exists():
         return profiles
+    allowed = resolve_device_profiles()
     for path in profile_dir.rglob("*.json"):
         try:
             with path.open() as f:
@@ -918,6 +946,9 @@ async def list_profiles():
                 continue
         except Exception as e:
             logger.info("Error processing %s"%(path))
+
+        if allowed is not None and "bundled" in path.parts and path.name not in allowed:
+            continue
 
         if "configuration" in data and "name" in data:
             created_at = data.get("createdAt") or int(path.stat().st_ctime * 1000)
