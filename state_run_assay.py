@@ -28,8 +28,8 @@ import aq_lib.state_requests as sr
 from aq_lib.motor_class import Axis, Drawer
 
 from aq_curve.main import results_to_json
-from fan_class import Fan
-from adc_class import OpticalRead
+from aq_lib.fan_class import Fan
+from aq_lib.adc_class import OpticalRead
 
 logging.config.dictConfig( LOGGING_CONFIG )
 logger = logging.getLogger( "aquila" )
