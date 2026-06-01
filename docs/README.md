@@ -16,29 +16,24 @@ A PCR run goes through these stages:
 
 ---
 
-## Quick start (on device)
+## Quick start (local development)
 
 ```bash
-# 1. On the Pi — bootstrap Tailscale
-curl -fsSL "https://raw.githubusercontent.com/AcornGenetics/aquilla-main/main/scripts/setup/tailscale_bootstrap.sh" -o /tmp/tailscale_bootstrap.sh
-sudo bash /tmp/tailscale_bootstrap.sh
+# 1. Install dependencies (Mac-safe — avoids Pi-only packages)
+pip install -r requirements-mac.txt
+pip install -r requirements-test.txt
 
-# 2. SSH in from your laptop via Tailscale, then run the main deployment script
-curl -fsSL "https://raw.githubusercontent.com/AcornGenetics/aquilla-main/main/deployment2.sh" -o /tmp/deployment2.sh
-sudo bash /tmp/deployment2.sh
+# 2. Set src_basedir to your local repo path in config.json and config.py
+#    (do not commit — both default to /opt/aquila for the Pi)
 
-# 3. Verify the deployment
-curl -fsSL "https://raw.githubusercontent.com/AcornGenetics/aquilla-main/main/deployment2_verify.sh" -o /tmp/deployment2_verify.sh
-sudo bash /tmp/deployment2_verify.sh
+# 3. Run the test suite
+pytest tests unit_tests -v -m "not hardware and not e2e"
 
-# Start/restart the stack manually
-sudo systemctl restart aquila-stack
-
-# View logs
-docker compose -f /opt/aquila/docker-compose.yml logs -f
+# 4. Start the app in simulation mode
+AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=3 uvicorn aquila_web.main:app --host 127.0.0.1 --port 8090
 ```
 
-The stack runs at `http://localhost:8080` (NGINX → FastAPI on 8090).
+Open `http://localhost:8090` in a browser. See `docs/onboarding/intern-onboarding.md` for full setup details including `src_basedir` configuration.
 
 ---
 

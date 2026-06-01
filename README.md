@@ -16,7 +16,8 @@ Aquila PCR system project.
 - `config_files/meerstetter/`: Meerstetter XML configs copied to `/opt/aquila/config/meerstetter`
 - `profiles/`: assay/profile JSON files
 - `logs/` and `data/`: results, logs, and run artifacts
-- `docs/`: internal documentation
+- `specs/`: spec-driven engineering — feature, backend, hardware, analysis, and testing specs
+- `docs/`: internal documentation (ADRs, debugging, onboarding, architecture)
 
 ## Key Backend Files
 - `aquila_web/main.py`: FastAPI app, API routes, simulation toggles
@@ -39,6 +40,37 @@ Aquila PCR system project.
 - On container start, bundled profiles are copied into `PROFILE_DIR` if it is empty.
 - Set `PROFILE_BUNDLE` (comma-separated filenames) to copy only specific bundled profiles; listed files are copied even if `PROFILE_DIR` already has other profiles, and existing filenames are not overwritten.
 - Or set `profile_bundle` in `config_files/profile_config.json` (mounted to `/opt/aquila/config/profile_config.json`) to control which bundled profiles are seeded on device.
+
+## Contributing
+
+### Spec-Driven Workflow
+
+**No code without a spec.** Before writing code, find or create a spec in `specs/`:
+
+```
+specs/
+  feature/    # User-facing features
+  backend/    # API endpoints, data models
+  hardware/   # Physical device behavior
+  frontend/   # Screen layouts, kiosk UX
+  analysis/   # Curve fitting, detection logic
+  testing/    # Test plans, coverage targets
+```
+
+See `specs/SPEC_WORKFLOW.md` for the full workflow.
+
+### GitHub Templates
+
+- **Issues**: use `.github/ISSUE_TEMPLATE/` — bug report, feature request, or hardware issue
+- **PRs**: link the relevant spec and complete the checklist in the PR template
+
+### PR Checklist (summary)
+- Spec file linked
+- New tests written; full suite passes (`pytest tests unit_tests -v`)
+- No secrets or `.env` files in diff
+- ADR written if an irreversible architectural decision was made
+
+---
 
 ## Testing
 
@@ -87,6 +119,8 @@ To update the version:
 
 | Version | Notes |
 |---------|-------|
+| V 1.2.4 | PCR curve parameter tuning. Auto-update paused during active runs. |
+| V 1.2.3 | PCR analysis improvements: baseline minimum, relative drop, result color updates. |
 | V 1.1.0 | Initial versioned release. Version shown in Help screen. Purple run-start dot removed from Run screen. |
 
 ## Runbook

@@ -53,26 +53,27 @@ def button_logic(state = "ready"):
             else:
                 pass
 
-#lfn = LogFileName()
-#path = lfn.get_results_json_filename()
-sr.change_screen("0")
-time.sleep(5)
-sr.change_screen("1")
-while True:
-    button_logic( state = "ready" ) 
-    sr.change_screen("2")
-    time.sleep(1)
-    sr.timer_control( status = "start" )
+if __name__ == "__main__":
+    #lfn = LogFileName()
+    #path = lfn.get_results_json_filename()
+    sr.change_screen("0")
     time.sleep(5)
-    sr.timer_control( "stop" )
-    time.sleep(2)
-    sr.timer_control( "reset" )
-    #path = "logs/results/results.json"
-    path = "logs/results/results_2.json"
-    sr.update_results_path(path)
-    time.sleep(1)
-    sr.change_screen("3")
-    button_logic( state = "end" ) 
+    sr.change_screen("1")
+    while True:
+        button_logic( state = "ready" )
+        sr.change_screen("2")
+        time.sleep(1)
+        sr.timer_control( status = "start" )
+        time.sleep(5)
+        sr.timer_control( "stop" )
+        time.sleep(2)
+        sr.timer_control( "reset" )
+        #path = "logs/results/results.json"
+        path = "logs/results/results_2.json"
+        sr.update_results_path(path)
+        time.sleep(1)
+        sr.change_screen("3")
+        button_logic( state = "end" )
 
 
 

@@ -17,6 +17,7 @@ def reset_state(client):
     client.post("/exit/force/reset")
     client.post("/run/complete/ack/reset")
     client.post("/drawer_status/reset")
+    client.post("/drawer/state", json={"open": False, "closed": False})
 
 
 @pytest.fixture
