@@ -355,7 +355,7 @@
           </div>
         `;
       } else if (data.status === "updating") {
-        area.innerHTML = '<p style="font-size:15px;color:#1a1c1c;">Downloading update… the device will restart automatically when complete.</p>';
+        _showUpdateOverlay();
       } else if (data.status === "error") {
         area.innerHTML = `
           <p style="color:#dc2626;font-size:15px;">Could not check for updates: ${_escHtml(data.error || "unknown error")}</p>
@@ -370,23 +370,56 @@
       }
     }
 
+    function _showUpdateOverlay() {
+      let overlay = document.getElementById("update-overlay");
+      if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "update-overlay";
+        overlay.style.cssText = [
+          "position:fixed","top:0","left:0","width:100%","height:100%",
+          "background:rgba(255,255,255,0.97)","z-index:9999",
+          "display:flex","flex-direction:column","align-items:center","justify-content:center",
+          "gap:16px"
+        ].join(";");
+        overlay.innerHTML = `
+          <p style="font-size:20px;font-weight:700;color:#1a1c1c;margin:0;">Applying update…</p>
+          <p style="font-size:15px;color:#6b7280;margin:0;">Please wait. Do not power off the device.</p>
+          <div style="width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:var(--icon-dark-green);border-radius:50%;animation:spin 1s linear infinite;"></div>
+        `;
+        if (!document.getElementById("update-spin-style")) {
+          const style = document.createElement("style");
+          style.id = "update-spin-style";
+          style.textContent = "@keyframes spin{to{transform:rotate(360deg)}}";
+          document.head.appendChild(style);
+        }
+        document.body.appendChild(overlay);
+      }
+    }
+
+    function _hideUpdateOverlay() {
+      const overlay = document.getElementById("update-overlay");
+      if (overlay) overlay.remove();
+    }
+
     async function applyUpdate() {
       const btn = document.getElementById("update-now-btn");
       if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
-      const area = document.getElementById("update-status-area");
+      _showUpdateOverlay();
+      document.querySelectorAll(".help-badge").forEach(b => b.remove());
       const r = await fetch("/update/apply", { method: "POST" }).catch(() => null);
       const d = r ? await r.json().catch(() => ({})) : {};
-      if (d.ok) {
-        area.innerHTML = '<p style="font-size:15px;color:#1a1c1c;">Downloading update… please wait.</p>';
-        document.querySelectorAll(".help-badge").forEach(b => b.remove());
+      if (d.ok || r === null) {
         _pollForUpdateComplete(0);
       } else {
-        area.innerHTML = `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(d.error || "unknown error")}</p>`;
+        _hideUpdateOverlay();
+        document.getElementById("update-status-area").innerHTML =
+          `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(d.error || "unknown error")}</p>`;
       }
     }
 
     function _pollForUpdateComplete(attempt) {
-      if (attempt > 40) {
+      if (attempt > 60) {
+        _hideUpdateOverlay();
         document.getElementById("update-status-area").innerHTML =
           '<p style="color:#6b7280;font-size:15px;">Update is taking longer than expected. Check back shortly.</p>';
         return;
@@ -394,16 +427,22 @@
       setTimeout(async () => {
         const r = await fetch("/update/status").catch(() => null);
         const data = r ? await r.json().catch(() => null) : null;
+        // Retry on network errors (backend restarting) or while still updating
         if (!data || data.status === "updating" || data.available) {
           _pollForUpdateComplete(attempt + 1);
           return;
         }
+        _hideUpdateOverlay();
         const area = document.getElementById("update-status-area");
         const dot = document.getElementById("updates-tab-dot");
         if (dot) dot.style.display = "none";
+        const checkedAt = data.last_checked
+          ? data.last_checked.replace("T", " ").replace("Z", " UTC")
+          : "";
         area.innerHTML = `
-          <p style="font-size:18px;font-weight:600;color:#16a34a;margin:0 0 8px;">✓ Update complete</p>
-          <p style="font-size:14px;color:#6b7280;">The device is running the latest software.</p>
+          <p style="font-size:20px;font-weight:700;color:#16a34a;margin:0 0 8px;">✓ Update complete</p>
+          <p style="font-size:15px;color:#1a1c1c;margin:0 0 6px;">The device is running the latest software.</p>
+          ${checkedAt ? `<p style="font-size:12px;color:#6b7280;margin:0;">Verified: ${_escHtml(checkedAt)}</p>` : ""}
         `;
       }, 3000);
     }
