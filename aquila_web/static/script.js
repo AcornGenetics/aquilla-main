@@ -185,6 +185,33 @@ const completeSection = document.getElementById("complete-section");
 const normalizedPath = window.location.pathname.replace(/\/$/, "");
 const isDashboard = normalizedPath === "/run" || Boolean(readySection);
 
+function updateStartHeader(screen) {
+  const summary = document.getElementById("run-start-summary");
+  if (!summary) {
+    return;
+  }
+
+  const isActive = screen === "running" || screen === "complete";
+  if (isActive) {
+    const select = document.getElementById("mySelect");
+    const selectedOption = select && select.selectedOptions ? select.selectedOptions[0] : null;
+    const profileText = selectedOption ? selectedOption.textContent.trim() : "";
+    const runName = runNameInput ? runNameInput.value.trim() : "";
+
+    const profileEl = document.getElementById("run-start-profile");
+    const runNameEl = document.getElementById("run-start-runname");
+    if (profileEl) {
+      profileEl.textContent = profileText;
+    }
+    if (runNameEl) {
+      runNameEl.textContent = runName;
+    }
+    summary.classList.remove("is-hidden");
+  } else {
+    summary.classList.add("is-hidden");
+  }
+}
+
 function updateDashboardSections(screen) {
   if (!isDashboard) {
     return false;
@@ -204,6 +231,8 @@ function updateDashboardSections(screen) {
   }
 
   currentScreen = screen;
+
+  updateStartHeader(screen);
 
   const sections = [
     { key: "ready", element: readySection },
