@@ -416,7 +416,6 @@ async def _simulate_run(profile_name: str) -> None:
     while not run_complete_ack:
         await asyncio.sleep(0.5)
     run_complete_ack = False
-    current_tube_names = DEFAULT_TUBE_NAMES[:]
     current_item.screen = "ready"
     state_change_event.set()
     state_change_event.clear()
@@ -451,8 +450,6 @@ async def change_screen():
 async def change_screen(state: Item ):
     logger.info ( "Change_screen" )
     global current_item, start_time, current_tube_names
-    if state.screen == "ready" and current_item.screen == "complete":
-        current_tube_names = DEFAULT_TUBE_NAMES[:]
     current_item = state
     #start_time = datetime.now()
     state_change_event.set()
@@ -531,9 +528,10 @@ async def set_path(payload: ResultPath):
 
 @app.post("/results/clear")
 async def clear_results():
-    global results_path, results_cleared
+    global results_path, results_cleared, current_tube_names
     results_path = None
     results_cleared = True
+    current_tube_names = DEFAULT_TUBE_NAMES[:]
     return {"ok": True}
 
 @app.post("/run/complete/ack")
@@ -1478,6 +1476,14 @@ async def apply_update():
                 _startup_image_digest_ui = _latest_ghcr_digest_ui
             _update_available = False
             _update_status = "updating"
+            # If containers don't restart (nothing to update), the in-memory status
+            # would stay "updating" until the next 5-min poller tick. Schedule a
+            # check after 3 minutes so the UI gets a timely resolution either way.
+            async def _deferred_status_reset() -> None:
+                await asyncio.sleep(180)
+                if _update_status == "updating":
+                    await _do_check_update()
+            asyncio.create_task(_deferred_status_reset())
             return {"ok": True, "message": "Update triggered — containers will restart shortly."}
         _update_status = "error"
         _update_error = f"Watchtower returned HTTP {r.status_code}"

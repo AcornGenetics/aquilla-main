@@ -279,7 +279,7 @@
 
         <!-- Footer -->
         <div class="help-footer" style="padding-bottom:16px;">
-          <span class="help-footer__meta" id="help-version-info">V 1.2.5.4</span>
+          <span class="help-footer__meta" id="help-version-info">V 1.2.5.6</span>
           <button class="help-exit-btn" onclick="notifyExitForce()">Exit GUI</button>
         </div>
 
@@ -389,7 +389,7 @@
           "gap:16px"
         ].join(";");
         overlay.innerHTML = `
-          <p style="font-size:20px;font-weight:700;color:#1a1c1c;margin:0;">Applying update…</p>
+          <p id="update-overlay-label" style="font-size:20px;font-weight:700;color:#1a1c1c;margin:0;">Applying update…</p>
           <p style="font-size:15px;color:#6b7280;margin:0;">Please wait. Do not power off the device.</p>
           <div style="width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:var(--icon-dark-green);border-radius:50%;animation:spin 1s linear infinite;"></div>
         `;
@@ -414,29 +414,49 @@
       _showUpdateOverlay();
       document.querySelectorAll(".help-badge").forEach(b => b.remove());
       const r = await fetch("/update/apply", { method: "POST" }).catch(() => null);
-      const d = r ? await r.json().catch(() => ({})) : {};
-      if (d.ok || r === null) {
-        _pollForUpdateComplete(0);
+      // Use null sentinel to distinguish parse failure from server-sent ok:false.
+      // A truncated/missing body means the container restarted mid-response —
+      // Watchtower already started the update, so always poll.
+      const d = r ? await r.json().catch(() => null) : null;
+      if (d && d.ok === false && d.error) {
+        // Definitive server rejection (e.g. "active run in progress") — still poll
+        // briefly in case Watchtower fired anyway before the response arrived.
+        _pollForUpdateComplete(0, d.error);
       } else {
-        _hideUpdateOverlay();
-        document.getElementById("update-status-area").innerHTML =
-          `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(d.error || "unknown error")}</p>`;
+        _pollForUpdateComplete(0, null);
       }
     }
 
-    function _pollForUpdateComplete(attempt) {
-      if (attempt > 60) {
+    function _pollForUpdateComplete(attempt, fallbackError) {
+      // Hard cap at 200 attempts (~10 min). Keep the overlay up the whole time so
+      // the screen never goes back to normal until we have a definitive result.
+      if (attempt > 200) {
         _hideUpdateOverlay();
-        document.getElementById("update-status-area").innerHTML =
-          '<p style="color:#6b7280;font-size:15px;">Update is taking longer than expected. Check back shortly.</p>';
+        const msg = fallbackError
+          ? `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(fallbackError)}</p>`
+          : '<p style="color:#6b7280;font-size:15px;">Update timed out. Please check the device and try again.</p>';
+        document.getElementById("update-status-area").innerHTML = msg;
         return;
+      }
+      // After 3 min, change the overlay label so the user knows we're still waiting
+      if (attempt === 60) {
+        const lbl = document.getElementById("update-overlay-label");
+        if (lbl) lbl.textContent = "Still updating, please wait…";
       }
       setTimeout(async () => {
         const r = await fetch("/update/status").catch(() => null);
         const data = r ? await r.json().catch(() => null) : null;
         // Retry on network errors (backend restarting) or while still updating
         if (!data || data.status === "updating" || data.available) {
-          _pollForUpdateComplete(attempt + 1);
+          _pollForUpdateComplete(attempt + 1, fallbackError);
+          return;
+        }
+        // If the server reports an error and no update occurred, surface the failure now
+        if (data.status === "error") {
+          _hideUpdateOverlay();
+          const errMsg = fallbackError || data.error || "unknown error";
+          document.getElementById("update-status-area").innerHTML =
+            `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(errMsg)}</p>`;
           return;
         }
         _hideUpdateOverlay();
