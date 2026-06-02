@@ -13,11 +13,13 @@ services:
       KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
       WATCHTOWER_URL: "http://aquila-watchtower:8080"
       RUNNING_IMAGE_DIGEST: "${RUNNING_IMAGE_DIGEST:-}"
+      RUNNING_IMAGE_DIGEST_UI: "${RUNNING_IMAGE_DIGEST_UI:-}"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
       - /opt/aquila/profiles:/opt/aquila/profiles
       - /opt/aquila/config:/opt/aquila/config
+      - /opt/fleet/.env:/opt/fleet/.env
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
       - "/dev/i2c-1:/dev/i2c-1"

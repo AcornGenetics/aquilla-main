@@ -1321,7 +1321,9 @@ WATCHTOWER_URL = os.getenv("WATCHTOWER_URL", "http://aquila-watchtower:8080")
 WATCHTOWER_TOKEN = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
 _OTA_GHCR_USER = os.getenv("GHCR_USERNAME", "")
 _OTA_GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
-_OTA_GHCR_REPO = os.getenv("GHCR_REPO", "acorngenetics/aquilla-main")
+_OTA_GHCR_BASE = os.getenv("GHCR_REPO", "acorngenetics/aquilla-main")
+_OTA_GHCR_REPO_API = _OTA_GHCR_BASE + "-api"
+_OTA_GHCR_REPO_UI  = _OTA_GHCR_BASE + "-ui"
 _OTA_IMAGE_TAG = os.getenv("IMAGE_TAG", "")   # dev | pilot | prod — set by device.env
 _OTA_POLL_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL", "300"))  # seconds
 
@@ -1330,10 +1332,12 @@ _update_dismissed: bool = False
 _update_status: str = "idle"   # idle | checking | available | updating | error
 _update_error: str | None = None
 _update_last_checked: str | None = None
-# Digest of the image actually running — injected at deploy time via RUNNING_IMAGE_DIGEST env var.
-# Falls back to the first GHCR poll result if not set (old behaviour).
+# Digests of the images actually running — injected at deploy time via env vars.
+# Fall back to the first GHCR poll result if not set.
 _startup_image_digest: str | None = os.getenv("RUNNING_IMAGE_DIGEST") or None
-_latest_ghcr_digest: str | None = None  # most recent digest fetched from GHCR
+_startup_image_digest_ui: str | None = os.getenv("RUNNING_IMAGE_DIGEST_UI") or None
+_latest_ghcr_digest: str | None = None
+_latest_ghcr_digest_ui: str | None = None
 
 
 async def _ghcr_bearer_token(user: str, token: str, repo: str) -> str | None:
@@ -1377,28 +1381,34 @@ async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> s
 
 
 async def _do_check_update() -> None:
-    global _update_available, _update_status, _update_error, _update_last_checked, _startup_image_digest, _latest_ghcr_digest
+    global _update_available, _update_status, _update_error, _update_last_checked
+    global _startup_image_digest, _startup_image_digest_ui, _latest_ghcr_digest, _latest_ghcr_digest_ui
     _update_status = "checking"
     try:
         if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
             _update_status = "idle"
             _update_error = "Registry credentials or IMAGE_TAG not configured"
             return
-        latest = await _ghcr_manifest_digest(
-            _OTA_GHCR_REPO, _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN
+        latest_api, latest_ui = await asyncio.gather(
+            _ghcr_manifest_digest(_OTA_GHCR_REPO_API, _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN),
+            _ghcr_manifest_digest(_OTA_GHCR_REPO_UI,  _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN),
         )
         _update_last_checked = datetime.utcnow().isoformat() + "Z"
-        if latest is None:
+        if latest_api is None and latest_ui is None:
             _update_status = "idle"
             _update_error = "Registry unreachable or credentials invalid"
             return
-        _latest_ghcr_digest = latest
+        if latest_api is not None:
+            _latest_ghcr_digest = latest_api
+        if latest_ui is not None:
+            _latest_ghcr_digest_ui = latest_ui
         if _startup_image_digest is None:
-            _startup_image_digest = latest
-            _update_status = "idle"
-            _update_error = None
-            return
-        if latest != _startup_image_digest:
+            _startup_image_digest = latest_api
+        if _startup_image_digest_ui is None:
+            _startup_image_digest_ui = latest_ui
+        api_changed = latest_api is not None and latest_api != _startup_image_digest
+        ui_changed  = latest_ui  is not None and latest_ui  != _startup_image_digest_ui
+        if api_changed or ui_changed:
             _update_available = True
             _update_status = "available"
         else:
@@ -1431,7 +1441,7 @@ async def trigger_update_check():
 
 @app.post("/update/apply")
 async def apply_update():
-    global _update_status, _update_error, _startup_image_digest, _update_available
+    global _update_status, _update_error, _startup_image_digest, _startup_image_digest_ui, _update_available
     if current_item.screen == "running":
         return JSONResponse(
             status_code=409,
@@ -1440,14 +1450,33 @@ async def apply_update():
     _update_status = "updating"
     headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
     try:
+        # Write new digests to /opt/fleet/.env before triggering Watchtower so the
+        # restarted container picks up the correct baseline even if we are killed mid-restart.
+        _fleet_env = "/opt/fleet/.env"
+        if (_latest_ghcr_digest or _latest_ghcr_digest_ui) and os.path.exists(_fleet_env):
+            try:
+                with open(_fleet_env, "r") as f:
+                    lines = f.readlines()
+                updated = []
+                for line in lines:
+                    if line.startswith("RUNNING_IMAGE_DIGEST=") and not line.startswith("RUNNING_IMAGE_DIGEST_UI=") and _latest_ghcr_digest:
+                        updated.append(f"RUNNING_IMAGE_DIGEST={_latest_ghcr_digest}\n")
+                    elif line.startswith("RUNNING_IMAGE_DIGEST_UI=") and _latest_ghcr_digest_ui:
+                        updated.append(f"RUNNING_IMAGE_DIGEST_UI={_latest_ghcr_digest_ui}\n")
+                    else:
+                        updated.append(line)
+                with open(_fleet_env, "w") as f:
+                    f.writelines(updated)
+            except OSError:
+                pass
         async with httpx.AsyncClient(timeout=60.0) as client:
             r = await client.post(f"{WATCHTOWER_URL}/v1/update", headers=headers)
         if r.status_code == 200:
-            # Advance the baseline so the poller doesn't re-flag the same update
-            # after watchtower restarts the containers.
             if _latest_ghcr_digest:
                 _startup_image_digest = _latest_ghcr_digest
-                _update_available = False
+            if _latest_ghcr_digest_ui:
+                _startup_image_digest_ui = _latest_ghcr_digest_ui
+            _update_available = False
             _update_status = "updating"
             return {"ok": True, "message": "Update triggered — containers will restart shortly."}
         _update_status = "error"
@@ -1470,13 +1499,14 @@ async def dismiss_update():
 async def reset_update_state():
     """Test/dev helper — resets all update state."""
     global _update_available, _update_dismissed, _update_status, _update_error
-    global _update_last_checked, _startup_image_digest
+    global _update_last_checked, _startup_image_digest, _startup_image_digest_ui
     _update_available = False
     _update_dismissed = False
     _update_status = "idle"
     _update_error = None
     _update_last_checked = None
     _startup_image_digest = None
+    _startup_image_digest_ui = None
     return {"ok": True}
 
 
