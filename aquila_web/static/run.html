@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Run</title>
-  <link rel="stylesheet" href="static/styles.css?v=212" />
+  <link rel="stylesheet" href="static/styles.css?v=217" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -140,10 +140,15 @@
           <p>Done!</p>
         </div>
       </div>
+      <div class="run-modal is-hidden" id="run-stopping-modal" role="alertdialog" aria-live="assertive">
+        <div class="run-modal__card run-modal__card--stopping">
+          <p>Stopping Run…</p>
+        </div>
+      </div>
     </main>
   </div>
   <script src="static/nav.js?v=1"></script>
-  <script src="static/script.js?v=66"></script>
+  <script src="static/script.js?v=67"></script>
   <script src="static/keyboard.js?v=14"></script>
 </body>
 </html>

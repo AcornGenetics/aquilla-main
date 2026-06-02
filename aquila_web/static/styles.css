@@ -875,6 +875,17 @@ a:active {
   color: #111827;
 }
 
+.run-modal__card--stopping {
+  background-color: var(--icon-white);
+  border: 1px solid #b91c1c;
+  color: #b91c1c;
+}
+
+.run-modal__card--stopping p {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
 .run-modal__close {
   position: absolute;
   top: 14px;
