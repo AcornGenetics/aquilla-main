@@ -591,25 +591,10 @@ RUNNING_IMAGE_DIGEST=${RUNNING_IMAGE_DIGEST:-}
 RUNNING_IMAGE_DIGEST_UI=${RUNNING_IMAGE_DIGEST_UI:-}
 EOF
 
-cat > /opt/fleet/update.sh <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-curl -fsSL \\
-    -H "Authorization: token ${GHCR_TOKEN}" \\
-    "https://raw.githubusercontent.com/${GHCR_REPO}/main/fleet-config/docker-compose.yml" \\
-    -o /opt/fleet/docker-compose.yml
-docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml pull
-# Update running digests in .env so OTA check baseline stays current after manual updates
-_DIGEST=\$(docker inspect --format='{{index .RepoDigests 0}}' \\
-    "ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG}" 2>/dev/null | awk -F@ '{print \$2}')
-_DIGEST_UI=\$(docker inspect --format='{{index .RepoDigests 0}}' \\
-    "ghcr.io/${GHCR_REPO}-ui:${IMAGE_TAG}" 2>/dev/null | awk -F@ '{print \$2}')
-sed -i "s|^RUNNING_IMAGE_DIGEST=.*|RUNNING_IMAGE_DIGEST=\${_DIGEST:-}|" /opt/fleet/.env
-sed -i "s|^RUNNING_IMAGE_DIGEST_UI=.*|RUNNING_IMAGE_DIGEST_UI=\${_DIGEST_UI:-}|" /opt/fleet/.env
-docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml up -d
-# Ensure required host directories exist after every update
-mkdir -p /opt/aquila/tests
-EOF
+curl -fsSL \
+    -H "Authorization: token ${GHCR_TOKEN}" \
+    "https://raw.githubusercontent.com/${GHCR_REPO}/main/scripts/deploy/fleet-update.sh" \
+    -o /opt/fleet/update.sh
 chmod +x /opt/fleet/update.sh
 
 run_test "docker-compose.yml downloaded"   "test -f /opt/fleet/docker-compose.yml"
