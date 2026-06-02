@@ -272,7 +272,7 @@
 
         <!-- Footer -->
         <div class="help-footer" style="padding-bottom:16px;">
-          <span class="help-footer__meta" id="help-version-info">V 1.2.5.5.1</span>
+          <span class="help-footer__meta" id="help-version-info">V 1.2.5.5.2</span>
           <button class="help-exit-btn" onclick="notifyExitForce()">Exit GUI</button>
         </div>
 
@@ -377,11 +377,35 @@
       const r = await fetch("/update/apply", { method: "POST" }).catch(() => null);
       const d = r ? await r.json().catch(() => ({})) : {};
       if (d.ok) {
-        area.innerHTML = '<p style="font-size:15px;color:#1a1c1c;">Downloading update… the device will restart automatically when complete.</p>';
+        area.innerHTML = '<p style="font-size:15px;color:#1a1c1c;">Downloading update… please wait.</p>';
         document.querySelectorAll(".help-badge").forEach(b => b.remove());
+        _pollForUpdateComplete(0);
       } else {
         area.innerHTML = `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(d.error || "unknown error")}</p>`;
       }
+    }
+
+    function _pollForUpdateComplete(attempt) {
+      if (attempt > 40) {
+        document.getElementById("update-status-area").innerHTML =
+          '<p style="color:#6b7280;font-size:15px;">Update is taking longer than expected. Check back shortly.</p>';
+        return;
+      }
+      setTimeout(async () => {
+        const r = await fetch("/update/status").catch(() => null);
+        const data = r ? await r.json().catch(() => null) : null;
+        if (!data || data.status === "updating" || data.available) {
+          _pollForUpdateComplete(attempt + 1);
+          return;
+        }
+        const area = document.getElementById("update-status-area");
+        const dot = document.getElementById("updates-tab-dot");
+        if (dot) dot.style.display = "none";
+        area.innerHTML = `
+          <p style="font-size:18px;font-weight:600;color:#16a34a;margin:0 0 8px;">✓ Update complete</p>
+          <p style="font-size:14px;color:#6b7280;">The device is running the latest software.</p>
+        `;
+      }, 3000);
     }
 
     async function dismissUpdate() {

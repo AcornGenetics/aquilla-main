@@ -1450,11 +1450,28 @@ async def apply_update():
     _update_status = "updating"
     headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
     try:
+        # Write new digests to /opt/fleet/.env before triggering Watchtower so the
+        # restarted container picks up the correct baseline even if we are killed mid-restart.
+        _fleet_env = "/opt/fleet/.env"
+        if (_latest_ghcr_digest or _latest_ghcr_digest_ui) and os.path.exists(_fleet_env):
+            try:
+                with open(_fleet_env, "r") as f:
+                    lines = f.readlines()
+                updated = []
+                for line in lines:
+                    if line.startswith("RUNNING_IMAGE_DIGEST=") and not line.startswith("RUNNING_IMAGE_DIGEST_UI=") and _latest_ghcr_digest:
+                        updated.append(f"RUNNING_IMAGE_DIGEST={_latest_ghcr_digest}\n")
+                    elif line.startswith("RUNNING_IMAGE_DIGEST_UI=") and _latest_ghcr_digest_ui:
+                        updated.append(f"RUNNING_IMAGE_DIGEST_UI={_latest_ghcr_digest_ui}\n")
+                    else:
+                        updated.append(line)
+                with open(_fleet_env, "w") as f:
+                    f.writelines(updated)
+            except OSError:
+                pass
         async with httpx.AsyncClient(timeout=60.0) as client:
             r = await client.post(f"{WATCHTOWER_URL}/v1/update", headers=headers)
         if r.status_code == 200:
-            # Advance baselines so the poller doesn't re-flag the same update
-            # after watchtower restarts the containers.
             if _latest_ghcr_digest:
                 _startup_image_digest = _latest_ghcr_digest
             if _latest_ghcr_digest_ui:
