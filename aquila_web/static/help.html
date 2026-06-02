@@ -182,10 +182,17 @@
               <p>Use <strong>Open Drawer</strong> and <strong>Close Drawer</strong> to insert or remove tubes. The drawer must be closed before a run can begin.</p>
               <h3>Results</h3>
               <ul>
-                <li><strong>Detected (red/orange)</strong> — target signal successfully amplified.</li>
+                <li><strong>Detected (red/orange)</strong> — target is present in sample.</li>
                 <li><strong>Inconclusive (yellow)</strong> — signal present but borderline.</li>
-                <li><strong>Not Detected (green)</strong> — no amplification observed.</li>
+                <li><strong>Undetected (green)</strong> — no target is present in sample.</li>
               </ul>
+              <h3>If a Result Is Inconclusive</h3>
+              <p>An inconclusive result means the amplification curve could not be confidently classified as either Detected or Undetected. This may occur due to weak amplification, irregular curve behavior, low signal strength, or borderline threshold crossing. When that happens:</p>
+              <ol>
+                <li>Review the amplification curves in history for irregular behavior or weak amplification.</li>
+                <li>Refer to the analysis help documentation for additional interpretation guidance.</li>
+                <li>If the result is still inconclusive, repeat the test.</li>
+              </ol>
             </div>
 
             <!-- History -->
@@ -272,7 +279,7 @@
 
         <!-- Footer -->
         <div class="help-footer" style="padding-bottom:16px;">
-          <span class="help-footer__meta" id="help-version-info">V 1.2.5.5.4</span>
+          <span class="help-footer__meta" id="help-version-info">V 1.2.5.4</span>
           <button class="help-exit-btn" onclick="notifyExitForce()">Exit GUI</button>
         </div>
 
