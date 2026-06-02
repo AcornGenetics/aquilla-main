@@ -74,8 +74,6 @@ Reference the state definitions in: `aquila_web/static/[state-config-file]`
 - No hover states (touch-only)
 - No text input from virtual keyboard unless explicitly required
 - Screen must remain readable at [distance from device]
-- Profile name listed in bold above run name
-- Profile name aligned with Ready status
 
 ---
 
