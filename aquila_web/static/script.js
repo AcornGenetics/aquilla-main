@@ -474,11 +474,6 @@ function wsHandleMessage(event) {
           if (screen === "ready" && previousScreen === "running" && !runDoneAcknowledged) {
             resetResultsUI("Results unavailable");
           }
-          if (screen === "ready" && previousScreen === "complete") {
-            tubeNames = DEFAULT_TUBE_NAMES.slice();
-            updateTubeLabels();
-            try { localStorage.removeItem(TUBE_NAME_KEY); } catch (e) {}
-          }
         }
         if (screen === "complete" && !runDoneAcknowledged) {
           showRunCompleteModal();
