@@ -1382,7 +1382,7 @@ async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> s
 
 async def _do_check_update() -> None:
     global _update_available, _update_status, _update_error, _update_last_checked
-    global _startup_image_digest, _latest_ghcr_digest, _latest_ghcr_digest_ui
+    global _startup_image_digest, _startup_image_digest_ui, _latest_ghcr_digest, _latest_ghcr_digest_ui
     _update_status = "checking"
     try:
         if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
@@ -1406,10 +1406,6 @@ async def _do_check_update() -> None:
             _startup_image_digest = latest_api
         if _startup_image_digest_ui is None:
             _startup_image_digest_ui = latest_ui
-        if _startup_image_digest is None and _startup_image_digest_ui is None:
-            _update_status = "idle"
-            _update_error = None
-            return
         api_changed = latest_api is not None and latest_api != _startup_image_digest
         ui_changed  = latest_ui  is not None and latest_ui  != _startup_image_digest_ui
         if api_changed or ui_changed:
@@ -1486,13 +1482,14 @@ async def dismiss_update():
 async def reset_update_state():
     """Test/dev helper — resets all update state."""
     global _update_available, _update_dismissed, _update_status, _update_error
-    global _update_last_checked, _startup_image_digest
+    global _update_last_checked, _startup_image_digest, _startup_image_digest_ui
     _update_available = False
     _update_dismissed = False
     _update_status = "idle"
     _update_error = None
     _update_last_checked = None
     _startup_image_digest = None
+    _startup_image_digest_ui = None
     return {"ok": True}
 
 

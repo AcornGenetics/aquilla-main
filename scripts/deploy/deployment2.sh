@@ -575,17 +575,20 @@ curl -fsSL \
 
 docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml pull
 
-# Capture the digest of the image just pulled so OTA check can compare against it
+# Capture digests of the images just pulled so OTA check can compare against them
 RUNNING_IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' \
     "ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG}" 2>/dev/null | awk -F@ '{print $2}')
+RUNNING_IMAGE_DIGEST_UI=$(docker inspect --format='{{index .RepoDigests 0}}' \
+    "ghcr.io/${GHCR_REPO}-ui:${IMAGE_TAG}" 2>/dev/null | awk -F@ '{print $2}')
 
-# Re-write /opt/fleet/.env with the captured digest
+# Re-write /opt/fleet/.env with the captured digests
 cat > /opt/fleet/.env <<EOF
 IMAGE_TAG=${IMAGE_TAG}
 DEVICE_HOSTNAME=${DEVICE_HOSTNAME}
 GHCR_REPO=${GHCR_REPO}
 DEVICE_ENV_FILE=/opt/aquila/config/device.env
 RUNNING_IMAGE_DIGEST=${RUNNING_IMAGE_DIGEST:-}
+RUNNING_IMAGE_DIGEST_UI=${RUNNING_IMAGE_DIGEST_UI:-}
 EOF
 
 cat > /opt/fleet/update.sh <<EOF
@@ -596,10 +599,13 @@ curl -fsSL \\
     "https://raw.githubusercontent.com/${GHCR_REPO}/main/fleet-config/docker-compose.yml" \\
     -o /opt/fleet/docker-compose.yml
 docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml pull
-# Update running digest in .env so OTA check baseline stays current after manual updates
+# Update running digests in .env so OTA check baseline stays current after manual updates
 _DIGEST=\$(docker inspect --format='{{index .RepoDigests 0}}' \\
     "ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG}" 2>/dev/null | awk -F@ '{print \$2}')
+_DIGEST_UI=\$(docker inspect --format='{{index .RepoDigests 0}}' \\
+    "ghcr.io/${GHCR_REPO}-ui:${IMAGE_TAG}" 2>/dev/null | awk -F@ '{print \$2}')
 sed -i "s|^RUNNING_IMAGE_DIGEST=.*|RUNNING_IMAGE_DIGEST=\${_DIGEST:-}|" /opt/fleet/.env
+sed -i "s|^RUNNING_IMAGE_DIGEST_UI=.*|RUNNING_IMAGE_DIGEST_UI=\${_DIGEST_UI:-}|" /opt/fleet/.env
 docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml up -d
 # Ensure required host directories exist after every update
 mkdir -p /opt/aquila/tests
