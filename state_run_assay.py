@@ -61,8 +61,7 @@ class AssayInterface():
         self.axis.reset_position()
         self.drawer.home()
         sr.change_screen("0")
-        self.drawer.open()
-        sr.update_drawer_state(is_open=True, is_closed=False)
+        sr.update_drawer_state(is_open=False, is_closed=True)
 
     def configure_thermal_control(self):
         device_type = int (config.pcr["device_type"] )
