@@ -22,8 +22,9 @@ class AnalysisService:
         results_filename: str,
         plot_path: str,
         labels: dict | None = None,
+        rox_unavailable: bool = False,
     ) -> None:
         """Generate results JSON and optics plot from a completed run log."""
         curve = Curve(src_basedir=self._results_dir)
-        curve.results_to_json(optics_path, results_filename)
+        curve.results_to_json(optics_path, results_filename, rox_unavailable=rox_unavailable)
         generate_optics_plot(optics_path, plot_path, labels=labels)

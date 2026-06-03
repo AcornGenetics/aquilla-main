@@ -1374,6 +1374,10 @@ a:active {
   background-color: #f2c97d;
 }
 
+.results-dot__half.is-unavailable {
+  background-color: #d1d5db;
+}
+
 .results-summary-row {
   display: flex;
   align-items: center;
@@ -1591,6 +1595,8 @@ a:active {
   font-size: 22px;
   color: #111827;
   font-weight: 400;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .run-detail-pills {

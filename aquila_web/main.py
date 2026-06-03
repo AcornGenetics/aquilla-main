@@ -82,6 +82,24 @@ def _load_profile_labels(profile_name: str | None) -> dict:
             continue
     return {}
 
+def _profile_rox_unavailable(profile_name: str | None) -> bool:
+    if not profile_name:
+        return False
+    profile_dir = resolve_profile_dir()
+    if not profile_dir.exists():
+        return False
+    for path in profile_dir.rglob("*.json"):
+        try:
+            with path.open() as f:
+                data = json.load(f)
+            title = data.get("title", path.stem)
+            profile_title = data.get("name", title)
+            if profile_title == profile_name or path.stem == profile_name or path.name == profile_name:
+                return bool(data.get("rox_unavailable", False))
+        except Exception:
+            continue
+    return False
+
 profile_dir = resolve_profile_dir()
 run_requested = False
 selected_profile = None
@@ -388,7 +406,8 @@ async def _simulate_run(profile_name: str) -> None:
         return
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
     labels = _load_profile_labels(profile_name)
-    _analysis.process_run(str(optics_path), results_file.name, str(plot_path), labels=labels)
+    rox_unavailable = _profile_rox_unavailable(profile_name)
+    _analysis.process_run(str(optics_path), results_file.name, str(plot_path), labels=labels, rox_unavailable=rox_unavailable)
     detected_summary = _summarize_results_from_file(results_file)
 
     results_path = str(results_file.resolve())
@@ -1213,6 +1232,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
             "id": profile_path.name,
             "title": data.get("name"),
             "labels": data.get("labels", {}),
+            "rox_unavailable": bool(data.get("rox_unavailable", False)),
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
         }
 
@@ -1220,6 +1240,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         "id": profile_path.name,
         "title": data.get("title", profile_path.stem),
         "labels": data.get("labels", {}),
+        "rox_unavailable": bool(data.get("rox_unavailable", False)),
         "steps": data.get("steps", [])
     }
 

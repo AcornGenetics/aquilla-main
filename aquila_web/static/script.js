@@ -41,6 +41,7 @@ const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
 let tubeNames = DEFAULT_TUBE_NAMES.slice();
 const DEFAULT_DYE_LABELS = { fam: "FAM", rox: "ROX" };
 let dyeLabels = { ...DEFAULT_DYE_LABELS };
+let roxUnavailable = false;
 let stopWarningTimer = null;
 let lastElapsedSeconds = null;
 let isStoppingRun = false;
@@ -115,11 +116,12 @@ const setupTubeNameInputs = () => {
   });
 };
 
-const applyDyeLabels = (labels = {}) => {
+const applyDyeLabels = (labels = {}, isRoxUnavailable = false) => {
   dyeLabels = {
     fam: labels.fam || DEFAULT_DYE_LABELS.fam,
     rox: labels.rox || DEFAULT_DYE_LABELS.rox
   };
+  roxUnavailable = isRoxUnavailable;
   if (typeof loadResults === "function") {
     loadResults();
   }
@@ -137,7 +139,7 @@ const loadProfileLabels = async (profileId) => {
       return;
     }
     const data = await response.json();
-    applyDyeLabels(data.labels || {});
+    applyDyeLabels(data.labels || {}, Boolean(data.rox_unavailable));
   } catch (error) {
     applyDyeLabels();
   }
@@ -289,6 +291,7 @@ function resetResultsUI(message = "Run for results!") {
         half.classList.remove("is-detected");
         half.classList.remove("is-inconclusive");
         half.classList.remove("is-not-detected");
+        half.classList.remove("is-unavailable");
       });
     }
   });
@@ -880,11 +883,15 @@ async function loadResults(){
         }
     }
 
-        const setHalfStatus = (halfEl, value) => {
+        const setHalfStatus = (halfEl, value, forceUnavailable = false) => {
             if (!halfEl) {
                 return;
             }
-            halfEl.classList.remove("is-detected", "is-inconclusive", "is-not-detected");
+            halfEl.classList.remove("is-detected", "is-inconclusive", "is-not-detected", "is-unavailable");
+            if (forceUnavailable) {
+                halfEl.classList.add("is-unavailable");
+                return;
+            }
             if (value === "Detected") {
                 halfEl.classList.add("is-detected");
             } else if (value === "Inconclusive") {
@@ -913,6 +920,7 @@ async function loadResults(){
                     half.classList.remove("is-detected");
                     half.classList.remove("is-inconclusive");
                     half.classList.remove("is-not-detected");
+                    half.classList.remove("is-unavailable");
                 });
             });
             return;
@@ -920,6 +928,9 @@ async function loadResults(){
         const tubeDetected = Array(4).fill(false);
         const tubeInconclusive = Array(4).fill(false);
         ["1", "2"].forEach((rowKey) => {
+            if (rowKey === "2" && roxUnavailable) {
+                return;
+            }
             const row = data?.[rowKey];
             if (!row || typeof row !== "object") {
                 return;
@@ -952,7 +963,7 @@ async function loadResults(){
             const famHalf = dot.querySelector(".results-dot__half--fam");
             const roxHalf = dot.querySelector(".results-dot__half--rox");
             setHalfStatus(famHalf, famStatus);
-            setHalfStatus(roxHalf, roxStatus);
+            setHalfStatus(roxHalf, roxStatus, roxUnavailable);
         });
     }
 }

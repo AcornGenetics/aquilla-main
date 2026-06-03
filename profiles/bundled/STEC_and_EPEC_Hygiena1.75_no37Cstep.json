@@ -2,6 +2,7 @@
 "output_dir": "pcr_data",
 "post_in_gui": "True",
 "title": "STEC and EPEC",
+"rox_unavailable": true,
 "steps": [
     {
         "disable": 0,
