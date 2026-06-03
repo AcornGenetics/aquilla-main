@@ -20,8 +20,17 @@ _DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' \
 _DIGEST_UI=$(docker inspect --format='{{index .RepoDigests 0}}' \
     "ghcr.io/${GHCR_REPO}-ui:${IMAGE_TAG}" 2>/dev/null | awk -F@ '{print $2}')
 
-sed -i "s|^RUNNING_IMAGE_DIGEST=.*|RUNNING_IMAGE_DIGEST=${_DIGEST:-}|" "${FLEET_ENV}"
-sed -i "s|^RUNNING_IMAGE_DIGEST_UI=.*|RUNNING_IMAGE_DIGEST_UI=${_DIGEST_UI:-}|" "${FLEET_ENV}"
+_upsert_env() {
+    local key=$1 val=$2 file=$3
+    if grep -q "^${key}=" "${file}"; then
+        sed -i "s|^${key}=.*|${key}=${val}|" "${file}"
+    else
+        echo "${key}=${val}" >> "${file}"
+    fi
+}
+
+_upsert_env RUNNING_IMAGE_DIGEST    "${_DIGEST:-}"    "${FLEET_ENV}"
+_upsert_env RUNNING_IMAGE_DIGEST_UI "${_DIGEST_UI:-}" "${FLEET_ENV}"
 
 docker compose --env-file "${FLEET_ENV}" -f /opt/fleet/docker-compose.yml up -d
 
