@@ -267,6 +267,7 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --ozone-platform=x11 \
     --disable-web-security \
     --allow-file-access-from-files \
+    --user-data-dir=/tmp/chromium-kiosk \
     --start-maximized \
     &
 fi
@@ -280,6 +281,7 @@ run_test "splash page installed"       "test -f /opt/aquila/splash.html"
 run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
 run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
 run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
+run_test "user-data-dir flag present"  "grep -q 'user-data-dir' ${AUTOSTART}"
 run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
 run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
 run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
