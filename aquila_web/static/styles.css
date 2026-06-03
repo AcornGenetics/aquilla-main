@@ -1321,6 +1321,10 @@ a:active {
   background-color: #f2c97d;
 }
 
+.results-dot__half.is-unavailable {
+  background-color: #d1d5db;
+}
+
 .results-summary-row {
   display: flex;
   align-items: center;

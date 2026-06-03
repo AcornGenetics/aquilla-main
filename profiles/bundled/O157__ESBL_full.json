@@ -1,0 +1,91 @@
+{
+"output_dir": "pcr_data",
+"post_in_gui": "True",
+"title": "O157 and ESBL",
+"rox_unavailable": true,
+"steps": [
+    {
+        "disable": 0,
+        "duration": 1,
+        "description": "Record equilabrion without power."
+    },
+    {
+        "ramp_rate": 1.8
+    },
+    {  
+        "pcr_fanon" : 1
+    },
+    {
+        "enable": 0, 
+        "duration": 1,
+        "description": "Turn on and record temperature for a little bit"
+    },
+    {
+	"optics":""
+    },
+    {
+        "setpoint": 25,
+        "duration": 1,
+        "description": "Presetting temperature"
+    },
+    {
+        "setpoint": 95,
+        "duration": 300,
+        "description": "Activation temperature for 5 minute"
+    },
+    {
+        "ramp_rate": 1.8
+    },
+    {
+        "repeat": [
+            {
+                "setpoint": 96.5,
+                "duration": 20,
+                "description": "Melt"
+            },
+	    {
+                "setpoint": 60.5,
+                "duration": 41,
+                "description": "Annealing"
+            },
+
+	    {
+                "setpoint": 72,
+                "duration": 54,
+                "description": "Extension pre-signal"
+            },
+	    {
+		"optics":""
+	    },
+	    {
+                "setpoint": 72,
+                "duration": 18,
+                "description": "Extension post-Signal"
+            }
+        ],
+        "cycles": 45
+    },
+    {
+        "ramp_rate": 1.8
+    },
+    {
+        "setpoint": 40,
+        "duration": 20,
+        "description": "Initial cooling"
+    },
+    {
+        "setpoint": 25,
+        "duration": 10,
+        "description": "Restoring setpoint to RT"
+    },
+    {
+        "disable": 0,
+        "duration": 5,
+        "description": "Turn off and record temperature for a little bit"
+    },
+
+    { 
+        "pcr_fanoff" : 0
+    }
+]
+}

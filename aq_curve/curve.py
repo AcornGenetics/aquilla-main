@@ -201,7 +201,7 @@ class Curve:
             logging.error(e)
             raise e
 
-    def results_to_json(self, raw_logfile, results_logfile):
+    def results_to_json(self, raw_logfile, results_logfile, rox_unavailable=False):
         self.test_run = False
         src = raw_logfile
         # Previous endpoint-based detection (kept for reference):
@@ -235,6 +235,8 @@ class Curve:
                 return None
             return round(float(cq), 2)
 
+        _ROX_UNAVAILABLE = "ROX Unavailable"
+
         result = {
             "1": {
                 "1": resolve_status(0, "fam", 1),
@@ -242,12 +244,16 @@ class Curve:
                 "3": resolve_status(0, "fam", 3),
                 "4": resolve_status(0, "fam", 4),
             },
-            "2": {
-                "1": resolve_status(1, "rox", 1),
-                "2": resolve_status(1, "rox", 2),
-                "3": resolve_status(1, "rox", 3),
-                "4": resolve_status(1, "rox", 4),
-            }
+            "2": (
+                {str(w): _ROX_UNAVAILABLE for w in [1, 2, 3, 4]}
+                if rox_unavailable
+                else {
+                    "1": resolve_status(1, "rox", 1),
+                    "2": resolve_status(1, "rox", 2),
+                    "3": resolve_status(1, "rox", 3),
+                    "4": resolve_status(1, "rox", 4),
+                }
+            ),
         }
 
         result["cq"] = {
@@ -257,12 +263,16 @@ class Curve:
                 "3": resolve_cq("fam", 3),
                 "4": resolve_cq("fam", 4),
             },
-            "2": {
-                "1": resolve_cq("rox", 1),
-                "2": resolve_cq("rox", 2),
-                "3": resolve_cq("rox", 3),
-                "4": resolve_cq("rox", 4),
-            }
+            "2": (
+                {str(w): None for w in [1, 2, 3, 4]}
+                if rox_unavailable
+                else {
+                    "1": resolve_cq("rox", 1),
+                    "2": resolve_cq("rox", 2),
+                    "3": resolve_cq("rox", 3),
+                    "4": resolve_cq("rox", 4),
+                }
+            ),
         }
 
         base_dir = Path(self.src_basedir).resolve()
