@@ -96,6 +96,23 @@ def test_wifi_scan_returns_network_list(client):
 
 
 @pytest.mark.contract
+def test_wifi_scan_includes_saved_field(client):
+    """GET /wifi/scan includes saved=True for networks with a stored profile."""
+    networks = [
+        {"ssid": "StaleNet", "signal": 60, "secured": True, "in_use": False, "saved": True},
+        {"ssid": "NewNet", "signal": 50, "secured": True, "in_use": False, "saved": False},
+    ]
+    with patch("aquila_web.main._kiosk_get", new=AsyncMock(return_value={"networks": networks})):
+        response = client.get("/wifi/scan")
+    assert response.status_code == 200
+    data = response.json()
+    stale = next(n for n in data["networks"] if n["ssid"] == "StaleNet")
+    new = next(n for n in data["networks"] if n["ssid"] == "NewNet")
+    assert stale["saved"] is True
+    assert new["saved"] is False
+
+
+@pytest.mark.contract
 def test_wifi_scan_kiosk_unreachable_returns_empty_list(client):
     """GET /wifi/scan returns empty networks list when kiosk-control is down."""
     with patch("aquila_web.main._kiosk_get", side_effect=Exception("timeout")):

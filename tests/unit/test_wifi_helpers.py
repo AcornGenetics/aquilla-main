@@ -78,6 +78,7 @@ class TestWifiScan:
         side_effects = [
             _nmcli_result(0, ""),        # rescan
             _nmcli_result(0, list_out),  # list
+            _nmcli_result(0, ""),        # connection show
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects), \
              patch("kiosk_control.time") as mock_time:
@@ -92,6 +93,7 @@ class TestWifiScan:
         side_effects = [
             _nmcli_result(0, ""),
             _nmcli_result(0, list_out),
+            _nmcli_result(0, ""),
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects), \
              patch("kiosk_control.time") as mock_time:
@@ -107,6 +109,7 @@ class TestWifiScan:
         side_effects = [
             _nmcli_result(0, ""),
             _nmcli_result(0, list_out),
+            _nmcli_result(0, ""),
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects), \
              patch("kiosk_control.time") as mock_time:
@@ -119,6 +122,7 @@ class TestWifiScan:
         side_effects = [
             _nmcli_result(0, ""),
             _nmcli_result(0, list_out),
+            _nmcli_result(0, ""),
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects), \
              patch("kiosk_control.time") as mock_time:
@@ -130,12 +134,30 @@ class TestWifiScan:
         side_effects = [
             _nmcli_result(0, ""),
             _nmcli_result(0, ""),
+            _nmcli_result(0, ""),
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects), \
              patch("kiosk_control.time") as mock_time:
             mock_time.sleep = MagicMock()
             result = kc._wifi_scan()
         assert result == []
+
+    def test_saved_field_true_for_known_profile(self):
+        list_out = "StaleNet:60:WPA2:\nFreshNet:50:WPA2:"
+        saved_out = "StaleNet\nAcorn Genetics"
+        side_effects = [
+            _nmcli_result(0, ""),
+            _nmcli_result(0, list_out),
+            _nmcli_result(0, saved_out),
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects), \
+             patch("kiosk_control.time") as mock_time:
+            mock_time.sleep = MagicMock()
+            result = kc._wifi_scan()
+        stale = next(n for n in result if n["ssid"] == "StaleNet")
+        fresh = next(n for n in result if n["ssid"] == "FreshNet")
+        assert stale["saved"] is True
+        assert fresh["saved"] is False
 
 
 # ===========================================================================

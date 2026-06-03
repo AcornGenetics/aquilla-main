@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi import WebSocket
@@ -416,7 +416,6 @@ async def _simulate_run(profile_name: str) -> None:
     while not run_complete_ack:
         await asyncio.sleep(0.5)
     run_complete_ack = False
-    current_tube_names = DEFAULT_TUBE_NAMES[:]
     current_item.screen = "ready"
     state_change_event.set()
     state_change_event.clear()
@@ -451,8 +450,6 @@ async def change_screen():
 async def change_screen(state: Item ):
     logger.info ( "Change_screen" )
     global current_item, start_time, current_tube_names
-    if state.screen == "ready" and current_item.screen == "complete":
-        current_tube_names = DEFAULT_TUBE_NAMES[:]
     current_item = state
     #start_time = datetime.now()
     state_change_event.set()
@@ -531,9 +528,10 @@ async def set_path(payload: ResultPath):
 
 @app.post("/results/clear")
 async def clear_results():
-    global results_path, results_cleared
+    global results_path, results_cleared, current_tube_names
     results_path = None
     results_cleared = True
+    current_tube_names = DEFAULT_TUBE_NAMES[:]
     return {"ok": True}
 
 @app.post("/run/complete/ack")
@@ -904,12 +902,40 @@ async def run_status_reset():
     logger.info("Run button reset, profile reset")
     return{"ok":True}
 
+def resolve_device_profiles() -> "set[str] | None":
+    import socket
+    hostname = os.getenv("DEVICE_HOSTNAME") or socket.gethostname()
+    device_profiles_path = BASE_DIR / "config_files" / "device_profiles.json"
+    profile_groups_path = BASE_DIR / "config_files" / "profile_groups.json"
+    try:
+        device_profiles = json.loads(device_profiles_path.read_text())
+    except Exception:
+        logger.warning("Could not load device_profiles.json; showing all profiles")
+        return None
+    device_entry = device_profiles.get(hostname)
+    if device_entry is None:
+        return None
+    try:
+        profile_groups = json.loads(profile_groups_path.read_text())
+    except Exception:
+        logger.warning("Could not load profile_groups.json; showing all profiles")
+        return None
+    group_name = device_entry.get("profile_group")
+    group_value = profile_groups.get(group_name)
+    if group_value is None:
+        return None
+    allowed = list(group_value)
+    allowed.extend(device_entry.get("extra_profiles", []))
+    return set(allowed)
+
+
 @app.get("/profiles")
 async def list_profiles():
     profiles = []
     profile_dir = resolve_profile_dir()
     if not profile_dir.exists():
         return profiles
+    allowed = resolve_device_profiles()
     for path in profile_dir.rglob("*.json"):
         try:
             with path.open() as f:
@@ -918,6 +944,9 @@ async def list_profiles():
                 continue
         except Exception as e:
             logger.info("Error processing %s"%(path))
+
+        if allowed is not None and "bundled" in path.parts and path.name not in allowed:
+            continue
 
         if "configuration" in data and "name" in data:
             created_at = data.get("createdAt") or int(path.stat().st_ctime * 1000)
@@ -1290,7 +1319,9 @@ WATCHTOWER_URL = os.getenv("WATCHTOWER_URL", "http://aquila-watchtower:8080")
 WATCHTOWER_TOKEN = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
 _OTA_GHCR_USER = os.getenv("GHCR_USERNAME", "")
 _OTA_GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
-_OTA_GHCR_REPO = os.getenv("GHCR_REPO", "acorngenetics/aquilla-main")
+_OTA_GHCR_BASE = os.getenv("GHCR_REPO", "acorngenetics/aquilla-main")
+_OTA_GHCR_REPO_API = _OTA_GHCR_BASE + "-api"
+_OTA_GHCR_REPO_UI  = _OTA_GHCR_BASE + "-ui"
 _OTA_IMAGE_TAG = os.getenv("IMAGE_TAG", "")   # dev | pilot | prod — set by device.env
 _OTA_POLL_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL", "300"))  # seconds
 
@@ -1299,7 +1330,12 @@ _update_dismissed: bool = False
 _update_status: str = "idle"   # idle | checking | available | updating | error
 _update_error: str | None = None
 _update_last_checked: str | None = None
-_startup_image_digest: str | None = None
+# Digests of the images actually running — injected at deploy time via env vars.
+# Fall back to the first GHCR poll result if not set.
+_startup_image_digest: str | None = os.getenv("RUNNING_IMAGE_DIGEST") or None
+_startup_image_digest_ui: str | None = os.getenv("RUNNING_IMAGE_DIGEST_UI") or None
+_latest_ghcr_digest: str | None = None
+_latest_ghcr_digest_ui: str | None = None
 
 
 async def _ghcr_bearer_token(user: str, token: str, repo: str) -> str | None:
@@ -1343,27 +1379,34 @@ async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> s
 
 
 async def _do_check_update() -> None:
-    global _update_available, _update_status, _update_error, _update_last_checked, _startup_image_digest
+    global _update_available, _update_status, _update_error, _update_last_checked
+    global _startup_image_digest, _startup_image_digest_ui, _latest_ghcr_digest, _latest_ghcr_digest_ui
     _update_status = "checking"
     try:
         if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
             _update_status = "idle"
             _update_error = "Registry credentials or IMAGE_TAG not configured"
             return
-        latest = await _ghcr_manifest_digest(
-            _OTA_GHCR_REPO, _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN
+        latest_api, latest_ui = await asyncio.gather(
+            _ghcr_manifest_digest(_OTA_GHCR_REPO_API, _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN),
+            _ghcr_manifest_digest(_OTA_GHCR_REPO_UI,  _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN),
         )
         _update_last_checked = datetime.utcnow().isoformat() + "Z"
-        if latest is None:
+        if latest_api is None and latest_ui is None:
             _update_status = "idle"
             _update_error = "Registry unreachable or credentials invalid"
             return
+        if latest_api is not None:
+            _latest_ghcr_digest = latest_api
+        if latest_ui is not None:
+            _latest_ghcr_digest_ui = latest_ui
         if _startup_image_digest is None:
-            _startup_image_digest = latest
-            _update_status = "idle"
-            _update_error = None
-            return
-        if latest != _startup_image_digest:
+            _startup_image_digest = latest_api
+        if _startup_image_digest_ui is None:
+            _startup_image_digest_ui = latest_ui
+        api_changed = latest_api is not None and latest_api != _startup_image_digest
+        ui_changed  = latest_ui  is not None and latest_ui  != _startup_image_digest_ui
+        if api_changed or ui_changed:
             _update_available = True
             _update_status = "available"
         else:
@@ -1396,14 +1439,51 @@ async def trigger_update_check():
 
 @app.post("/update/apply")
 async def apply_update():
-    global _update_status, _update_error
+    global _update_status, _update_error, _startup_image_digest, _startup_image_digest_ui, _update_available
+    if current_item.screen == "running":
+        return JSONResponse(
+            status_code=409,
+            content={"ok": False, "error": "Cannot update during an active run. Stop the run first."},
+        )
     _update_status = "updating"
     headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
     try:
+        # Write new digests to /opt/fleet/.env before triggering Watchtower so the
+        # restarted container picks up the correct baseline even if we are killed mid-restart.
+        _fleet_env = "/opt/fleet/.env"
+        if (_latest_ghcr_digest or _latest_ghcr_digest_ui) and os.path.exists(_fleet_env):
+            try:
+                with open(_fleet_env, "r") as f:
+                    lines = f.readlines()
+                updated = []
+                for line in lines:
+                    if line.startswith("RUNNING_IMAGE_DIGEST=") and not line.startswith("RUNNING_IMAGE_DIGEST_UI=") and _latest_ghcr_digest:
+                        updated.append(f"RUNNING_IMAGE_DIGEST={_latest_ghcr_digest}\n")
+                    elif line.startswith("RUNNING_IMAGE_DIGEST_UI=") and _latest_ghcr_digest_ui:
+                        updated.append(f"RUNNING_IMAGE_DIGEST_UI={_latest_ghcr_digest_ui}\n")
+                    else:
+                        updated.append(line)
+                with open(_fleet_env, "w") as f:
+                    f.writelines(updated)
+            except OSError:
+                pass
         async with httpx.AsyncClient(timeout=60.0) as client:
             r = await client.post(f"{WATCHTOWER_URL}/v1/update", headers=headers)
         if r.status_code == 200:
+            if _latest_ghcr_digest:
+                _startup_image_digest = _latest_ghcr_digest
+            if _latest_ghcr_digest_ui:
+                _startup_image_digest_ui = _latest_ghcr_digest_ui
+            _update_available = False
             _update_status = "updating"
+            # If containers don't restart (nothing to update), the in-memory status
+            # would stay "updating" until the next 5-min poller tick. Schedule a
+            # check after 3 minutes so the UI gets a timely resolution either way.
+            async def _deferred_status_reset() -> None:
+                await asyncio.sleep(180)
+                if _update_status == "updating":
+                    await _do_check_update()
+            asyncio.create_task(_deferred_status_reset())
             return {"ok": True, "message": "Update triggered — containers will restart shortly."}
         _update_status = "error"
         _update_error = f"Watchtower returned HTTP {r.status_code}"
@@ -1425,13 +1505,14 @@ async def dismiss_update():
 async def reset_update_state():
     """Test/dev helper — resets all update state."""
     global _update_available, _update_dismissed, _update_status, _update_error
-    global _update_last_checked, _startup_image_digest
+    global _update_last_checked, _startup_image_digest, _startup_image_digest_ui
     _update_available = False
     _update_dismissed = False
     _update_status = "idle"
     _update_error = None
     _update_last_checked = None
     _startup_image_digest = None
+    _startup_image_digest_ui = None
     return {"ok": True}
 
 

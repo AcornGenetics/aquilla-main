@@ -289,7 +289,7 @@
           Connect to ${safeLabel}
         </button>
         <div class="wifi-error" id="err-${safeId}"></div>
-        ${net.in_use ? `
+        ${(net.in_use || net.saved) ? `
         <button class="wifi-forget-btn" type="button" id="forget-btn-${safeId}" onclick="doForget('${safeId}')">
           Forget ${safeLabel}
         </button>` : ""}

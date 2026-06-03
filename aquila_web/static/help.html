@@ -182,10 +182,17 @@
               <p>Use <strong>Open Drawer</strong> and <strong>Close Drawer</strong> to insert or remove tubes. The drawer must be closed before a run can begin.</p>
               <h3>Results</h3>
               <ul>
-                <li><strong>Detected (green)</strong> — target signal successfully amplified.</li>
+                <li><strong>Detected (red/orange)</strong> — target is present in sample.</li>
                 <li><strong>Inconclusive (yellow)</strong> — signal present but borderline.</li>
-                <li><strong>Not Detected</strong> — no amplification observed.</li>
+                <li><strong>Undetected (green)</strong> — no target is present in sample.</li>
               </ul>
+              <h3>If a Result Is Inconclusive</h3>
+              <p>An inconclusive result means the amplification curve could not be confidently classified as either Detected or Undetected. This may occur due to weak amplification, irregular curve behavior, low signal strength, or borderline threshold crossing. When that happens:</p>
+              <ol>
+                <li>Review the amplification curves in history for irregular behavior or weak amplification.</li>
+                <li>Refer to the analysis help documentation for additional interpretation guidance.</li>
+                <li>If the result is still inconclusive, repeat the test.</li>
+              </ol>
             </div>
 
             <!-- History -->
@@ -272,7 +279,7 @@
 
         <!-- Footer -->
         <div class="help-footer" style="padding-bottom:16px;">
-          <span class="help-footer__meta" id="help-version-info">V 1.2.6</span>
+          <span class="help-footer__meta" id="help-version-info">V 1.2.5.8</span>
           <button class="help-exit-btn" onclick="notifyExitForce()">Exit GUI</button>
         </div>
 
@@ -355,7 +362,7 @@
           </div>
         `;
       } else if (data.status === "updating") {
-        area.innerHTML = '<p style="font-size:15px;color:#1a1c1c;">Downloading update… the device will restart automatically when complete.</p>';
+        _showUpdateOverlay();
       } else if (data.status === "error") {
         area.innerHTML = `
           <p style="color:#dc2626;font-size:15px;">Could not check for updates: ${_escHtml(data.error || "unknown error")}</p>
@@ -370,18 +377,101 @@
       }
     }
 
+    function _showUpdateOverlay() {
+      let overlay = document.getElementById("update-overlay");
+      if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "update-overlay";
+        overlay.style.cssText = [
+          "position:fixed","top:0","left:0","width:100%","height:100%",
+          "background:rgba(255,255,255,0.97)","z-index:9999",
+          "display:flex","flex-direction:column","align-items:center","justify-content:center",
+          "gap:16px"
+        ].join(";");
+        overlay.innerHTML = `
+          <p id="update-overlay-label" style="font-size:20px;font-weight:700;color:#1a1c1c;margin:0;">Applying update…</p>
+          <p style="font-size:15px;color:#6b7280;margin:0;">Please wait. Do not power off the device.</p>
+          <div style="width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:var(--icon-dark-green);border-radius:50%;animation:spin 1s linear infinite;"></div>
+        `;
+        if (!document.getElementById("update-spin-style")) {
+          const style = document.createElement("style");
+          style.id = "update-spin-style";
+          style.textContent = "@keyframes spin{to{transform:rotate(360deg)}}";
+          document.head.appendChild(style);
+        }
+        document.body.appendChild(overlay);
+      }
+    }
+
+    function _hideUpdateOverlay() {
+      const overlay = document.getElementById("update-overlay");
+      if (overlay) overlay.remove();
+    }
+
     async function applyUpdate() {
       const btn = document.getElementById("update-now-btn");
       if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
-      const area = document.getElementById("update-status-area");
+      _showUpdateOverlay();
+      document.querySelectorAll(".help-badge").forEach(b => b.remove());
       const r = await fetch("/update/apply", { method: "POST" }).catch(() => null);
-      const d = r ? await r.json().catch(() => ({})) : {};
-      if (d.ok) {
-        area.innerHTML = '<p style="font-size:15px;color:#1a1c1c;">Downloading update… the device will restart automatically when complete.</p>';
-        document.querySelectorAll(".help-badge").forEach(b => b.remove());
+      // Use null sentinel to distinguish parse failure from server-sent ok:false.
+      // A truncated/missing body means the container restarted mid-response —
+      // Watchtower already started the update, so always poll.
+      const d = r ? await r.json().catch(() => null) : null;
+      if (d && d.ok === false && d.error) {
+        // Definitive server rejection (e.g. "active run in progress") — still poll
+        // briefly in case Watchtower fired anyway before the response arrived.
+        _pollForUpdateComplete(0, d.error);
       } else {
-        area.innerHTML = `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(d.error || "unknown error")}</p>`;
+        _pollForUpdateComplete(0, null);
       }
+    }
+
+    function _pollForUpdateComplete(attempt, fallbackError) {
+      // Hard cap at 200 attempts (~10 min). Keep the overlay up the whole time so
+      // the screen never goes back to normal until we have a definitive result.
+      if (attempt > 200) {
+        _hideUpdateOverlay();
+        const msg = fallbackError
+          ? `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(fallbackError)}</p>`
+          : '<p style="color:#6b7280;font-size:15px;">Update timed out. Please check the device and try again.</p>';
+        document.getElementById("update-status-area").innerHTML = msg;
+        return;
+      }
+      // After 3 min, change the overlay label so the user knows we're still waiting
+      if (attempt === 60) {
+        const lbl = document.getElementById("update-overlay-label");
+        if (lbl) lbl.textContent = "Still updating, please wait…";
+      }
+      setTimeout(async () => {
+        const r = await fetch("/update/status").catch(() => null);
+        const data = r ? await r.json().catch(() => null) : null;
+        // Retry on network errors (backend restarting) or while still updating
+        if (!data || data.status === "updating" || data.available) {
+          _pollForUpdateComplete(attempt + 1, fallbackError);
+          return;
+        }
+        // If the server reports an error and no update occurred, surface the failure now
+        if (data.status === "error") {
+          _hideUpdateOverlay();
+          const errMsg = fallbackError || data.error || "unknown error";
+          document.getElementById("update-status-area").innerHTML =
+            `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(errMsg)}</p>`;
+          return;
+        }
+        _hideUpdateOverlay();
+        const area = document.getElementById("update-status-area");
+        const dot = document.getElementById("updates-tab-dot");
+        if (dot) dot.style.display = "none";
+        const checkedAt = data.last_checked
+          ? data.last_checked.replace("T", " ").replace("Z", " UTC")
+          : "";
+        area.innerHTML = `
+          <p style="font-size:20px;font-weight:700;color:#16a34a;margin:0 0 8px;">✓ Update complete</p>
+          <p style="font-size:15px;color:#1a1c1c;margin:0 0 6px;">The device is running the latest software.</p>
+          ${checkedAt ? `<p style="font-size:12px;color:#6b7280;margin:0;">Verified: ${_escHtml(checkedAt)}</p>` : ""}
+        `;
+      }, 3000);
     }
 
     async function dismissUpdate() {

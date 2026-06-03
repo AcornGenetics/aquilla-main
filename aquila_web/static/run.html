@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Run</title>
-  <link rel="stylesheet" href="static/styles.css?v=211" />
+  <link rel="stylesheet" href="static/styles.css?v=217" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -47,7 +47,10 @@
       <section class="run-section run-start-card">
         <div class="run-start-header">
           <div class="run-start-title">
-            <h2>Start Run</h2>
+            <div class="run-start-summary is-hidden" id="run-start-summary">
+              <span class="run-start-summary__profile" id="run-start-profile"></span>
+              <span class="run-start-summary__runname" id="run-start-runname"></span>
+            </div>
           </div>
           <div class="run-start-status">
             <div class="run-ready-pill">
@@ -137,10 +140,15 @@
           <p>Done!</p>
         </div>
       </div>
+      <div class="run-modal is-hidden" id="run-stopping-modal" role="alertdialog" aria-live="assertive">
+        <div class="run-modal__card run-modal__card--stopping">
+          <p>Stopping Run…</p>
+        </div>
+      </div>
     </main>
   </div>
   <script src="static/nav.js?v=1"></script>
-  <script src="static/script.js?v=65"></script>
+  <script src="static/script.js?v=67"></script>
   <script src="static/keyboard.js?v=14"></script>
 </body>
 </html>

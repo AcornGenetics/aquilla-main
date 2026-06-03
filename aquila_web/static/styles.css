@@ -666,6 +666,28 @@ a:active {
   gap: 6px;
 }
 
+.run-start-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 18px;
+}
+
+.run-start-summary__profile {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #1a1c1c;
+}
+
+.run-start-summary__runname {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #64748b;
+}
+
 .run-start-status {
   display: flex;
   flex-direction: column;
@@ -853,6 +875,17 @@ a:active {
   color: #111827;
 }
 
+.run-modal__card--stopping {
+  background-color: var(--icon-white);
+  border: 1px solid #b91c1c;
+  color: #b91c1c;
+}
+
+.run-modal__card--stopping p {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
 .run-modal__close {
   position: absolute;
   top: 14px;
@@ -1008,6 +1041,26 @@ a:active {
   font-weight: 700;
   font-size: 15px;
   letter-spacing: 0.5px;
+}
+
+.keyboard-key--symbols {
+  flex: 0 0 auto;
+  width: 78px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.keyboard-key--symbols.is-active {
+  background: #1f2937;
+  border-color: #1f2937;
+  color: #fff;
+  box-shadow: 0 2px 0 #111827;
+}
+
+.keyboard-symbols-panel {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
 }
 
 
