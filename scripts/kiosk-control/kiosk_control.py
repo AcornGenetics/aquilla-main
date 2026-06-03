@@ -153,6 +153,8 @@ def _wifi_scan() -> list:
     _nmcli("device", "wifi", "rescan")
     time.sleep(3)
     code, out, err = _nmcli("-f", "SSID,SIGNAL,SECURITY,IN-USE", "device", "wifi", "list")
+    _, saved_out, _ = _nmcli("-f", "NAME", "connection", "show")
+    saved_names = {line.strip() for line in saved_out.splitlines() if line.strip()}
     networks = []
     seen = set()
     for line in out.splitlines():
@@ -168,6 +170,7 @@ def _wifi_scan() -> list:
             "signal": int(signal) if signal.isdigit() else 0,
             "secured": bool(security and security != "--"),
             "in_use": in_use.strip() == "*",
+            "saved": ssid in saved_names,
         })
     networks.sort(key=lambda n: n["signal"], reverse=True)
     return networks
