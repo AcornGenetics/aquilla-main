@@ -599,8 +599,16 @@ function connectWebSocket() {
   }
   socket = new WebSocket(wsUrl);
   socket.onmessage = wsHandleMessage;
+  let _wsWasConnected = false;
   socket.onopen = function() {
     console.log("WebSocket connection established.");
+    // Reload the page if we reconnected after a drop during an active update so
+    // the stale overlay and polling state are cleared.
+    if (_wsWasConnected && document.getElementById("update-overlay")) {
+      window.location.reload();
+      return;
+    }
+    _wsWasConnected = true;
   };
   socket.onerror = function(error) {
     console.error("WebSocket error:", error);
