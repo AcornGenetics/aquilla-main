@@ -90,11 +90,19 @@ All constants can be overridden per-device via environment variables. Defaults a
 
 | Constant | Default | Meaning |
 |---|---|---|
-| `PCR_SPIKE_MULTIPLIER` | 80.0 | Max allowed cycle-to-cycle delta as a multiple of the median delta |
+| `PCR_SPIKE_MULTIPLIER` | 80.0 | Max allowed cycle-to-cycle delta as a multiple of the median delta (used by `check_smooth_features`) |
+| `PCR_SPIKE_CROSSING_MULTIPLIER` | 40.0 | Max allowed crossing-point delta as a multiple of the median delta (used by spike-only crossing detection) |
 | `PCR_MAX_DIFF` | 30.0 | Absolute max allowed delta when median delta is zero |
 | `PCR_MAX_TRANSITIONS` | 3 | Maximum number of distinct strong-derivative peaks allowed |
 | `PCR_PEAK_FRACTION` | 0.3 | Fraction of max derivative used as the peak detection threshold |
 | `PCR_TRANSITION_DIP_TOLERANCE` | 0.05 | A dip between peaks that stays within this fraction of peak_threshold is treated as the same transition, not a new one |
+
+### Rapid terminal rise
+
+| Constant | Default | Meaning |
+|---|---|---|
+| `PCR_RAPID_RISE_MAX_REMAINING` | 5 | If the sustained rise starts with fewer than this many cycles remaining, the rise is considered "terminal" |
+| `PCR_RAPID_RISE_FRACTION` | 0.65 | Maximum fraction of the total signal range that can be covered in the first 3 post-rise cycles before the rise is classified as rapid |
 
 ### Late drift / negative drop
 
@@ -142,6 +150,7 @@ Each check returns `True` (pass) or `False` (fail). All operate on the baseline-
 - **`check_single_transition`**: number of strong derivative peaks ≤ `PCR_MAX_TRANSITIONS`. Peaks within `PCR_TRANSITION_DIP_TOLERANCE` of the peak threshold are grouped as one transition.
 - **`check_smooth_features`**: `max(|Δy|) ≤ PCR_SPIKE_MULTIPLIER × median(|Δy|)`. If median is 0, uses `PCR_MAX_DIFF` as absolute cap.
 - **`check_no_late_drift`**: slope of last `PCR_LATE_CYCLES` cycles ≤ `PCR_LATE_DRIFT_MAX`.
+- **`check_no_rapid_terminal_rise`**: returns `False` when the sustained rise is both **terminal** (starts with fewer than `PCR_RAPID_RISE_MAX_REMAINING` cycles remaining) and **rapid** (the first 3 post-rise cycles cover ≥ `PCR_RAPID_RISE_FRACTION` of the total signal range). True PCR amplification develops gradually over many cycles; a signal that shoots up only in the final few cycles is an artifact. A genuine slow late-Cq rise (barely emerging near run-end with a small per-cycle gain) passes because its 3-cycle fraction stays below the threshold.
 - **`check_signal_range`** *(raw signal)*: `amplitude_fraction ≥ PCR_SIGNAL_RANGE_PEAK_FRACTION` OR `fold_change ≥ PCR_MIN_FOLD`.
 - **`check_negative_drop`**: always passes — stub, not yet implemented.
 
@@ -162,14 +171,28 @@ Run in parallel with typical checks. All operate on the post-rise segment.
 ## Final classification
 
 ```
-if threshold_crossing fails  →  "undetected"
-elif typical_pass OR biphasic_pass  →  "detected"
-else  →  "inconclusive"
+compute Cq and evaluate late-Cq confidence upfront
+
+if late_confident                                        →  "detected"
+elif threshold_crossing fails OR signal_range fails      →  "undetected"
+elif mountain_shape OR rapid_terminal_rise               →  "undetected"
+elif cq is None AND no sustained_increase                →  "undetected"
+elif cq >= PCR_LATE_CQ_THRESHOLD:
+    if late_ok AND (typical_pass OR biphasic_pass)       →  "detected"
+    else                                                 →  "inconclusive"
+elif typical_pass OR biphasic_pass                       →  "detected"
+else                                                     →  "inconclusive"
 ```
 
 Where:
 - `typical_pass` = threshold passes AND no baseline check fails AND no other check fails AND not a test run
 - `biphasic_pass` = threshold passes AND all biphasic checks pass AND not a test run
+- `late_ok` = `check_late_cq_tier` passes (per-cycle fold ≥ `PCR_LATE_PER_CYCLE_FOLD_MIN`)
+- `late_confident` = `late_ok` AND threshold passes AND baseline is clean AND no rapid terminal rise AND threshold oscillation passes — allows detection of genuine slow late-Cq signals even when absolute-signal checks (e.g. `check_signal_range`) are too strict for a barely-emerged curve
+- `mountain_shape` = `check_no_mountain_shape` fails OR `check_end_above_midpoint` fails
+- `rapid_terminal_rise` = `check_no_rapid_terminal_rise` fails
+
+**Spike-only crossings**: before the status decision, if the threshold is crossed but every crossing is preceded by a spike-level jump (`|Δy| > PCR_SPIKE_CROSSING_MULTIPLIER × median(|Δy|)`), the threshold is treated as not genuinely crossed.
 
 ---
 

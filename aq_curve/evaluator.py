@@ -16,7 +16,7 @@ def _spike_only_crossings(y_corrected, threshold):
     median_diff = float(np.median(diffs))
     if median_diff == 0:
         return False
-    multiplier = config.get_float("PCR_SPIKE_MULTIPLIER")
+    multiplier = config.get_float("PCR_SPIKE_CROSSING_MULTIPLIER")
     spike_mask = diffs > median_diff * multiplier
     above = y_corrected >= threshold
     crossing_indices = [i + 1 for i in range(len(above) - 1) if not above[i] and above[i + 1]]
@@ -254,6 +254,38 @@ def check_single_transition(curve_data, curve):
         # values in [dip_threshold, peak_threshold): maintain current state
     max_transitions = config.get_int("PCR_MAX_TRANSITIONS")
     return transitions <= max_transitions
+
+
+def check_no_rapid_terminal_rise(curve_data, curve):
+    """Return False if the signal rises abruptly in the final few cycles.
+
+    True PCR amplification takes many cycles to develop.  A curve whose
+    sustained rise starts with fewer than PCR_RAPID_RISE_MAX_REMAINING cycles
+    left AND covers more than PCR_RAPID_RISE_FRACTION of the total signal range
+    in the first three post-rise cycles is an unphysiologically fast artifact.
+    """
+    _, y_corrected, _ = curve_data
+    threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
+    min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
+    rise_idx = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    if rise_idx is None:
+        return True
+
+    n = len(y_corrected)
+    cycles_remaining = n - rise_idx
+    max_remaining = config.get_int("PCR_RAPID_RISE_MAX_REMAINING")
+    if cycles_remaining >= max_remaining:
+        return True
+
+    signal_range = float(np.max(y_corrected)) - float(np.min(y_corrected))
+    if signal_range <= 0:
+        return True
+
+    end3 = min(rise_idx + 3, n - 1)
+    rise_in_3 = float(y_corrected[end3] - y_corrected[rise_idx])
+    fraction = rise_in_3 / signal_range
+    max_fraction = config.get_float("PCR_RAPID_RISE_FRACTION")
+    return fraction < max_fraction
 
 
 def check_smooth_features(curve_data, curve):
@@ -499,6 +531,7 @@ def check_signal_basics(curve_data, curve):
         check_no_late_drift,
         check_negative_drop,
         check_no_mountain_shape,
+        check_no_rapid_terminal_rise,
         check_end_above_midpoint,
         check_sigmoidal_profile,
         check_signal_range,
@@ -548,6 +581,7 @@ def evaluate_curve(curve, log_name, dye, well):
         typical_results.get("check_no_mountain_shape", True)
         and typical_results.get("check_end_above_midpoint", True)
     )
+    rapid_rise_detected = not typical_results.get("check_no_rapid_terminal_rise", True)
     baseline_fail = any(
         not typical_results.get(name, False)
         for name in ("check_baseline_length", "check_baseline_stability")
@@ -568,16 +602,36 @@ def evaluate_curve(curve, log_name, dye, well):
     signal_range_pass = typical_results.get("check_signal_range", True)
     if threshold_pass and _spike_only_crossings(y_corrected, threshold_val):
         threshold_pass = False
-    if not threshold_pass or not signal_range_pass:
-        status = "undetected"
-    elif mountain_shape_detected:
-        status = "undetected"
-    elif cq is not None and cq >= late_threshold:
+
+    # Evaluate late-Cq confidence up-front so it can override strict shape checks
+    # that are inherently harder to pass for a signal that barely emerged near run-end.
+    if cq is not None and cq >= late_threshold:
         late_ok = _run_check(
             lambda cd, c: check_late_cq_tier(cd, c, cq),
             curve_data,
             curve,
         )
+        late_confident = (
+            late_ok
+            and threshold_pass
+            and not baseline_fail
+            and not rapid_rise_detected
+            and typical_results.get("check_threshold_oscillation", True)
+        )
+    else:
+        late_ok = False
+        late_confident = False
+
+    if late_confident:
+        status = "detected"
+    elif not threshold_pass or not signal_range_pass:
+        status = "undetected"
+    elif mountain_shape_detected or rapid_rise_detected:
+        status = "undetected"
+    elif cq is None and not typical_results.get("check_sustained_increase", True):
+        # No Cq and no sustained increase: threshold was crossed by noise or a spike
+        status = "undetected"
+    elif cq is not None and cq >= late_threshold:
         if late_ok and (typical_pass or biphasic_pass):
             status = "detected"
         else:
