@@ -241,8 +241,8 @@ xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
   "Coordinate Transformation Matrix" \
   0 1 0 -1 0 1 0 0 1
 
-# Hide cursor after 0.5s idle
-unclutter -idle 0.5 &
+# Hide cursor immediately on touch — -root covers the whole screen, -noevents prevents re-show on touch
+unclutter -idle 0 -root -noevents &
 
 # Allow display and compositor to settle before launching Chromium
 sleep 3
@@ -267,6 +267,7 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --ozone-platform=x11 \
     --disable-web-security \
     --allow-file-access-from-files \
+    --user-data-dir=/tmp/chromium-kiosk \
     --start-maximized \
     &
 fi
@@ -280,6 +281,7 @@ run_test "splash page installed"       "test -f /opt/aquila/splash.html"
 run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
 run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
 run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
+run_test "user-data-dir flag present"  "grep -q 'user-data-dir' ${AUTOSTART}"
 run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
 run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
 run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
@@ -298,6 +300,11 @@ phase_start 6 "Display and Touch configuration"
 run_test "xrandr binary present"  "which xrandr"
 run_test "xinput binary present"  "which xinput"
 run_test "unclutter present"      "which unclutter"
+
+# Disable the Raspberry Pi welcome wizard so it never appears on first boot
+rm -f /etc/xdg/autostart/piwiz.desktop
+
+run_test "piwiz disabled" "test ! -f /etc/xdg/autostart/piwiz.desktop"
 
 chown -R pi:pi "${PI_HOME}/.config"
 

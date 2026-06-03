@@ -1043,6 +1043,26 @@ a:active {
   letter-spacing: 0.5px;
 }
 
+.keyboard-key--symbols {
+  flex: 0 0 auto;
+  width: 78px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.keyboard-key--symbols.is-active {
+  background: #1f2937;
+  border-color: #1f2937;
+  color: #fff;
+  box-shadow: 0 2px 0 #111827;
+}
+
+.keyboard-symbols-panel {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+
 
 .page-header h1 {
   font-family: "ABC Favorit Mono", "Courier New", monospace;
