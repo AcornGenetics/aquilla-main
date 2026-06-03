@@ -12,11 +12,14 @@ services:
       CONFIG_DIR: "/opt/aquila/config"
       KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
       WATCHTOWER_URL: "http://aquila-watchtower:8080"
+      RUNNING_IMAGE_DIGEST: "${RUNNING_IMAGE_DIGEST:-}"
+      RUNNING_IMAGE_DIGEST_UI: "${RUNNING_IMAGE_DIGEST_UI:-}"
     volumes:
       - /opt/aquila/results:/opt/aquila/results
       - /opt/aquila/logs:/opt/aquila/logs
       - /opt/aquila/profiles:/opt/aquila/profiles
       - /opt/aquila/config:/opt/aquila/config
+      - /opt/fleet/.env:/opt/fleet/.env
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
       - "/dev/i2c-1:/dev/i2c-1"
@@ -119,7 +122,7 @@ services:
       WATCHTOWER_HTTP_API_UPDATE: "true"
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_CONFIG_FILE: "/config.json"
-    command: --label-enable --http-api-update --cleanup --api-version 1.54 --interval 300
+    command: --label-enable --http-api-update --cleanup --api-version 1.54
     restart: unless-stopped
     logging:
       driver: json-file

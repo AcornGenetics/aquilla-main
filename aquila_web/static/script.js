@@ -24,6 +24,9 @@ const runNameInput = document.getElementById("run-name-input");
 const runWarning = document.getElementById("run-warning");
 const drawerWarning = document.getElementById("drawer-warning");
 const stopRunButton = document.getElementById("stop-run-button");
+const runStoppingModal = document.getElementById("run-stopping-modal");
+const runStoppingText = runStoppingModal ? runStoppingModal.querySelector("p") : null;
+let stoppingDotsTimer = null;
 
 let seconds = 0;
 let currentScreen = null;
@@ -184,6 +187,33 @@ const completeSection = document.getElementById("complete-section");
 const normalizedPath = window.location.pathname.replace(/\/$/, "");
 const isDashboard = normalizedPath === "/run" || Boolean(readySection);
 
+function updateStartHeader(screen) {
+  const summary = document.getElementById("run-start-summary");
+  if (!summary) {
+    return;
+  }
+
+  const isActive = screen === "running" || screen === "complete";
+  if (isActive) {
+    const select = document.getElementById("mySelect");
+    const selectedOption = select && select.selectedOptions ? select.selectedOptions[0] : null;
+    const profileText = selectedOption ? selectedOption.textContent.trim() : "";
+    const runName = runNameInput ? runNameInput.value.trim() : "";
+
+    const profileEl = document.getElementById("run-start-profile");
+    const runNameEl = document.getElementById("run-start-runname");
+    if (profileEl) {
+      profileEl.textContent = profileText;
+    }
+    if (runNameEl) {
+      runNameEl.textContent = runName;
+    }
+    summary.classList.remove("is-hidden");
+  } else {
+    summary.classList.add("is-hidden");
+  }
+}
+
 function updateDashboardSections(screen) {
   if (!isDashboard) {
     return false;
@@ -203,6 +233,8 @@ function updateDashboardSections(screen) {
   }
 
   currentScreen = screen;
+
+  updateStartHeader(screen);
 
   const sections = [
     { key: "ready", element: readySection },
@@ -365,6 +397,36 @@ function showRunCompleteModal() {
   runCompleteModal.classList.remove("is-hidden");
 }
 
+function showRunStoppingModal() {
+  if (!runStoppingModal) {
+    return;
+  }
+  runStoppingModal.classList.remove("is-hidden");
+  if (!runStoppingText) {
+    return;
+  }
+  let dots = 1;
+  runStoppingText.textContent = "Stopping Run.";
+  if (stoppingDotsTimer) {
+    clearInterval(stoppingDotsTimer);
+  }
+  stoppingDotsTimer = setInterval(() => {
+    dots = (dots % 3) + 1;
+    runStoppingText.textContent = "Stopping Run" + ".".repeat(dots);
+  }, 500);
+}
+
+function hideRunStoppingModal() {
+  if (!runStoppingModal) {
+    return;
+  }
+  runStoppingModal.classList.add("is-hidden");
+  if (stoppingDotsTimer) {
+    clearInterval(stoppingDotsTimer);
+    stoppingDotsTimer = null;
+  }
+}
+
 function hideRunCompleteModal() {
   if (!runCompleteModal) {
     return;
@@ -441,6 +503,7 @@ function wsHandleMessage(event) {
       setStopRunState(true);
       isStoppingRun = false;
       lastElapsedSeconds = null;
+      hideRunStoppingModal();
       if (isDashboard && runWarning && runWarning.textContent === STOPPING_MESSAGE) {
         setRunWarning("");
       }
@@ -476,11 +539,6 @@ function wsHandleMessage(event) {
           document.body.classList.remove("is-running");
           if (screen === "ready" && previousScreen === "running" && !runDoneAcknowledged) {
             resetResultsUI("Results unavailable");
-          }
-          if (screen === "ready" && previousScreen === "complete") {
-            tubeNames = DEFAULT_TUBE_NAMES.slice();
-            updateTubeLabels();
-            try { localStorage.removeItem(TUBE_NAME_KEY); } catch (e) {}
           }
         }
         if (screen === "complete" && !runDoneAcknowledged) {
@@ -544,8 +602,16 @@ function connectWebSocket() {
   }
   socket = new WebSocket(wsUrl);
   socket.onmessage = wsHandleMessage;
+  let _wsWasConnected = false;
   socket.onopen = function() {
     console.log("WebSocket connection established.");
+    // Reload the page if we reconnected after a drop during an active update so
+    // the stale overlay and polling state are cleared.
+    if (_wsWasConnected && document.getElementById("update-overlay")) {
+      window.location.reload();
+      return;
+    }
+    _wsWasConnected = true;
   };
   socket.onerror = function(error) {
     console.error("WebSocket error:", error);
@@ -629,6 +695,7 @@ async function notifyStopRun(){
       formatElapsed(lastElapsedSeconds);
     }
     setRunWarning(STOPPING_MESSAGE);
+    showRunStoppingModal();
     try {
         const ret = await fetch("/button/stop", {
             method:"POST"
@@ -637,6 +704,8 @@ async function notifyStopRun(){
     } catch (err) {
         console.error("Stop button failed", err);
         setStopRunState(true);
+        isStoppingRun = false;
+        hideRunStoppingModal();
     }
 }
 

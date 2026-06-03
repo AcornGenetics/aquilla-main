@@ -9,12 +9,18 @@ const KEY_ROWS = [
   ["z", "x", "c", "v", "b", "n", "m", ".", "-"],
 ];
 
+const SYMBOL_ROWS = [
+  ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"],
+  ["-", "_", "+", "=", ";", ":", "'", "\"", "?", "/"],
+];
+
 let activeInput = null;
 let keyboardPadding = 0;
 let lastPhysicalKey = null;
 let lastPhysicalKeyTime = 0;
 let suppressMouseEvents = false;
 let isUppercase = false;
+let isSymbols = false;
 
 function safeSetSelectionRange(input, start, end) {
   if (!input || typeof input.setSelectionRange !== "function") return;
@@ -72,6 +78,24 @@ function buildKeyboard() {
     });
   }
 
+  // Symbol rows (hidden until ?123 toggled)
+  const symbolsPanel = document.createElement("div");
+  symbolsPanel.className = "keyboard-symbols-panel";
+  SYMBOL_ROWS.forEach((row) => {
+    const rowEl = document.createElement("div");
+    rowEl.className = "keyboard-row";
+    row.forEach((key) => {
+      const keyEl = document.createElement("button");
+      keyEl.type = "button";
+      keyEl.className = "keyboard-key";
+      keyEl.textContent = key;
+      keyEl.dataset.value = key;
+      rowEl.appendChild(keyEl);
+    });
+    symbolsPanel.appendChild(rowEl);
+  });
+  keyboard.appendChild(symbolsPanel);
+
   // Number row + Delete
   const row0 = document.createElement("div");
   row0.className = "keyboard-row";
@@ -118,6 +142,12 @@ function buildKeyboard() {
   const actionRow = document.createElement("div");
   actionRow.className = "keyboard-row keyboard-row--actions";
 
+  const symbolsBtn = document.createElement("button");
+  symbolsBtn.type = "button";
+  symbolsBtn.className = "keyboard-key keyboard-key--symbols";
+  symbolsBtn.textContent = "?123";
+  symbolsBtn.dataset.value = "symbols";
+
   const clearBtn = document.createElement("button");
   clearBtn.type = "button";
   clearBtn.className = "keyboard-key keyboard-key--clear";
@@ -136,6 +166,7 @@ function buildKeyboard() {
   enterBtn.textContent = "ENTER";
   enterBtn.dataset.value = "enter";
 
+  actionRow.appendChild(symbolsBtn);
   actionRow.appendChild(clearBtn);
   actionRow.appendChild(spaceBtn);
   actionRow.appendChild(enterBtn);
@@ -143,6 +174,19 @@ function buildKeyboard() {
 
   document.body.appendChild(keyboard);
   updateKeyboardCase();
+  updateSymbolsVisibility();
+}
+
+function updateSymbolsVisibility() {
+  const keyboard = document.querySelector(KEYBOARD_SELECTOR);
+  if (!keyboard) return;
+  const panel = keyboard.querySelector(".keyboard-symbols-panel");
+  if (panel) panel.style.display = isSymbols ? "flex" : "none";
+  keyboard.querySelectorAll(".keyboard-key--symbols").forEach((btn) => {
+    btn.textContent = isSymbols ? "ABC" : "?123";
+    btn.classList.toggle("is-active", isSymbols);
+  });
+  updateKeyboardSpacing(keyboard, true);
 }
 
 function updateKeyboardCase() {
@@ -181,6 +225,12 @@ function handleKeyPress(value) {
   if (value === "shift") {
     isUppercase = !isUppercase;
     updateKeyboardCase();
+    return;
+  }
+
+  if (value === "symbols") {
+    isSymbols = !isSymbols;
+    updateSymbolsVisibility();
     return;
   }
 
@@ -265,6 +315,10 @@ function hideKeyboard() {
     updateKeyboardSpacing(keyboard, false);
   }
   activeInput = null;
+  if (isSymbols) {
+    isSymbols = false;
+    updateSymbolsVisibility();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
