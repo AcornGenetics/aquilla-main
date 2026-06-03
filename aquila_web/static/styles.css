@@ -1595,6 +1595,8 @@ a:active {
   font-size: 22px;
   color: #111827;
   font-weight: 400;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .run-detail-pills {
