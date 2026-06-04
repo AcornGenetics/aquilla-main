@@ -1417,6 +1417,13 @@ async def wifi_forget(body: WifiForget):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+@app.get("/wifi/saved")
+async def wifi_saved():
+    try:
+        return await _kiosk_get("/wifi/saved")
+    except Exception as e:
+        return {"profiles": [], "error": str(e)}
+
 
 # ---------------------------------------------------------------------------
 # OTA Update — manual approval flow
