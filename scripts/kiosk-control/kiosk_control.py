@@ -189,6 +189,20 @@ def _wifi_forget(ssid: str) -> dict:
     return {"ok": code == 0, "error": err if code != 0 else None}
 
 
+def _wifi_saved() -> list:
+    _, out, _ = _nmcli("-f", "NAME,TYPE", "connection", "show")
+    profiles = []
+    for line in out.splitlines():
+        parts = line.split(":")
+        if len(parts) < 2:
+            continue
+        name, conn_type = parts[0].strip(), parts[1].strip()
+        if not name or "wireless" not in conn_type:
+            continue
+        profiles.append({"ssid": name})
+    return profiles
+
+
 # ---------------------------------------------------------------------------
 
 class KioskHandler(BaseHTTPRequestHandler):
@@ -228,6 +242,8 @@ class KioskHandler(BaseHTTPRequestHandler):
         elif self.path == "/wifi/scan":
             networks = _wifi_scan()
             self._respond(200, {"networks": networks})
+        elif self.path == "/wifi/saved":
+            self._respond(200, {"profiles": _wifi_saved()})
         else:
             self._respond(404, {"error": "not found"})
 
