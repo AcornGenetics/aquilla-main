@@ -249,6 +249,7 @@ sleep 3
 
 # Hide the mouse cursor at all times
 unclutter -idle 0 -root &
+xsetroot -cursor_name none
 
 # If kiosk_disabled flag exists, show desktop instead of kiosk.
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
@@ -272,6 +273,7 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --allow-file-access-from-files \
     --user-data-dir=/tmp/chromium-kiosk \
     --start-maximized \
+    --hide-scrollbars \
     >/dev/null 2>&1 &
 fi
 EOF
@@ -891,13 +893,13 @@ if [[ -f "${ACORN_LOGO_SVG}" ]]; then
     rsvg-convert -w 192 -h 192 --background-color white "${ACORN_LOGO_SVG}" \
         -o /tmp/acorn_logo_tmp.png 2>/dev/null
     if command -v convert &>/dev/null; then
-        convert /tmp/acorn_logo_tmp.png -rotate 270 "${ACORN_LOGO_PNG}" 2>/dev/null \
+        convert /tmp/acorn_logo_tmp.png -rotate 90 "${ACORN_LOGO_PNG}" 2>/dev/null \
             || cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
     elif python3 -c "from PIL import Image" &>/dev/null 2>&1; then
         python3 -c "
 from PIL import Image
 img = Image.open('/tmp/acorn_logo_tmp.png')
-img.rotate(90, expand=True).save('${ACORN_LOGO_PNG}')
+img.rotate(-90, expand=True).save('${ACORN_LOGO_PNG}')
 " 2>/dev/null || cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
     else
         cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
