@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Acorn
+Description=Acorn Genetics boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/acorn
+ScriptFile=/usr/share/plymouth/themes/acorn/acorn.script

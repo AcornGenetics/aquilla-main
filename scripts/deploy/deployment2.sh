@@ -317,6 +317,8 @@ phase_start 7 "Persistent Directory Structure"
 
 mkdir -p /opt/aquila/config
 mkdir -p /opt/aquila/profiles
+mkdir -p /opt/aquila/profiles/bundled
+mkdir -p /opt/aquila/profiles/local
 mkdir -p /opt/aquila/results
 mkdir -p /opt/aquila/logs/results
 mkdir -p /opt/aquila/logs/plots
@@ -328,6 +330,8 @@ mkdir -p /opt/fleet
 
 run_test "/opt/aquila/config"           "test -d /opt/aquila/config"
 run_test "/opt/aquila/profiles"         "test -d /opt/aquila/profiles"
+run_test "/opt/aquila/profiles/bundled" "test -d /opt/aquila/profiles/bundled"
+run_test "/opt/aquila/profiles/local"   "test -d /opt/aquila/profiles/local"
 run_test "/opt/aquila/results"          "test -d /opt/aquila/results"
 run_test "/opt/aquila/logs/results"     "test -d /opt/aquila/logs/results"
 run_test "/opt/aquila/logs/plots"       "test -d /opt/aquila/logs/plots"
@@ -837,10 +841,77 @@ if grep -q "console=tty1" "${CMDLINE_FILE}"; then
     sed -i 's/console=tty1/console=tty3/' "${CMDLINE_FILE}"
 fi
 
-run_test "tty3 in cmdline"     "grep -q 'console=tty3' ${CMDLINE_FILE}"
-run_test "tty1 not in cmdline" "! grep -q 'console=tty1' ${CMDLINE_FILE}"
+if ! grep -q "vt.global_cursor_default=0" "${CMDLINE_FILE}"; then
+    sed -i 's/$/ vt.global_cursor_default=0/' "${CMDLINE_FILE}"
+fi
 
-phase_pass "quiet boot configured (tty3)"
+run_test "tty3 in cmdline"          "grep -q 'console=tty3' ${CMDLINE_FILE}"
+run_test "tty1 not in cmdline"      "! grep -q 'console=tty1' ${CMDLINE_FILE}"
+run_test "cursor hidden in cmdline" "grep -q 'vt.global_cursor_default=0' ${CMDLINE_FILE}"
+
+phase_pass "quiet boot configured (tty3, cursor hidden)"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 14b — Plymouth Acorn Boot Theme
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "14b" "Plymouth Acorn Boot Theme"
+
+PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/acorn"
+PLYMOUTH_INITRAMFS_HOOK="/etc/initramfs-tools/hooks/plymouth"
+ACORN_LOGO_SVG="/opt/aquila/acorn_logo.svg"
+ACORN_LOGO_PNG="${PLYMOUTH_THEME_DIR}/acorn_logo.png"
+
+# Ensure Plymouth and theme packages are installed (idempotent)
+apt-get install -y --no-install-recommends plymouth plymouth-themes librsvg2-bin 2>/dev/null
+
+# Reinstall plymouth if initramfs hook is still missing (ensures early-boot coverage)
+if [[ ! -f "${PLYMOUTH_INITRAMFS_HOOK}" ]]; then
+    echo "  Plymouth initramfs hook missing — reinstalling plymouth..."
+    apt-get install --reinstall -y plymouth 2>/dev/null
+fi
+
+# Download acornlogo SVG from repo if not already on device
+if [[ ! -f "${ACORN_LOGO_SVG}" ]]; then
+    curl -fsSL "${RAW_REPO_URL}/aquila_web/static/acornlogo.svg" \
+        -o "${ACORN_LOGO_SVG}" 2>/dev/null || true
+fi
+
+# Create theme directory and convert SVG → PNG (256×256, white on transparent → white on black)
+mkdir -p "${PLYMOUTH_THEME_DIR}"
+
+if [[ -f "${ACORN_LOGO_SVG}" ]]; then
+    # 192×192 px — large enough for 1080p without blurring, matches splash.html proportions
+    rsvg-convert -w 192 -h 192 --background-color white "${ACORN_LOGO_SVG}" \
+        -o "${ACORN_LOGO_PNG}" 2>/dev/null \
+        || { echo "  ✗ rsvg-convert failed — logo PNG not created"; }
+else
+    echo "  ✗ acornlogo.svg not found — skipping logo conversion"
+fi
+
+# Install theme files from repo
+curl -fsSL "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.plymouth" \
+    -o "${PLYMOUTH_THEME_DIR}/acorn.plymouth" 2>/dev/null
+curl -fsSL "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.script" \
+    -o "${PLYMOUTH_THEME_DIR}/acorn.script" 2>/dev/null
+
+# Set Acorn as default theme and rebuild initramfs
+if [[ -f "${PLYMOUTH_THEME_DIR}/acorn.plymouth" ]]; then
+    plymouth-set-default-theme acorn
+    update-initramfs -u -k all 2>/dev/null
+    echo "  ✓ Acorn Plymouth theme set and initramfs updated"
+else
+    echo "  ✗ acorn.plymouth not installed — theme not set"
+fi
+
+run_test "plymouth installed"           "command -v plymouth-set-default-theme"
+run_test "plymouth initramfs hook"      "test -f ${PLYMOUTH_INITRAMFS_HOOK}"
+run_test "acorn theme dir exists"       "test -d ${PLYMOUTH_THEME_DIR}"
+run_test "acorn.plymouth file exists"   "test -f ${PLYMOUTH_THEME_DIR}/acorn.plymouth"
+run_test "acorn.script file exists"     "test -f ${PLYMOUTH_THEME_DIR}/acorn.script"
+run_test "acorn logo png exists"        "test -f ${ACORN_LOGO_PNG}"
+run_test "acorn theme is default"       "plymouth-set-default-theme | grep -q acorn"
+
+phase_pass "Plymouth Acorn theme installed (takes effect on next reboot)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 15 — Download Security Script
