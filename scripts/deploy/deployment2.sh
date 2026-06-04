@@ -857,7 +857,9 @@ phase_pass "quiet boot configured (tty3, cursor hidden)"
 phase_start "14b" "Plymouth Acorn Boot Theme"
 
 PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/acorn"
-PLYMOUTH_INITRAMFS_HOOK="/etc/initramfs-tools/hooks/plymouth"
+PLYMOUTH_INITRAMFS_HOOK="${PLYMOUTH_INITRAMFS_HOOK:-/usr/share/initramfs-tools/hooks/plymouth}"
+# Fallback: some distros put it in /etc/initramfs-tools/hooks/ instead
+[[ -f "/etc/initramfs-tools/hooks/plymouth" ]] && PLYMOUTH_INITRAMFS_HOOK="/etc/initramfs-tools/hooks/plymouth"
 ACORN_LOGO_SVG="/opt/aquila/acorn_logo.svg"
 ACORN_LOGO_PNG="${PLYMOUTH_THEME_DIR}/acorn_logo.png"
 
