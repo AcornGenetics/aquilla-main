@@ -247,6 +247,9 @@ unclutter -idle 0 -root -noevents &
 # Allow display and compositor to settle before launching Chromium
 sleep 3
 
+# Hide the mouse cursor at all times
+unclutter -idle 0 -root &
+
 # If kiosk_disabled flag exists, show desktop instead of kiosk.
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
 if [ ! -f /tmp/kiosk_disabled ]; then
@@ -269,7 +272,7 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --allow-file-access-from-files \
     --user-data-dir=/tmp/chromium-kiosk \
     --start-maximized \
-    &
+    >/dev/null 2>&1 &
 fi
 EOF
 
@@ -864,7 +867,7 @@ ACORN_LOGO_SVG="/opt/aquila/acorn_logo.svg"
 ACORN_LOGO_PNG="${PLYMOUTH_THEME_DIR}/acorn_logo.png"
 
 # Ensure Plymouth and theme packages are installed (idempotent)
-apt-get install -y --no-install-recommends plymouth plymouth-themes librsvg2-bin 2>/dev/null
+apt-get install -y --no-install-recommends plymouth plymouth-themes librsvg2-bin imagemagick 2>/dev/null
 
 # Reinstall plymouth if initramfs hook is still missing (ensures early-boot coverage)
 if [[ ! -f "${PLYMOUTH_INITRAMFS_HOOK}" ]]; then
@@ -882,10 +885,24 @@ fi
 mkdir -p "${PLYMOUTH_THEME_DIR}"
 
 if [[ -f "${ACORN_LOGO_SVG}" ]]; then
-    # 192×192 px — large enough for 1080p without blurring, matches splash.html proportions
+    # 192×192 px. Pre-rotate 270° (= 90° CCW) to compensate for display_hdmi_rotate=1.
+    # Plymouth renders to the raw framebuffer; hardware rotation applies after,
+    # so the image must be pre-rotated to appear upright on the physical screen.
     rsvg-convert -w 192 -h 192 --background-color white "${ACORN_LOGO_SVG}" \
-        -o "${ACORN_LOGO_PNG}" 2>/dev/null \
-        || { echo "  ✗ rsvg-convert failed — logo PNG not created"; }
+        -o /tmp/acorn_logo_tmp.png 2>/dev/null
+    if command -v convert &>/dev/null; then
+        convert /tmp/acorn_logo_tmp.png -rotate 270 "${ACORN_LOGO_PNG}" 2>/dev/null \
+            || cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
+    elif python3 -c "from PIL import Image" &>/dev/null 2>&1; then
+        python3 -c "
+from PIL import Image
+img = Image.open('/tmp/acorn_logo_tmp.png')
+img.rotate(90, expand=True).save('${ACORN_LOGO_PNG}')
+" 2>/dev/null || cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
+    else
+        cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
+        echo "  ⚠ No rotation tool found (install imagemagick) — logo may appear sideways"
+    fi
 else
     echo "  ✗ acornlogo.svg not found — skipping logo conversion"
 fi
