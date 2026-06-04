@@ -126,8 +126,27 @@ class Item(BaseModel):
 class TimerControl(BaseModel):
     action: str
 
+def estimated_minutes_to_seconds(minutes) -> Optional[int]:
+    """Convert an optional estimated-completion time (minutes) to whole seconds.
+
+    Returns None for missing / blank / non-positive / invalid input, which the
+    caller treats as "no estimate" (Run screen falls back to the stopwatch).
+    """
+    if isinstance(minutes, bool):
+        return None
+    if not isinstance(minutes, (int, float)):
+        return None
+    if minutes != minutes:  # NaN
+        return None
+    if minutes in (float("inf"), float("-inf")):
+        return None
+    if minutes <= 0:
+        return None
+    return int(round(minutes)) * 60
+
+
 class ProfileSelect(BaseModel):
-    profile: str 
+    profile: str
 
 class ProfileSave(BaseModel):
     name: str
@@ -135,6 +154,8 @@ class ProfileSave(BaseModel):
     steps: Optional[list] = None
     fam_label: Optional[str] = None
     rox_label: Optional[str] = None
+    # Optional estimated completion time, in minutes. None clears any existing estimate.
+    estimated_minutes: Optional[int] = None
 
 class ProfileDelete(BaseModel):
     profiles: list[str]
@@ -1145,6 +1166,17 @@ async def save_profile(payload: ProfileSave):
     if labels:
         base_profile["labels"] = labels
 
+    # Estimated completion time. Only touch the JSON when the caller actually sent the
+    # field (so an omitted field preserves the existing value); a positive value is stored
+    # as seconds, a blank/None/zero value clears it.
+    fields_set = getattr(payload, "model_fields_set", None) or getattr(payload, "__fields_set__", set())
+    if "estimated_minutes" in fields_set:
+        seconds = estimated_minutes_to_seconds(payload.estimated_minutes)
+        if seconds is not None:
+            base_profile["estimated_completion_seconds"] = seconds
+        else:
+            base_profile.pop("estimated_completion_seconds", None)
+
     if not profile_path:
         file_name = sanitize_name(payload.name)
         profile_path = profile_dir / f"{file_name}.json"
@@ -1233,6 +1265,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
             "title": data.get("name"),
             "labels": data.get("labels", {}),
             "rox_unavailable": bool(data.get("rox_unavailable", False)),
+            "estimated_completion_seconds": data.get("estimated_completion_seconds"),
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
         }
 
@@ -1241,6 +1274,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         "title": data.get("title", profile_path.stem),
         "labels": data.get("labels", {}),
         "rox_unavailable": bool(data.get("rox_unavailable", False)),
+        "estimated_completion_seconds": data.get("estimated_completion_seconds"),
         "steps": data.get("steps", [])
     }
 
