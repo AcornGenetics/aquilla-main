@@ -728,6 +728,28 @@ curl -fsSL "${KIOSK_RAW}/kiosk-control.service" -o /etc/systemd/system/kiosk-con
 systemctl daemon-reload
 systemctl enable --now kiosk-control
 
+# Install wifi-recovery startup service — cleans broken profiles and reconnects on boot
+curl -fsSL "${RAW_REPO_URL}/scripts/setup/wifi_recovery.sh" -o /opt/aquila/wifi_recovery.sh
+chmod +x /opt/aquila/wifi_recovery.sh
+cat > /etc/systemd/system/wifi-recovery.service <<'EOF'
+[Unit]
+Description=WiFi recovery — clean broken profiles and reconnect on boot
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/aquila/wifi_recovery.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable wifi-recovery.service
+
 # Create lxpanel-pi config for desktop WiFi panel (used when kiosk exits)
 mkdir -p "${PI_HOME}/.config/lxpanel-pi/panels"
 cat > "${PI_HOME}/.config/lxpanel-pi/panels/panel" <<'PANELEOF'
