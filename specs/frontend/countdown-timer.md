@@ -18,6 +18,8 @@ This spec adds an **optional estimated completion time** to run profiles and use
 - If the estimate is absent or `null`, the Run screen keeps the **existing elapsed-time stopwatch** behavior exactly as it is today.
 - When the countdown reaches zero, it **stops at `00:00`** (it does **not** go negative) and a **"Finishing Run" overlay** appears — modeled on the existing "Stopping Run…" modal — reading **"Finishing Run, Please Wait…"**. This overlay stays up until the run actually completes (or is stopped).
 - The machine's runtime is not dictated by the countdown. If the machine finishes a run while the countdown still has time left, the UI switches to the done/complete state exactly as it does today — the countdown is purely informational and never drives run state.
+- `time_unavailable` and `estimated_completion_seconds` fields always present in bundled json files and located above steps.
+- If `time_unavailable` true, then  `estimated_completion_seconds` should be null. Else, `estimated_completion_seconds` displays the time in seconds.
 
 ---
 

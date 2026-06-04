@@ -1,94 +1,93 @@
 {
-"output_dir": "pcr_data",
-"post_in_gui": "True",
-"title": "Verification Profile",
-"steps": [
+  "output_dir": "pcr_data",
+  "post_in_gui": "True",
+  "title": "Verification Profile",
+  "time_unavailable": true,
+  "estimated_completion_seconds": null,
+  "steps": [
     {
-        "disable": 0,
-        "duration": 1,
-        "description": "Record equilabrion without power."
-    },
-    {
-        "ramp_rate": 1.6
-    },
-    {  
-        "pcr_fanon" : 1
+      "disable": 0,
+      "duration": 1,
+      "description": "Record equilabrion without power."
     },
     {
-        "enable": 0, 
-        "duration": 1,
-        "description": "Turn on and record temperature for a little bit"
+      "ramp_rate": 1.6
     },
     {
-	"optics":""
+      "pcr_fanon": 1
     },
     {
-        "setpoint": 25,
-        "duration": 1,
-        "description": "Presetting temperature"
+      "enable": 0,
+      "duration": 1,
+      "description": "Turn on and record temperature for a little bit"
     },
     {
-        "setpoint": 37,
-        "duration": 60,
-        "description": "37C for 1 minutes"
+      "setpoint": 25,
+      "duration": 1,
+      "description": "Presetting temperature"
     },
     {
-        "setpoint": 60.5,
-        "duration": 60,
-        "description": "60C for 1 minutes"
+      "setpoint": 37,
+      "duration": 60,
+      "description": "37C for 1 minutes"
     },
     {
-        "setpoint": 95,
-        "duration": 300,
-        "description": "Activation temperature for 5 minutes"
+      "setpoint": 60.5,
+      "duration": 60,
+      "description": "60C for 1 minutes"
     },
     {
-        "ramp_rate": 1.75
+      "setpoint": 95,
+      "duration": 300,
+      "description": "Activation temperature for 5 minutes"
     },
     {
-        "repeat": [
-            {
-                "setpoint": 95,
-                "duration": 12,
-                "description": "Melt"
-            },
-	    {
-                "setpoint": 60,
-                "duration": 20,
-                "description": "Annealing"
-            },
-	    {
-		"optics":""
-	    },
-	    {
-                "setpoint": 60,
-                "duration": 18,
-                "description": "Annealing"
-            }
-        ],
-        "cycles": 5
+      "ramp_rate": 1.75
     },
     {
-        "ramp_rate": 1.6
+      "repeat": [
+        {
+          "setpoint": 95,
+          "duration": 12,
+          "description": "Melt"
+        },
+        {
+          "setpoint": 60,
+          "duration": 20,
+          "description": "Annealing"
+        },
+        {
+          "setpoint": 60,
+          "duration": 18,
+          "description": "Annealing"
+        }
+      ],
+      "cycles": 5
     },
     {
-        "setpoint": 40,
-        "duration": 20,
-        "description": "Initial cooling"
+      "ramp_rate": 1.6
     },
     {
-        "setpoint": 25,
-        "duration": 10,
-        "description": "Restoring setpoint to RT"
+      "setpoint": 40,
+      "duration": 20,
+      "description": "Initial cooling"
     },
     {
-        "disable": 0,
-        "duration": 5,
-        "description": "Turn off and record temperature for a little bit"
+      "setpoint": 25,
+      "duration": 10,
+      "description": "Restoring setpoint to RT"
     },
-
-    { 
-        "pcr_fanoff" : 0
+    {
+      "disable": 0,
+      "duration": 5,
+      "description": "Turn off and record temperature for a little bit"
+    },
+    {
+      "pcr_fanoff": 0
     }
-]
+  ],
+  "labels": {
+    "fam": "FAM",
+    "rox": "ROX"
+  }
 }

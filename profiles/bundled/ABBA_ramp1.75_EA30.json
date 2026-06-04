@@ -2,6 +2,8 @@
 "output_dir": "pcr_data",
 "post_in_gui": "True",
 "title": "ABBA_ramp1.75_EA30",
+"time_unavailable": false,
+"estimated_completion_seconds": 4080,
 "steps": [
     {
         "disable": 0,

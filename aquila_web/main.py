@@ -145,6 +145,29 @@ def estimated_minutes_to_seconds(minutes) -> Optional[int]:
     return int(round(minutes)) * 60
 
 
+def _order_time_fields(profile: dict) -> dict:
+    """Return a copy of *profile* with ``time_unavailable`` and
+    ``estimated_completion_seconds`` placed immediately after ``rox_unavailable``
+    (or after ``title`` when ``rox_unavailable`` is absent)."""
+    time_unavailable = profile.get("time_unavailable", True)
+    estimated = profile.get("estimated_completion_seconds")
+    anchor = "rox_unavailable" if "rox_unavailable" in profile else "title"
+    ordered: dict = {}
+    inserted = False
+    for key, value in profile.items():
+        if key in ("time_unavailable", "estimated_completion_seconds"):
+            continue
+        ordered[key] = value
+        if key == anchor:
+            ordered["time_unavailable"] = time_unavailable
+            ordered["estimated_completion_seconds"] = estimated
+            inserted = True
+    if not inserted:
+        ordered["time_unavailable"] = time_unavailable
+        ordered["estimated_completion_seconds"] = estimated
+    return ordered
+
+
 class ProfileSelect(BaseModel):
     profile: str
 
@@ -1166,16 +1189,24 @@ async def save_profile(payload: ProfileSave):
     if labels:
         base_profile["labels"] = labels
 
-    # Estimated completion time. Only touch the JSON when the caller actually sent the
-    # field (so an omitted field preserves the existing value); a positive value is stored
-    # as seconds, a blank/None/zero value clears it.
+    # Estimated completion time. The JSON always carries both (time_unavailable
+    # mirrors the rox_unavailable convention — True means no estimate is set):
+    #   time_unavailable              -> bool, True when NO estimate is set
+    #   estimated_completion_seconds  -> int seconds when set, else None
+    # When the caller sends the field we use it; when omitted we keep whatever the
+    # existing profile already had. Either way both keys are always written.
     fields_set = getattr(payload, "model_fields_set", None) or getattr(payload, "__fields_set__", set())
     if "estimated_minutes" in fields_set:
-        seconds = estimated_minutes_to_seconds(payload.estimated_minutes)
-        if seconds is not None:
-            base_profile["estimated_completion_seconds"] = seconds
-        else:
-            base_profile.pop("estimated_completion_seconds", None)
+        estimate_seconds = estimated_minutes_to_seconds(payload.estimated_minutes)
+    else:
+        existing = base_profile.get("estimated_completion_seconds")
+        estimate_seconds = existing if (
+            isinstance(existing, (int, float))
+            and not isinstance(existing, bool)
+            and existing > 0
+        ) else None
+    base_profile["time_unavailable"] = estimate_seconds is None
+    base_profile["estimated_completion_seconds"] = estimate_seconds
 
     if not profile_path:
         file_name = sanitize_name(payload.name)
@@ -1189,6 +1220,8 @@ async def save_profile(payload: ProfileSave):
             if candidate_path.exists() and candidate_path != profile_path:
                 candidate_path = profile_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
             profile_path = candidate_path
+
+    base_profile = _order_time_fields(base_profile)
 
     try:
         with profile_path.open("w") as f:
@@ -1265,6 +1298,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
             "title": data.get("name"),
             "labels": data.get("labels", {}),
             "rox_unavailable": bool(data.get("rox_unavailable", False)),
+            "time_unavailable": bool(data.get("time_unavailable", data.get("estimated_completion_seconds") is None)),
             "estimated_completion_seconds": data.get("estimated_completion_seconds"),
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
         }
