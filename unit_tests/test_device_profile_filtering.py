@@ -28,7 +28,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "aquila_web"))
 
-os.environ.setdefault("AQ_DEV_SIMULATE", "1")
 os.environ.setdefault("AQ_SRC_BASEDIR", str(REPO_ROOT))
 
 
@@ -134,3 +133,105 @@ def test_duke_bundle(monkeypatch, tmp_path):
         "STEC_and_EPEC_Hygiena1.75_no37Cstep.json",
         "verification_profile.json",
     }
+
+
+# ── Migration tests ──────────────────────────────────────────────────────────
+
+def _write_profile(path: Path, title: str = "Test") -> None:
+    path.write_text(json.dumps({"title": title, "post_in_gui": "True", "steps": []}))
+
+
+def test_migration_moves_bundled_files_to_bundled_subdir(monkeypatch, tmp_path):
+    pdir = tmp_path / "profiles"
+    pdir.mkdir()
+    _write_profile(pdir / "ABBA_ramp1.75_EA30.json")
+    _write_profile(pdir / "verification_profile.json")
+
+    import aquila_web.main as web_main
+    monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
+    web_main._migrate_profiles()
+
+    assert (pdir / "bundled" / "ABBA_ramp1.75_EA30.json").exists()
+    assert (pdir / "bundled" / "verification_profile.json").exists()
+    assert not (pdir / "ABBA_ramp1.75_EA30.json").exists()
+
+
+def test_migration_moves_unknown_files_to_local_subdir(monkeypatch, tmp_path):
+    pdir = tmp_path / "profiles"
+    pdir.mkdir()
+    _write_profile(pdir / "my_custom_profile.json")
+
+    import aquila_web.main as web_main
+    monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
+    web_main._migrate_profiles()
+
+    assert (pdir / "local" / "my_custom_profile.json").exists()
+    assert not (pdir / "my_custom_profile.json").exists()
+
+
+def test_migration_is_noop_when_subdirs_exist(monkeypatch, tmp_path):
+    pdir = tmp_path / "profiles"
+    (pdir / "bundled").mkdir(parents=True)
+    (pdir / "local").mkdir(parents=True)
+    _write_profile(pdir / "leftover.json")
+
+    import aquila_web.main as web_main
+    monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
+    web_main._migrate_profiles()
+
+    # flat file should NOT have been moved — migration was a no-op
+    assert (pdir / "leftover.json").exists()
+
+
+def test_migration_skips_flat_if_bundled_already_has_file(monkeypatch, tmp_path):
+    pdir = tmp_path / "profiles"
+    pdir.mkdir()
+    flat = pdir / "ABBA_ramp1.75_EA30.json"
+    _write_profile(flat, title="old local edit")
+
+    # Simulate entrypoint having already written the image version
+    bundled_sub = pdir / "bundled"
+    bundled_sub.mkdir()
+    _write_profile(bundled_sub / "ABBA_ramp1.75_EA30.json", title="image version")
+    # local/ does not exist yet — triggers migration
+    (pdir / "local").mkdir()
+
+    import aquila_web.main as web_main
+    monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
+    # Both subdirs exist → no-op; flat file untouched
+    web_main._migrate_profiles()
+
+    # Image version preserved
+    data = json.loads((bundled_sub / "ABBA_ramp1.75_EA30.json").read_text())
+    assert data["title"] == "image version"
+
+
+def test_migration_aborts_gracefully_if_profile_groups_missing(monkeypatch, tmp_path):
+    pdir = tmp_path / "profiles"
+    pdir.mkdir()
+    _write_profile(pdir / "some_profile.json")
+    # Remove profile_groups.json so migration can't determine bundled filenames
+    (tmp_path / "config_files" / "profile_groups.json").unlink()
+
+    import aquila_web.main as web_main
+    monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
+    web_main._migrate_profiles()  # should not raise
+
+    # File should be untouched
+    assert (pdir / "some_profile.json").exists()
+
+
+# ── Filter works with real bundled/ subdir (production layout) ───────────────
+
+def test_all_bundled_filenames_returns_union_of_all_groups(monkeypatch, tmp_path):
+    import aquila_web.main as web_main
+    monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
+    result = web_main._all_bundled_filenames()
+    assert "ABBA_ramp1.75_EA30.json" in result
+    assert "O157__ESBL_full.json" in result
+    assert "verification_profile.json" in result

@@ -55,10 +55,6 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 app.mount("/plots", StaticFiles(directory=str(PLOTS_DIR)), name="plots")
 
 def resolve_profile_dir() -> Path:
-    if DEV_SIMULATE and BUNDLED_PROFILE_DIR.exists():
-        return BUNDLED_PROFILE_DIR
-    if DEV_SIMULATE and LOCAL_BUNDLED_PROFILE_DIR.exists():
-        return LOCAL_BUNDLED_PROFILE_DIR
     if DEFAULT_PROFILE_DIR.exists():
         return DEFAULT_PROFILE_DIR
     return LOCAL_PROFILE_DIR
@@ -99,6 +95,60 @@ def _profile_rox_unavailable(profile_name: str | None) -> bool:
         except Exception:
             continue
     return False
+
+def _all_bundled_filenames() -> set[str]:
+    profile_groups_path = BASE_DIR / "config_files" / "profile_groups.json"
+    try:
+        groups = json.loads(profile_groups_path.read_text())
+        result = set()
+        for v in groups.values():
+            if isinstance(v, list):
+                result.update(v)
+        return result
+    except Exception:
+        return set()
+
+
+def _migrate_profiles() -> None:
+    base = Path(BASE_DIR) / "profiles" if not str(BASE_DIR).endswith("profiles") else Path(BASE_DIR)
+    # Use the resolved profile dir (may differ in dev mode)
+    pdir = resolve_profile_dir()
+    bundled_sub = pdir / "bundled"
+    local_sub = pdir / "local"
+
+    if bundled_sub.exists() and local_sub.exists():
+        return
+
+    known_bundled = _all_bundled_filenames()
+    if not known_bundled:
+        logger.warning("_migrate_profiles: profile_groups.json unreadable — skipping migration")
+        return
+
+    bundled_sub.mkdir(parents=True, exist_ok=True)
+    local_sub.mkdir(parents=True, exist_ok=True)
+
+    moved_bundled = 0
+    moved_local = 0
+    for flat_file in list(pdir.glob("*.json")):
+        if flat_file.name in known_bundled:
+            dest = bundled_sub / flat_file.name
+            if dest.exists():
+                flat_file.unlink(missing_ok=True)
+            else:
+                flat_file.rename(dest)
+                moved_bundled += 1
+        else:
+            dest = local_sub / flat_file.name
+            try:
+                flat_file.rename(dest)
+                moved_local += 1
+            except Exception as e:
+                logger.error("_migrate_profiles: failed to move %s to local/: %s", flat_file.name, e)
+
+    logger.info("_migrate_profiles: moved %d → bundled/, %d → local/", moved_bundled, moved_local)
+
+
+_migrate_profiles()
 
 profile_dir = resolve_profile_dir()
 run_requested = False
@@ -955,16 +1005,39 @@ async def list_profiles():
     if not profile_dir.exists():
         return profiles
     allowed = resolve_device_profiles()
-    for path in profile_dir.rglob("*.json"):
+
+    # Collect local filenames first for deduplication — local takes priority over bundled
+    local_filenames: set[str] = {p.name for p in (profile_dir / "local").glob("*.json")} if (profile_dir / "local").exists() else set()
+
+    # local/ first, then bundled/, then anything flat (dev/legacy)
+    search_paths = []
+    local_dir = profile_dir / "local"
+    bundled_dir = profile_dir / "bundled"
+    if local_dir.exists():
+        search_paths.extend(sorted(local_dir.glob("*.json")))
+    if bundled_dir.exists():
+        search_paths.extend(sorted(bundled_dir.glob("*.json")))
+    # fallback: flat files not in either subdir (dev simulate or pre-migration)
+    search_paths.extend(p for p in sorted(profile_dir.glob("*.json")) if p.is_file())
+
+    for path in search_paths:
+        is_bundled = "bundled" in path.parts
+
+        # Deduplicate: skip bundled file if a local version exists with same filename
+        if is_bundled and path.name in local_filenames:
+            continue
+
+        # Device allowlist: only filter bundled profiles
+        if allowed is not None and is_bundled and path.name not in allowed:
+            continue
+
         try:
             with path.open() as f:
                 data = json.load(f)
             if "post_in_gui" in data and str(data.get("post_in_gui")).lower() != "true":
                 continue
-        except Exception as e:
-            logger.info("Error processing %s"%(path))
-
-        if allowed is not None and "bundled" in path.parts and path.name not in allowed:
+        except Exception:
+            logger.info("Error processing %s", path)
             continue
 
         if "configuration" in data and "name" in data:
@@ -974,6 +1047,7 @@ async def list_profiles():
                 "id": str(path.relative_to(profile_dir)),
                 "name": data.get("name"),
                 "label": data.get("name"),
+                "bundled": is_bundled,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
                 "configuration": data.get("configuration", {})
@@ -985,12 +1059,14 @@ async def list_profiles():
                 "id": str(path.relative_to(profile_dir)),
                 "name": data.get("title", path.stem),
                 "label": data.get("title", path.stem),
+                "bundled": is_bundled,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
                 "configuration": _convert_legacy_steps_to_run_config(
                     data.get("steps", [])
                 )
             })
+
     name_counts = {}
     for profile in profiles:
         name = profile.get("name") or profile.get("label") or profile.get("id") or "profile"
@@ -1113,6 +1189,8 @@ async def save_profile(payload: ProfileSave):
         profile_path = profile_dir / payload.profile_id
         if not profile_path.name.endswith(".json"):
             profile_path = profile_path.with_suffix(".json")
+        if "bundled" in profile_path.parts:
+            raise HTTPException(status_code=403, detail="Bundled profiles are read-only.")
 
     base_profile = None
     if profile_path and profile_path.exists():
@@ -1146,10 +1224,12 @@ async def save_profile(payload: ProfileSave):
         base_profile["labels"] = labels
 
     if not profile_path:
+        local_dir = profile_dir / "local"
+        local_dir.mkdir(parents=True, exist_ok=True)
         file_name = sanitize_name(payload.name)
-        profile_path = profile_dir / f"{file_name}.json"
+        profile_path = local_dir / f"{file_name}.json"
         if profile_path.exists():
-            profile_path = profile_dir / f"{file_name}_{int(datetime.now().timestamp())}.json"
+            profile_path = local_dir / f"{file_name}_{int(datetime.now().timestamp())}.json"
     elif requested_title:
         sanitized_title = sanitize_name(requested_title)
         if sanitized_title and profile_path.stem != sanitized_title:
@@ -1170,7 +1250,7 @@ async def save_profile(payload: ProfileSave):
         except Exception:
             logger.warning("Failed to remove old profile %s", original_profile_path)
 
-    return {"ok": True, "id": profile_path.name}
+    return {"ok": True, "id": str(profile_path.relative_to(profile_dir))}
 
 @app.post("/profiles/delete")
 async def delete_profiles(payload: ProfileDelete):
@@ -1181,10 +1261,18 @@ async def delete_profiles(payload: ProfileDelete):
     for profile_id in payload.profiles:
         if not profile_id:
             continue
-        safe_name = Path(profile_id).name
-        profile_path = profile_dir / safe_name
-        if profile_path.suffix != ".json":
-            profile_path = profile_path.with_suffix(".json")
+        # profile_id may be a relative path like "local/foo.json" or just "foo.json"
+        candidate = profile_dir / profile_id
+        if candidate.suffix != ".json":
+            candidate = candidate.with_suffix(".json")
+        # Reject attempts to delete bundled profiles
+        if "bundled" in candidate.parts:
+            raise HTTPException(status_code=403, detail="Bundled profiles cannot be deleted.")
+        safe_name = candidate.name
+        profile_path = candidate
+        if not profile_path.exists():
+            # fallback: check local/ subdir
+            profile_path = profile_dir / "local" / safe_name
         if not profile_path.exists():
             missing.append(safe_name)
             continue
