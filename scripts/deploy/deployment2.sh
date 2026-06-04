@@ -241,15 +241,12 @@ xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
   "Coordinate Transformation Matrix" \
   0 1 0 -1 0 1 0 0 1
 
-# Hide cursor immediately on touch — -root covers the whole screen, -noevents prevents re-show on touch
+# Hide cursor at X11 root level (covers terminal and behind Chromium)
+xsetroot -cursor_name none
 unclutter -idle 0 -root -noevents &
 
 # Allow display and compositor to settle before launching Chromium
 sleep 3
-
-# Hide the mouse cursor at all times
-unclutter -idle 0 -root &
-xsetroot -cursor_name none
 
 # If kiosk_disabled flag exists, show desktop instead of kiosk.
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
@@ -956,9 +953,6 @@ phase_pass "security.sh saved to /opt/aquila/security.sh — run it manually whe
 echo ""
 echo "=================================================="
 echo " Deployment complete for device: ${DEVICE_HOSTNAME}"
-echo ""
-echo " IMPORTANT: On first boot, physically push the"
-echo " drawer back to the home sensor before powering on."
 echo ""
 echo " MANUAL STEP REQUIRED after reboot:"
 echo " If the login screen appears instead of the kiosk,"
