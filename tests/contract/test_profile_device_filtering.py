@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 os.environ.setdefault("AQ_SRC_BASEDIR", str(REPO_ROOT))
-os.environ.setdefault("AQ_DEV_SIMULATE", "1")
 sys.path.insert(0, str(REPO_ROOT))
 
 

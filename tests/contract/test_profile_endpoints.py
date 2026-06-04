@@ -161,11 +161,97 @@ def test_profile_name_with_special_chars_is_sanitized(client):
     resp = client.post("/profiles", json={"name": traversal_name, "steps": []})
     assert resp.status_code == 200
     returned_id = resp.json().get("id", "")
-    # The returned filename must not contain path separators
-    assert "/" not in returned_id
-    assert "\\" not in returned_id
-    assert ".." not in returned_id
+    # ID may contain a known subdir prefix (e.g. "local/") — check the filename part only
+    filename_part = returned_id.split("/")[-1]
+    assert "\\" not in filename_part
+    assert ".." not in filename_part
+    # No extra slashes beyond the single allowed subdir prefix
+    assert returned_id.count("/") <= 1
     _delete_profile(client, returned_id)
+
+
+# ---------------------------------------------------------------------------
+# Bundled + local both visible in listing
+# ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+def test_local_profile_appears_alongside_bundled(client):
+    """A user-created (local) profile appears in /profiles together with bundled ones."""
+    profile_id = _create_profile(client, name="Local And Bundled Coexist")
+    try:
+        profiles = client.get("/profiles").json()
+        ids = [p["id"] for p in profiles]
+        # The local profile is present
+        assert profile_id in ids, f"local profile {profile_id!r} missing from listing"
+        # At least one bundled profile is also present
+        bundled_ids = [i for i in ids if i.startswith("bundled/")]
+        assert bundled_ids, "No bundled profiles found alongside local profile"
+    finally:
+        _delete_profile(client, profile_id)
+
+
+@pytest.mark.contract
+def test_local_profile_has_bundled_false(client):
+    """A user-created profile must not be flagged as bundled."""
+    profile_id = _create_profile(client, name="Local Not Bundled")
+    try:
+        profiles = client.get("/profiles").json()
+        match = next((p for p in profiles if p["id"] == profile_id), None)
+        assert match is not None
+        assert match.get("bundled") is False
+    finally:
+        _delete_profile(client, profile_id)
+
+
+@pytest.mark.contract
+def test_bundled_profile_has_bundled_true(client):
+    """Profiles served from the bundled/ subdir must be flagged bundled=True."""
+    profiles = client.get("/profiles").json()
+    bundled = [p for p in profiles if p["id"].startswith("bundled/")]
+    assert bundled, "No bundled profiles in listing — check profiles/bundled/ dir"
+    for p in bundled:
+        assert p.get("bundled") is True, f"{p['id']} missing bundled=True"
+
+
+@pytest.mark.contract
+def test_overwriting_bundled_does_not_alter_local_copy(client, tmp_path):
+    """
+    Replacing a bundled file on disk must not change a local profile with the
+    same base name.  The two files live in separate subdirs and are independent.
+    """
+    from aquila_web import main as web_main
+
+    profile_dir = web_main.resolve_profile_dir()
+    bundled_dir = profile_dir / "bundled"
+    local_dir = profile_dir / "local"
+    bundled_dir.mkdir(parents=True, exist_ok=True)
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    fname = "shared_name_test.json"
+    bundled_path = bundled_dir / fname
+    local_path = local_dir / fname
+
+    bundled_path.write_text(json.dumps({
+        "title": "bundled version", "post_in_gui": "True", "steps": []
+    }))
+    local_path.write_text(json.dumps({
+        "title": "local version", "post_in_gui": "True", "steps": []
+    }))
+
+    try:
+        # Simulate entrypoint overwriting bundled copy with a new image version
+        bundled_path.write_text(json.dumps({
+            "title": "updated bundled version", "post_in_gui": "True", "steps": []
+        }))
+
+        # Local file must be unchanged
+        local_data = json.loads(local_path.read_text())
+        assert local_data["title"] == "local version", (
+            "Overwriting bundled file mutated the local copy"
+        )
+    finally:
+        bundled_path.unlink(missing_ok=True)
+        local_path.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------

@@ -5,10 +5,10 @@ profile_dir="${PROFILE_DIR:-/opt/aquila/profiles}"
 bundled_profile_dir="${BUNDLED_PROFILE_DIR:-/opt/aquila/profiles_bundled}"
 
 if [[ -d "${bundled_profile_dir}" ]]; then
-  mkdir -p "${profile_dir}"
+  mkdir -p "${profile_dir}/bundled"
   shopt -s nullglob
   for profile in "${bundled_profile_dir}"/*.json; do
-    cp -n "${profile}" "${profile_dir}/"
+    cp -f "${profile}" "${profile_dir}/bundled/"
   done
   shopt -u nullglob
 fi

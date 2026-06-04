@@ -252,6 +252,9 @@ pcr_curve_tests/tmp/
 # Device-local config
 cmdline.txt
 
+# User-created profiles (device-local, never committed)
+profiles/local/
+
 # Ruflo / AI tool runtime
 ruvector.db
 .swarm/
