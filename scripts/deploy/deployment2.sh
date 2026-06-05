@@ -241,7 +241,8 @@ xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
   "Coordinate Transformation Matrix" \
   0 1 0 -1 0 1 0 0 1
 
-# Hide cursor immediately on touch — -root covers the whole screen, -noevents prevents re-show on touch
+# Hide cursor at X11 root level (covers terminal and behind Chromium)
+xsetroot -cursor_name none
 unclutter -idle 0 -root -noevents &
 
 # Allow display and compositor to settle before launching Chromium
@@ -269,7 +270,8 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --allow-file-access-from-files \
     --user-data-dir=/tmp/chromium-kiosk \
     --start-maximized \
-    &
+    --hide-scrollbars \
+    >/dev/null 2>&1 &
 fi
 EOF
 
@@ -317,6 +319,8 @@ phase_start 7 "Persistent Directory Structure"
 
 mkdir -p /opt/aquila/config
 mkdir -p /opt/aquila/profiles
+mkdir -p /opt/aquila/profiles/bundled
+mkdir -p /opt/aquila/profiles/local
 mkdir -p /opt/aquila/results
 mkdir -p /opt/aquila/logs/results
 mkdir -p /opt/aquila/logs/plots
@@ -328,6 +332,8 @@ mkdir -p /opt/fleet
 
 run_test "/opt/aquila/config"           "test -d /opt/aquila/config"
 run_test "/opt/aquila/profiles"         "test -d /opt/aquila/profiles"
+run_test "/opt/aquila/profiles/bundled" "test -d /opt/aquila/profiles/bundled"
+run_test "/opt/aquila/profiles/local"   "test -d /opt/aquila/profiles/local"
 run_test "/opt/aquila/results"          "test -d /opt/aquila/results"
 run_test "/opt/aquila/logs/results"     "test -d /opt/aquila/logs/results"
 run_test "/opt/aquila/logs/plots"       "test -d /opt/aquila/logs/plots"
@@ -859,10 +865,93 @@ if grep -q "console=tty1" "${CMDLINE_FILE}"; then
     sed -i 's/console=tty1/console=tty3/' "${CMDLINE_FILE}"
 fi
 
-run_test "tty3 in cmdline"     "grep -q 'console=tty3' ${CMDLINE_FILE}"
-run_test "tty1 not in cmdline" "! grep -q 'console=tty1' ${CMDLINE_FILE}"
+if ! grep -q "vt.global_cursor_default=0" "${CMDLINE_FILE}"; then
+    sed -i 's/$/ vt.global_cursor_default=0/' "${CMDLINE_FILE}"
+fi
 
-phase_pass "quiet boot configured (tty3)"
+run_test "tty3 in cmdline"          "grep -q 'console=tty3' ${CMDLINE_FILE}"
+run_test "tty1 not in cmdline"      "! grep -q 'console=tty1' ${CMDLINE_FILE}"
+run_test "cursor hidden in cmdline" "grep -q 'vt.global_cursor_default=0' ${CMDLINE_FILE}"
+
+phase_pass "quiet boot configured (tty3, cursor hidden)"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 14b — Plymouth Acorn Boot Theme
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "14b" "Plymouth Acorn Boot Theme"
+
+PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/acorn"
+PLYMOUTH_INITRAMFS_HOOK="${PLYMOUTH_INITRAMFS_HOOK:-/usr/share/initramfs-tools/hooks/plymouth}"
+# Fallback: some distros put it in /etc/initramfs-tools/hooks/ instead
+[[ -f "/etc/initramfs-tools/hooks/plymouth" ]] && PLYMOUTH_INITRAMFS_HOOK="/etc/initramfs-tools/hooks/plymouth"
+ACORN_LOGO_SVG="/opt/aquila/acorn_logo.svg"
+ACORN_LOGO_PNG="${PLYMOUTH_THEME_DIR}/acorn_logo.png"
+
+# Ensure Plymouth and theme packages are installed (idempotent)
+apt-get install -y --no-install-recommends plymouth plymouth-themes librsvg2-bin imagemagick 2>/dev/null
+
+# Reinstall plymouth if initramfs hook is still missing (ensures early-boot coverage)
+if [[ ! -f "${PLYMOUTH_INITRAMFS_HOOK}" ]]; then
+    echo "  Plymouth initramfs hook missing — reinstalling plymouth..."
+    apt-get install --reinstall -y plymouth 2>/dev/null
+fi
+
+# Download acornlogo SVG from repo if not already on device
+if [[ ! -f "${ACORN_LOGO_SVG}" ]]; then
+    curl -fsSL "${RAW_REPO_URL}/aquila_web/static/acornlogo.svg" \
+        -o "${ACORN_LOGO_SVG}" 2>/dev/null || true
+fi
+
+# Create theme directory and convert SVG → PNG (256×256, white on transparent → white on black)
+mkdir -p "${PLYMOUTH_THEME_DIR}"
+
+if [[ -f "${ACORN_LOGO_SVG}" ]]; then
+    # 192×192 px. Pre-rotate 270° (= 90° CCW) to compensate for display_hdmi_rotate=1.
+    # Plymouth renders to the raw framebuffer; hardware rotation applies after,
+    # so the image must be pre-rotated to appear upright on the physical screen.
+    rsvg-convert -w 192 -h 192 --background-color white "${ACORN_LOGO_SVG}" \
+        -o /tmp/acorn_logo_tmp.png 2>/dev/null
+    if command -v convert &>/dev/null; then
+        convert /tmp/acorn_logo_tmp.png -rotate 90 "${ACORN_LOGO_PNG}" 2>/dev/null \
+            || cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
+    elif python3 -c "from PIL import Image" &>/dev/null 2>&1; then
+        python3 -c "
+from PIL import Image
+img = Image.open('/tmp/acorn_logo_tmp.png')
+img.rotate(-90, expand=True).save('${ACORN_LOGO_PNG}')
+" 2>/dev/null || cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
+    else
+        cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
+        echo "  ⚠ No rotation tool found (install imagemagick) — logo may appear sideways"
+    fi
+else
+    echo "  ✗ acornlogo.svg not found — skipping logo conversion"
+fi
+
+# Install theme files from repo
+curl -fsSL "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.plymouth" \
+    -o "${PLYMOUTH_THEME_DIR}/acorn.plymouth" 2>/dev/null
+curl -fsSL "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.script" \
+    -o "${PLYMOUTH_THEME_DIR}/acorn.script" 2>/dev/null
+
+# Set Acorn as default theme and rebuild initramfs
+if [[ -f "${PLYMOUTH_THEME_DIR}/acorn.plymouth" ]]; then
+    plymouth-set-default-theme acorn
+    update-initramfs -u -k all 2>/dev/null
+    echo "  ✓ Acorn Plymouth theme set and initramfs updated"
+else
+    echo "  ✗ acorn.plymouth not installed — theme not set"
+fi
+
+run_test "plymouth installed"           "command -v plymouth-set-default-theme"
+run_test "plymouth initramfs hook"      "test -f ${PLYMOUTH_INITRAMFS_HOOK}"
+run_test "acorn theme dir exists"       "test -d ${PLYMOUTH_THEME_DIR}"
+run_test "acorn.plymouth file exists"   "test -f ${PLYMOUTH_THEME_DIR}/acorn.plymouth"
+run_test "acorn.script file exists"     "test -f ${PLYMOUTH_THEME_DIR}/acorn.script"
+run_test "acorn logo png exists"        "test -f ${ACORN_LOGO_PNG}"
+run_test "acorn theme is default"       "plymouth-set-default-theme | grep -q acorn"
+
+phase_pass "Plymouth Acorn theme installed (takes effect on next reboot)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 15 — Download Security Script
@@ -886,9 +975,6 @@ phase_pass "security.sh saved to /opt/aquila/security.sh — run it manually whe
 echo ""
 echo "=================================================="
 echo " Deployment complete for device: ${DEVICE_HOSTNAME}"
-echo ""
-echo " IMPORTANT: On first boot, physically push the"
-echo " drawer back to the home sensor before powering on."
 echo ""
 echo " MANUAL STEP REQUIRED after reboot:"
 echo " If the login screen appears instead of the kiosk,"

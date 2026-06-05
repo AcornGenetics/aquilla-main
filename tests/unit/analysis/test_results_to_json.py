@@ -228,3 +228,84 @@ def test_empty_optics_log_raises_or_does_not_write(tmp_path):
     if results_path.exists():
         data = json.loads(results_path.read_text())
         assert isinstance(data, dict)
+
+
+# ---------------------------------------------------------------------------
+# Cross-channel rule: FAM undetected + late ROX → ROX suppressed
+# ---------------------------------------------------------------------------
+
+
+def _make_cq_sequence(*values):
+    """Stub for compute_cq that yields successive values from the provided sequence."""
+    it = iter(values)
+
+    def _stub(*_args, **_kwargs):
+        return next(it, None)
+
+    return _stub
+
+
+def _stub_evaluate_by_dye(fam_status, rox_status):
+    """evaluate_curve stub that returns different statuses per dye."""
+    def _stub(_curve, _src, dye_name, _well):
+        return {"status": fam_status if dye_name == "fam" else rox_status}
+    return _stub
+
+
+@pytest.mark.unit
+def test_late_rox_suppressed_when_fam_undetected(tmp_path, monkeypatch):
+    """ROX with a late Cq must become Not Detected when FAM is undetected."""
+    monkeypatch.setattr(curve_module, "evaluate_curve",
+                        _stub_evaluate_by_dye("undetected", "detected"))
+    monkeypatch.setattr(curve_module, "get_curve_data", _stub_get_curve_data)
+    monkeypatch.setattr(curve_module, "get_threshold", _stub_get_threshold)
+    # FAM wells 1-4: None; ROX wells 1-4: 36.5 (>= PCR_LATE_CQ_THRESHOLD=35)
+    monkeypatch.setattr(curve_module, "compute_cq",
+                        _make_cq_sequence(None, None, None, None, 36.5, 36.5, 36.5, 36.5))
+
+    curve = Curve(src_basedir=str(tmp_path))
+    curve.results_to_json("raw.dat", "results.json")
+    data = json.loads((tmp_path / "results.json").read_text())
+
+    for col in ("1", "2", "3", "4"):
+        assert data["2"][col] == "Not Detected", f"ROX well {col} should be suppressed"
+        assert data["cq"]["2"][col] is None, f"ROX Cq well {col} should be None"
+
+
+@pytest.mark.unit
+def test_early_rox_not_suppressed_when_fam_undetected(tmp_path, monkeypatch):
+    """ROX with an early Cq must remain Detected even when FAM is undetected."""
+    monkeypatch.setattr(curve_module, "evaluate_curve",
+                        _stub_evaluate_by_dye("undetected", "detected"))
+    monkeypatch.setattr(curve_module, "get_curve_data", _stub_get_curve_data)
+    monkeypatch.setattr(curve_module, "get_threshold", _stub_get_threshold)
+    # FAM wells 1-4: None; ROX wells 1-4: 22.0 (< threshold, rule does not fire)
+    monkeypatch.setattr(curve_module, "compute_cq",
+                        _make_cq_sequence(None, None, None, None, 22.0, 22.0, 22.0, 22.0))
+
+    curve = Curve(src_basedir=str(tmp_path))
+    curve.results_to_json("raw.dat", "results.json")
+    data = json.loads((tmp_path / "results.json").read_text())
+
+    for col in ("1", "2", "3", "4"):
+        assert data["2"][col] == "Detected", f"ROX well {col} should remain Detected"
+        assert data["cq"]["2"][col] == 22.0, f"ROX Cq well {col} should be preserved"
+
+
+@pytest.mark.unit
+def test_late_rox_not_suppressed_when_fam_detected(tmp_path, monkeypatch):
+    """Late ROX must not be suppressed when FAM is detected."""
+    monkeypatch.setattr(curve_module, "evaluate_curve", _stub_evaluate("detected"))
+    monkeypatch.setattr(curve_module, "get_curve_data", _stub_get_curve_data)
+    monkeypatch.setattr(curve_module, "get_threshold", _stub_get_threshold)
+    # FAM wells 1-4: 18.0; ROX wells 1-4: 36.0 (late but FAM is detected)
+    monkeypatch.setattr(curve_module, "compute_cq",
+                        _make_cq_sequence(18.0, 18.0, 18.0, 18.0, 36.0, 36.0, 36.0, 36.0))
+
+    curve = Curve(src_basedir=str(tmp_path))
+    curve.results_to_json("raw.dat", "results.json")
+    data = json.loads((tmp_path / "results.json").read_text())
+
+    for col in ("1", "2", "3", "4"):
+        assert data["2"][col] == "Detected", f"ROX well {col} should remain Detected"
+        assert data["cq"]["2"][col] == 36.0
