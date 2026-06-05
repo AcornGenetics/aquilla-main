@@ -1380,7 +1380,8 @@ async def _kiosk_post(path: str, body: dict) -> dict:
 
 @app.get("/wifi")
 async def wifi_page():
-    return FileResponse(static_dir / "wifi.html")
+    return FileResponse(static_dir / "wifi.html",
+                        headers={"Cache-Control": "no-store"})
 
 @app.get("/wifi/status")
 async def wifi_status():
