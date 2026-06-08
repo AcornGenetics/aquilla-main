@@ -14,6 +14,8 @@ const viewMode = params.get("mode") === "view" || params.get("view") === "1";
 const nameInput = document.getElementById("profile-name");
 const famLabelInput = document.getElementById("profile-fam-label");
 const roxLabelInput = document.getElementById("profile-rox-label");
+const estimatedMinutesInput = document.getElementById("profile-estimated-minutes");
+const estimatedError = document.getElementById("profile-estimated-error");
 const saveButton = document.getElementById("save-profile-button");
 const saveStatus = document.getElementById("save-status");
 const pageTitle = document.getElementById("profile-page-title");
@@ -333,6 +335,7 @@ const applyViewMode = () => {
     "#profile-name",
     "#profile-fam-label",
     "#profile-rox-label",
+    "#profile-estimated-minutes",
     "#stage-select",
     "#stage-name",
     "#stage-cycles",
@@ -515,6 +518,13 @@ async function loadProfileDetails() {
   if (roxLabelInput) {
     roxLabelInput.value = data.labels?.rox || DEFAULT_DYE_LABELS.rox;
   }
+  if (estimatedMinutesInput) {
+    const seconds = data.estimated_completion_seconds;
+    estimatedMinutesInput.value =
+      typeof seconds === "number" && isFinite(seconds) && seconds > 0
+        ? String(Math.round(seconds / 60))
+        : "";
+  }
 
     const parsedStages = [];
     let stageIndex = 1;
@@ -556,13 +566,34 @@ async function saveProfile() {
   if (!nameInput || !saveStatus) {
     return;
   }
+  // Estimated completion time (optional). Blank clears it; a value must be a positive integer.
+  let estimatedMinutes = null;
+  if (estimatedMinutesInput) {
+    const raw = estimatedMinutesInput.value.trim();
+    if (raw !== "") {
+      const parsed = Math.round(Number(raw));
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        if (estimatedError) {
+          estimatedError.classList.remove("is-hidden");
+        }
+        saveStatus.textContent = "Invalid Estimated Time";
+        return;
+      }
+      estimatedMinutes = parsed;
+    }
+  }
+  if (estimatedError) {
+    estimatedError.classList.add("is-hidden");
+  }
+
   saveStatus.textContent = "Saving...";
   const payload = {
     name: nameInput.value.trim(),
     profile_id: profileId,
     steps: buildStepsPayload(),
     fam_label: famLabelInput ? famLabelInput.value.trim() : DEFAULT_DYE_LABELS.fam,
-    rox_label: roxLabelInput ? roxLabelInput.value.trim() : DEFAULT_DYE_LABELS.rox
+    rox_label: roxLabelInput ? roxLabelInput.value.trim() : DEFAULT_DYE_LABELS.rox,
+    estimated_minutes: estimatedMinutes
   };
 
   try {
