@@ -1308,6 +1308,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         "title": data.get("title", profile_path.stem),
         "labels": data.get("labels", {}),
         "rox_unavailable": bool(data.get("rox_unavailable", False)),
+        "time_unavailable": bool(data.get("time_unavailable", data.get("estimated_completion_seconds") is None)),
         "estimated_completion_seconds": data.get("estimated_completion_seconds"),
         "steps": data.get("steps", [])
     }

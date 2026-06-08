@@ -55,20 +55,19 @@ running --[Stop Run / backend "ready"]--> ready
 ### Screen: `profile-edit`
 
 **New field — Estimated completion time:**
-- Located in the profile details card (`#profile-edit-details` in `edit_form.html`), alongside Profile name / FAM / ROX.
-- Label: **"Estimated completion time (minutes)"**, optional.
-- Input: `<input id="profile-estimated-minutes" type="number" inputmode="numeric" min="1" step="1" />`, empty by default.
-- Helper text: "Optional. If set, the Run screen shows a countdown instead of an elapsed-time stopwatch."
+- Located in the profile details card (`#profile-edit-details` in `edit_form.html`), in its own field row below Profile name / FAM / ROX.
+- Label: **"Est. Time (Min)"**, optional.
+- Input: `<input id="profile-estimated-minutes" type="number" inputmode="numeric" min="1" step="1" placeholder="(Optional)" />`, empty by default. The greyed-out **"(Optional)"** placeholder shows when the field is empty and disappears as the operator types.
 
 **Behavior:**
-- **Create:** if the field is left blank, the profile is saved with no estimate (field `null` / omitted). If a positive number is entered, it is stored.
+- **Create:** if the field is left blank, the profile is saved with no estimate (`time_unavailable: true`, `estimated_completion_seconds: null`). If a positive number is entered, it is stored (`time_unavailable: false`, seconds = minutes × 60).
 - **Edit:** the field is pre-populated from the profile's stored value (converted seconds → minutes). The operator may change it, or clear it to remove the estimate.
-- **Read View:** the estimate is shown as a read-only summary row ("Estimated completion: N min") only when set.
+- **Read View:** the field lives in the details card, which is hidden in Read View (consistent with Profile name / FAM / ROX); the estimate is not shown separately in the read-only summary.
 
 **Validation (client-side):**
 - Blank → no estimate (valid).
-- Must be a positive integer if provided. Non-numeric, zero, or negative → treat as no estimate / show inline validation message "Enter a positive number of minutes."
-- Decimals: round to the nearest whole minute (or reject — see Open Questions).
+- Must be a positive integer if provided. Non-numeric, zero, or negative → show the inline error **"Invalid Estimated Time"** and block the save.
+- Decimals: rounded to the nearest whole minute.
 
 ### Screen: `running` (timer region)
 
@@ -152,25 +151,29 @@ A new overlay modeled on the existing "Stopping Run…" modal (`#run-stopping-mo
 
 ## 6. Data Model / JSON Changes
 
-**Profile JSON** gains one optional top-level field:
+**Profile JSON** always carries two fields, positioned immediately after `rox_unavailable` (or after `title` when `rox_unavailable` is absent):
 
 ```jsonc
 {
   "output_dir": "pcr_data",
   "post_in_gui": "True",
-  "title": "Verification Profile",
-  "labels": { "fam": "FAM", "rox": "ROX" },
-  "estimated_completion_seconds": 2700,   // NEW — optional; 45 min. null or absent => stopwatch
+  "title": "STEC and EPEC",
+  "rox_unavailable": true,
+  "time_unavailable": false,              // NEW — true when NO estimate is set
+  "estimated_completion_seconds": 3900,   // NEW — int seconds when set, else null
   "steps": [ /* ... */ ]
 }
 ```
 
-- **Field name:** `estimated_completion_seconds` (integer seconds). Stored in seconds to match step `duration` units and the WebSocket `elapsed` unit, even though the UI input is in minutes.
-- **Absent or `null`** → stopwatch behavior (current).
+- **`time_unavailable`** (bool) — mirrors the `rox_unavailable` convention. `true` = no estimate (stopwatch); `false` = estimate set (countdown).
+- **`estimated_completion_seconds`** (int seconds, or `null`) — stored in seconds to match step `duration` units and the WebSocket `elapsed` unit, even though the UI input is in minutes. `null` whenever `time_unavailable` is `true`.
+- Both keys are **always written** on save (never removed), and both are returned by `/profiles/details`.
 - Backend changes (in `aquila_web/main.py`):
-  - `ProfileSave` model: add `estimated_minutes: Optional[int] = None` (or `estimated_completion_seconds`).
-  - `save_profile()`: when present and positive, set `base_profile["estimated_completion_seconds"] = minutes * 60`; when explicitly blank/`null`, remove the key (so editing can clear it). Preserve the value on edits when the field is omitted vs. explicitly cleared — see Open Questions.
-  - `profile_details()`: include `"estimated_completion_seconds": data.get("estimated_completion_seconds")` in the response payload so the frontend (edit form + run screen) can read it.
+  - `ProfileSave` model: `estimated_minutes: Optional[int] = None` (the UI sends minutes; `null` clears the estimate).
+  - `estimated_minutes_to_seconds()` helper: converts minutes → whole seconds; returns `None` for blank / non-positive / invalid input (decimals are rounded).
+  - `save_profile()`: computes the seconds, then sets `time_unavailable = (seconds is None)` and `estimated_completion_seconds = seconds`. When `estimated_minutes` is omitted by the caller, the existing value is preserved. Both keys are always present.
+  - `_order_time_fields()`: positions the two keys right after `rox_unavailable` / `title` before the file is written.
+  - `profile_details()`: returns both `time_unavailable` and `estimated_completion_seconds` on **both** return branches (see §10.1 for the bug where the main branch initially missed `time_unavailable`).
 
 ---
 
@@ -186,13 +189,81 @@ A new overlay modeled on the existing "Stopping Run…" modal (`#run-stopping-mo
 
 ## 8. Acceptance Criteria
 
-- [ ] Profile editor shows an optional "Estimated completion time (minutes)" field on both create and edit.
-- [ ] Saving a profile with a positive value writes `estimated_completion_seconds` (= minutes × 60) to the profile JSON.
-- [ ] Saving with the field blank stores no estimate (key absent / `null`), and editing can clear a previously set estimate.
+- [ ] Profile editor shows an optional "Est. Time (Min)" field (with `(Optional)` placeholder) on both create and edit.
+- [ ] Saving a profile with a positive value writes `estimated_completion_seconds` (= minutes × 60) and `time_unavailable: false` to the profile JSON.
+- [ ] Saving with the field blank stores `time_unavailable: true` / `estimated_completion_seconds: null`, and editing can clear a previously set estimate.
+- [ ] An invalid entry (zero / negative / non-numeric) shows "Invalid Estimated Time" and blocks the save.
 - [ ] On Run, if the selected profile has an estimate, the timer label reads "Time Remaining" and counts down from the estimate.
 - [ ] On Run, if the profile has no estimate, the timer behaves exactly as the current elapsed stopwatch ("Elapsed Time").
 - [ ] When the countdown reaches zero, the timer holds at `00:00` (never negative) and the "Finishing Run, Please Wait…" overlay appears while the backend still reports `running`.
 - [ ] The finishing overlay auto-hides when the run completes or is stopped, and never appears in stopwatch mode.
 
 ---
+
+## 9. Test Plan
+
+Tests are layered to match the marker convention in `pytest.ini` (`unit`, `contract`, `e2e`). The backend/data-model behavior is covered by automated tests; the live, timing-dependent timer UI is covered by a manual dev checklist.
+
+### 9.1 Unit tests — `unit_tests/test_estimated_completion.py` (`unit`)
+
+Pure backend logic, no hardware/network.
+
+- **`estimated_minutes_to_seconds()`**
+  - Positive minutes convert to seconds (×60): `1→60`, `45→2700`, `90→5400`.
+  - Invalid/blank input returns `None` (→ no estimate): `None`, `0`, negatives, `""`, non-numeric strings, `NaN`, `±inf`, booleans.
+  - Decimal minutes round to the nearest whole minute (`2.4→120`, `2.6→180`).
+- **`_order_time_fields()`**
+  - `time_unavailable` + `estimated_completion_seconds` are inserted immediately after `rox_unavailable` when present, otherwise after `title`, and always before `steps`.
+  - Existing values and all other keys are preserved.
+  - Idempotent: re-running produces identical output.
+
+### 9.2 Contract tests — `tests/contract/test_profile_endpoints.py` (`contract`)
+
+FastAPI `TestClient`, exercising `/profiles` + `/profiles/details`.
+
+- Create with `estimated_minutes=45` → details returns `estimated_completion_seconds=2700` and `time_unavailable=false`.
+- Create with no estimate → `estimated_completion_seconds=null` and `time_unavailable=true`.
+- Edit with `estimated_minutes=null` clears the estimate → `null` / `time_unavailable=true`.
+- Edit omitting the field preserves the existing estimate (no accidental wipe).
+- Saved JSON on disk always carries **both** keys, positioned right after `rox_unavailable`/`title` (verifies lines 21–22).
+
+### 9.3 E2E DOM tests — `tests/e2e/test_countdown_timer.py` (`e2e`)
+
+Playwright against a running frontend (page-load only, no sim run required).
+
+- `#run-finishing-modal` exists, is hidden by default, and contains "Finishing Run".
+- `#run-timer-label` element is present on the Run screen.
+- `#profile-estimated-minutes` exists on the edit form with placeholder `(Optional)`.
+
+### 9.4 Manual dev checklist (live timer UI)
+
+Run dev with `AQ_DEV_SIMULATE=1` and `AQ_DEV_RUN_DURATION=90`:
+
+- [ ] Profile **with** estimate → on Run, label reads **"Time Remaining"** and counts down.
+- [ ] Estimate shorter than run duration → at `00:00` the timer **holds** (no negative) and **"Finishing Run, Please Wait…"** appears.
+- [ ] Profile **without** estimate → label **"Elapsed Time"**, counts up; finishing flag never shows.
+- [ ] Finishing flag **auto-hides** on complete/ready.
+- [ ] Pressing **Stop Run** while the finishing flag is up → **"Stopping Run…"** takes precedence.
+
+---
+
+## 10. Bugs Found During Testing
+
+### 10.1 `profile_details()` omitted `time_unavailable` on the main response branch
+
+**Found by:** the contract tests in §9.2 (`test_create_with_estimate_persists_seconds_and_flag`, `test_create_without_estimate_is_time_unavailable`, `test_edit_clears_estimate_when_minutes_null`, `test_edit_omitting_estimate_preserves_existing`), which failed with `KeyError: 'time_unavailable'`.
+
+**Symptom:** `save_profile()` correctly wrote both `time_unavailable` and `estimated_completion_seconds` to the JSON file (the on-disk shape test passed), but `GET /profiles/details` did not return `time_unavailable` for normal profiles. The field was present only in the legacy `configuration`-style return branch, not in the main branch that ordinary profiles use — so any consumer reading the API response saw an incomplete payload.
+
+**Impact:** Low for the countdown feature itself (the Run screen and editor key off `estimated_completion_seconds`, which was still returned), but the response did not match the spec's data model — `time_unavailable` should always be exposed. It would bite any future consumer that relied on the boolean.
+
+**Root cause:** `profile_details()` has two return paths. When the `time_*` fields were added, only the legacy branch received `time_unavailable`; the main branch was missed.
+
+**Fix:** Added the field to the main return branch in `aquila_web/main.py`, with the same sensible default as the legacy branch (`true` when there is no estimate):
+
+```python
+"time_unavailable": bool(data.get("time_unavailable", data.get("estimated_completion_seconds") is None)),
+```
+
+**Verification:** All four failing contract tests now pass; full unit + contract run is green (33 passed).
 
