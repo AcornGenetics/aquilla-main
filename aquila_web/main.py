@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
+from aq_lib.device_id import inject_hw_serial_env
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -1639,6 +1640,11 @@ async def _background_update_poller() -> None:
         if _OTA_GHCR_TOKEN and _OTA_IMAGE_TAG:
             await _do_check_update()
         await asyncio.sleep(_OTA_POLL_INTERVAL)
+
+
+@app.on_event("startup")
+async def _inject_device_id() -> None:
+    inject_hw_serial_env()
 
 
 @app.on_event("startup")
