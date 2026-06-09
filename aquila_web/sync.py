@@ -26,8 +26,12 @@ def sync_pending_events(
         "device_id": os.getenv("AQ_SYNC_DEVICE_ID") or os.getenv("DEVICE_ID"),
         "events": pending_events,
     }
-    response = requests.post(resolved_endpoint, json=payload, timeout=resolved_timeout)
-    response.raise_for_status()
+    try:
+        response = requests.post(resolved_endpoint, json=payload, timeout=resolved_timeout)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Sync failed (will retry next interval): %s", exc)
+        return 0
     mark_event_synced([event["id"] for event in pending_events])
     logger.info("Synced %s events", len(pending_events))
     return len(pending_events)

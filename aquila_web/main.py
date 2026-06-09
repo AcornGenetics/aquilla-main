@@ -1665,6 +1665,27 @@ async def _background_update_poller() -> None:
         await asyncio.sleep(_OTA_POLL_INTERVAL)
 
 
+_SYNC_INTERVAL_SECONDS = int(os.getenv("AQ_SYNC_INTERVAL_SECONDS", "900"))
+
+
+async def _background_sync_poller() -> None:
+    """Flush SQLite event queue to AWS ingest endpoint every AQ_SYNC_INTERVAL_SECONDS."""
+    while True:
+        await asyncio.sleep(_SYNC_INTERVAL_SECONDS)
+        try:
+            from aquila_web.sync import sync_pending_events
+            sync_pending_events()
+        except Exception as exc:
+            logger.warning("Background sync error: %s", exc)
+
+
+@app.post("/sync/flush")
+async def sync_flush():
+    from aquila_web.sync import sync_pending_events
+    synced = sync_pending_events()
+    return {"synced": synced}
+
+
 @app.on_event("startup")
 async def _inject_device_id() -> None:
     inject_hw_serial_env()
@@ -1673,3 +1694,8 @@ async def _inject_device_id() -> None:
 @app.on_event("startup")
 async def start_background_update_poller() -> None:
     asyncio.create_task(_background_update_poller())
+
+
+@app.on_event("startup")
+async def start_background_sync_poller() -> None:
+    asyncio.create_task(_background_sync_poller())
