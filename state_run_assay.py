@@ -282,7 +282,9 @@ class AssayInterface():
                     graph_path = f"/plots/{plot_filename}"
                 except Exception as e:
                     logger.error("Failed to generate plot: %s", e)
-                sr.log_history(self.thermal_profile.replace("profiles/", ""), self.run_name, results_json, graph_path)
+                profile_name = self.thermal_profile.replace("profiles/", "")
+                sr.log_history(profile_name, self.run_name, results_json, graph_path)
+                sr.emit_run_complete(self.run_name, profile_name, str(results_json))
                 sr.advance_run_name()
                 sr.change_screen("3")
 
