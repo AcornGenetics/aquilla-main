@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
 from aq_lib.device_id import inject_hw_serial_env
+from aquila_web.local_db import enqueue_event, init_local_db
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -476,6 +477,11 @@ async def _simulate_run(profile_name: str) -> None:
         "tube_names": current_tube_names
     })
     _save_history(history)
+    init_local_db()
+    enqueue_event(
+        "run_complete",
+        {"run_name": run_name, "profile": profile_name, "result": detected_summary},
+    )
 
     current_item.screen = "complete"
     state_change_event.set()
@@ -615,6 +621,23 @@ async def reset_run_complete_ack():
     global run_complete_ack
     run_complete_ack = False
     return {"ok": True}
+
+
+class _RunCompleteEventRequest(BaseModel):
+    run_name: str
+    profile: str
+    results_path: Optional[str] = None
+
+
+@app.post("/events/run_complete")
+async def events_run_complete(req: _RunCompleteEventRequest):
+    init_local_db()
+    result = _summarize_results_from_file(Path(req.results_path)) if req.results_path else ""
+    event_id = enqueue_event(
+        "run_complete",
+        {"run_name": req.run_name, "profile": req.profile, "result": result},
+    )
+    return {"ok": True, "event_id": event_id}
 
 @app.get("/results/get_path")
 async def get_path():
