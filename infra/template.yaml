@@ -1,0 +1,317 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Sentri Analytics Pipeline — API Gateway + Lambda + SQS + S3 + Aurora PostgreSQL
+
+# Deploy:
+#   sam build && sam deploy --guided
+#
+# Required parameters (set once via --guided, saved to samconfig.toml):
+#   DBMasterUsername, DBMasterPassword
+#
+# Outputs after deploy:
+#   IngestEndpoint  → set as AQ_SYNC_ENDPOINT on each Sentri
+#   FleetApiKey     → set as AQ_SYNC_API_KEY  on each Sentri (retrieve from API Gateway console)
+
+Parameters:
+  DBMasterUsername:
+    Type: String
+    Default: sentri_admin
+    NoEcho: false
+  DBMasterPassword:
+    Type: String
+    NoEcho: true
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, staging]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        AWS_ACCOUNT_ID: !Ref AWS::AccountId
+
+# ---------------------------------------------------------------------------
+# VPC (Lambda 3 + Aurora live here)
+# ---------------------------------------------------------------------------
+Resources:
+
+  SentriVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: sentri-analytics-vpc
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SentriVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: sentri-private-a
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SentriVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: sentri-private-b
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref SentriVPC
+
+  SubnetARouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  SubnetBRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Free S3 Gateway Endpoint — Lambda 3 reaches S3 without NAT
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref SentriVPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Lambda 3 outbound to Aurora
+      VpcId: !Ref SentriVPC
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Aurora — allow Lambda 3 on port 5432
+      VpcId: !Ref SentriVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !GetAtt LambdaSecurityGroup.GroupId
+
+# ---------------------------------------------------------------------------
+# SQS — event queue + dead-letter queue
+# ---------------------------------------------------------------------------
+
+  EventDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: sentri-event-dlq
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  EventQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: sentri-event-queue
+      VisibilityTimeout: 60
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt EventDLQ.Arn
+        maxReceiveCount: 3
+
+# ---------------------------------------------------------------------------
+# S3 — raw event archive
+# ---------------------------------------------------------------------------
+
+  RawEventsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "sentri-raw-events-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ArchiveToGlacier
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: "s3:ObjectCreated:*"
+            Function: !GetAtt AuroraLoaderFunction.Arn
+
+# ---------------------------------------------------------------------------
+# Aurora PostgreSQL (Provisioned)
+# ---------------------------------------------------------------------------
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Sentri Aurora subnet group
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  AuroraCluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Snapshot
+    Properties:
+      Engine: aurora-postgresql
+      EngineVersion: "15.4"
+      DBClusterIdentifier: !Sub "sentri-analytics-${Environment}"
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VpcSecurityGroupIds:
+        - !GetAtt DBSecurityGroup.GroupId
+      StorageEncrypted: true
+      BackupRetentionPeriod: 7
+      DeletionProtection: true
+
+  AuroraInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: db.t4g.medium
+      Engine: aurora-postgresql
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceIdentifier: !Sub "sentri-analytics-${Environment}-1"
+      PubliclyAccessible: false
+
+# ---------------------------------------------------------------------------
+# Lambda 1 — ingest-handler (no VPC)
+# ---------------------------------------------------------------------------
+
+  IngestHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sentri-ingest-handler
+      CodeUri: handlers/
+      Handler: ingest_handler.handler
+      Description: Validates device event batch and sends to SQS
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt EventQueue.QueueName
+      Environment:
+        Variables:
+          SQS_QUEUE_URL: !Ref EventQueue
+      Events:
+        IngestPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref IngestApi
+            Method: POST
+            Path: /ingest
+
+# ---------------------------------------------------------------------------
+# Lambda 2 — s3-archiver (no VPC)
+# ---------------------------------------------------------------------------
+
+  S3ArchiverFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sentri-s3-archiver
+      CodeUri: handlers/
+      Handler: s3_archiver.handler
+      Description: Archives raw event JSON to S3
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !GetAtt EventQueue.QueueName
+        - S3WritePolicy:
+            BucketName: !Sub "sentri-raw-events-${AWS::AccountId}"
+      Environment:
+        Variables:
+          S3_BUCKET: !Sub "sentri-raw-events-${AWS::AccountId}"
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt EventQueue.Arn
+            BatchSize: 10
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+
+# ---------------------------------------------------------------------------
+# Lambda 3 — aurora-loader (IN VPC)
+# ---------------------------------------------------------------------------
+
+  AuroraLoaderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sentri-aurora-loader
+      CodeUri: handlers/
+      Handler: aurora_loader.handler
+      Description: Loads archived events from S3 into Aurora PostgreSQL
+      Timeout: 60
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt LambdaSecurityGroup.GroupId
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub "sentri-raw-events-${AWS::AccountId}"
+        - VPCAccessPolicy: {}
+      Environment:
+        Variables:
+          DB_DSN: !Sub
+            - "postgresql://${User}:${Pass}@${Host}/sentri"
+            - User: !Ref DBMasterUsername
+              Pass: !Ref DBMasterPassword
+              Host: !GetAtt AuroraCluster.Endpoint.Address
+
+  # Allow S3 to invoke Lambda 3
+  AuroraLoaderS3Permission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt AuroraLoaderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub "arn:aws:s3:::sentri-raw-events-${AWS::AccountId}"
+
+# ---------------------------------------------------------------------------
+# API Gateway — HTTP API with API key auth
+# ---------------------------------------------------------------------------
+
+  IngestApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: Sentri device event ingest endpoint
+
+  # API key + usage plan are managed via AWS console or CLI after deploy.
+  # Set AQ_SYNC_API_KEY on each device to the generated key value.
+  # See docs/adr/ADR-009 for key rotation procedure.
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+
+Outputs:
+  IngestEndpoint:
+    Description: Set as AQ_SYNC_ENDPOINT on each Sentri device
+    Value: !Sub "https://${IngestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/ingest"
+
+  EventQueueUrl:
+    Value: !Ref EventQueue
+
+  RawEventsBucketName:
+    Value: !Sub "sentri-raw-events-${AWS::AccountId}"
+
+  AuroraEndpoint:
+    Description: Aurora cluster endpoint (use in DB_DSN for Lambda 3 and psql access)
+    Value: !GetAtt AuroraCluster.Endpoint.Address
