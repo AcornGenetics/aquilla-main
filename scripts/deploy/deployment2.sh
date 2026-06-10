@@ -357,6 +357,8 @@ prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token"
 prompt_if_unset LID_HEATER_UPPER_BOUND "Enter lid heater upper bound voltage (e.g. 0.34)"
 prompt_if_unset LID_HEATER_LOWER_BOUND "Enter lid heater lower bound voltage (e.g. 0.20)"
 prompt_if_unset DRAWER_READ_STEPS      "Enter drawer read_steps for this device (e.g. 160)"
+prompt_if_unset AQ_SYNC_ENDPOINT  "Enter AQ_SYNC_ENDPOINT (AWS ingest URL, leave blank to skip)"
+prompt_if_unset AQ_SYNC_API_KEY   "Enter AQ_SYNC_API_KEY (fleet API key, leave blank to skip)"
 
 WATCHTOWER_TOKEN="${WATCHTOWER_TOKEN:-$(openssl rand -hex 32)}"
 
@@ -371,6 +373,8 @@ WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN}
 GHCR_USERNAME=${GHCR_USER}
 GHCR_TOKEN=${GHCR_TOKEN}
 AQ_SRC_BASEDIR=/opt/aquila
+AQ_SYNC_ENDPOINT=${AQ_SYNC_ENDPOINT}
+AQ_SYNC_API_KEY=${AQ_SYNC_API_KEY}
 EOF
 chown root:root /opt/aquila/config/device.env
 chmod 600 /opt/aquila/config/device.env
