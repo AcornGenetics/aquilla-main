@@ -1,5 +1,9 @@
 # PRD: Sentri Analytics Pipeline — Device-Side Data Collection
 
+> **Revision 2 — 2026-06-10**
+> AWS ingest architecture updated from single-Lambda to three-Lambda + SQS + S3 pattern.
+> See _AWS Ingest Architecture_ section for details. All other sections unchanged.
+
 ## Problem Statement
 
 Aquilla runs PCR assays on Sentri devices deployed in the field. There is currently no way to observe how those devices are performing across the fleet. When a protocol produces a high rate of inconclusive results — meaning the analysis engine cannot determine Detected or Not Detected — there is no signal to investigate whether the issue is with the protocol configuration, a specific device, or a systemic problem. Run results exist only locally on each Sentri and are not collected or queryable in aggregate.
@@ -65,10 +69,56 @@ A new asyncio background task in the FastAPI app calls `sync_pending_events()` o
 
 ### AWS Ingest Architecture
 
-- **Ingest endpoint**: AWS API Gateway (HTTP API), single POST route receiving event batches
-- **Auth**: `x-api-key` header containing the Fleet API Key, validated by API Gateway's built-in usage plan — no custom Lambda auth logic
-- **Processing**: Lambda function receives the batch, validates structure, and upserts into RDS PostgreSQL using `ON CONFLICT DO NOTHING` for idempotency
-- **Storage**: RDS PostgreSQL `db.t4g.micro`, three tables (see schema below), flat (no partitioning), indefinite retention
+#### Pipeline overview
+
+```
+Sentri Device
+  └─→ API Gateway  (HTTP API, POST /ingest, x-api-key auth)
+        └─→ Lambda 1 — ingest-handler  (no VPC)
+              - validates payload structure
+              - sends event batch to SQS
+              - returns 200 {"queued": N} immediately
+              └─→ SQS: sentri-event-queue  (standard queue)
+                    - visibility timeout: 60 s
+                    - DLQ: sentri-event-dlq (maxReceiveCount: 3)
+                    └─→ Lambda 2 — s3-archiver  (no VPC)
+                          - triggered by SQS (batch size: 10)
+                          - writes one JSON file per event to S3
+                          - path: s3://sentri-raw-events/{YYYY-MM-DD}/{device_id}/{event_id}.json
+                          └─→ S3: sentri-raw-events bucket
+                                - ObjectCreated notification → Lambda 3
+                                └─→ Lambda 3 — aurora-loader  (IN VPC, private subnet)
+                                      - reads raw JSON from S3
+                                      - upserts into Aurora PostgreSQL:
+                                        devices / runs / run_results
+                                      - ON CONFLICT DO NOTHING idempotency
+                                      └─→ Aurora PostgreSQL (Provisioned, private subnet)
+```
+
+#### Why three Lambdas
+
+- **Resilience**: S3 is the durable buffer. If Aurora is down, events are already archived in S3 and Lambda 3 retries independently via S3 event notifications.
+- **Replayability**: Any time window can be replayed by re-triggering Lambda 3 against the S3 prefix — no data is ever lost.
+- **Simplicity per Lambda**: each function has one job (validate+queue / archive / load), making each independently testable and deployable.
+
+#### Networking and cost
+
+| Component | VPC | Reason |
+|---|---|---|
+| Lambda 1 (ingest-handler) | No | Only writes to SQS — public AWS endpoint |
+| Lambda 2 (s3-archiver) | No | Reads SQS, writes S3 — both public |
+| Lambda 3 (aurora-loader) | **Yes, private subnet** | Needs Aurora which is in private subnet |
+| Aurora PostgreSQL | Private subnet | Never exposed to public internet |
+| S3 bucket | — | Lambda 3 accesses via free VPC Gateway Endpoint |
+
+No NAT Gateway required. VPC Gateway Endpoint for S3 is free. Estimated monthly cost: Aurora `db.t4g.medium` ≈ $55/mo; Lambda + SQS + S3 at this volume ≈ $0 (free tier covers it).
+
+#### Components
+
+- **API Gateway**: HTTP API, single `POST /ingest` route, usage plan validates `x-api-key`
+- **SQS**: Standard queue with Dead-Letter Queue (messages that fail 3× go to DLQ for investigation)
+- **S3**: `sentri-raw-events` bucket, versioning enabled, lifecycle: transition to Glacier after 90 days
+- **Aurora PostgreSQL**: Provisioned `db.t4g.medium`, single-AZ, three tables (see schema below)
 - **Query access**: Raw SQL via psql; no BI tool for v1
 
 IoT Core was evaluated and rejected: the connection management overhead and per-device certificate provisioning are not justified at <100 devices. See ADR-009.
@@ -144,8 +194,14 @@ Test that pending events are POSTed to the configured endpoint with the correct 
 **`local_db` queue — idempotency (unit test)**
 Test that `cleanup_synced_events()` removes events older than the retention window and leaves recent ones. Test that `mark_event_synced` with an empty list is a no-op.
 
-**Lambda handler — upsert behavior (unit test)**
-Test that a valid batch inserts rows into `run_results`, that a duplicate batch (same `run_id`, `well`, `channel`) does not duplicate rows, and that an aborted run inserts a `runs` row with `aborted = true` and zero `run_results` rows.
+**Lambda 1: ingest-handler — queue behavior (unit test)**
+Test that a valid payload sends messages to SQS and returns `{"queued": N}`. Test that a malformed payload returns 400 without touching SQS. Mock the SQS client.
+
+**Lambda 2: s3-archiver — archive behavior (unit test)**
+Test that each SQS message produces one S3 object at the correct path (`{date}/{device_id}/{event_id}.json`). Mock the S3 client. Test that a batch of N messages produces N S3 objects.
+
+**Lambda 3: aurora-loader — upsert behavior (unit test)**
+Test that a valid S3 event loads rows into `devices`, `runs`, and `run_results`. Test that a duplicate S3 event (same `run_id`, `well`, `channel`) does not duplicate rows. Test that an aborted run inserts a `runs` row with `aborted = true` and zero `run_results` rows. Mock the Aurora/psycopg connection.
 
 **Device ID extraction (unit test)**
 Test that the RPi serial extraction from `/proc/cpuinfo` returns the expected string, and that a missing file falls back gracefully (e.g., returns hostname).
@@ -159,12 +215,12 @@ Test that the RPi serial extraction from `/proc/cpuinfo` returns the expected st
 - **Per-device API keys**: Shared fleet key only for v1. Per-device keys or mTLS are a future security hardening option.
 - **Raw fluorescence data**: The optics log files (per-cycle RFU readings) are not synced. Only the final calls and Cq values are collected.
 - **IoT Core**: Explicitly out of scope until fleet exceeds 500 devices (see ADR-009).
-- **S3 / Athena data lake**: Out of scope for v1; revisit if query volume outgrows RDS.
+- **S3 as analytics source (Athena)**: S3 stores raw event archives for replay and durability but is not queried directly in v1. Athena is a future option if query volume outgrows Aurora.
 - **Sync from the assay loop process**: All event emission happens in the FastAPI web process. The assay loop (`state_run_assay.py`) is not modified.
 
 ## Further Notes
 
-- The existing `cloud_db.py` module contains a partial PostgreSQL integration (`psycopg`, bulk insert with `ON CONFLICT DO NOTHING`). The Lambda function can adopt this idempotency pattern directly.
+- The existing `cloud_db.py` module contains a partial PostgreSQL integration (`psycopg`, bulk insert with `ON CONFLICT DO NOTHING`). Lambda 3 (aurora-loader) adopts this idempotency pattern directly.
 - The existing `AQ_SYNC_ENDPOINT`, `AQ_SYNC_DEVICE_ID`, `AQ_SYNC_BATCH_SIZE`, and `AQ_SYNC_TIMEOUT_SECONDS` env vars are the complete device-side configuration surface. The new `AQ_SYNC_API_KEY` is the only addition.
 - Devices that have never synced will have a backlog in SQLite. On first successful sync after pipeline deployment, the Lambda should handle potentially large initial batches gracefully (the existing 100-event batch size cap in `sync.py` limits per-request size).
 - See `CONTEXT.md` for the canonical analytics domain glossary.
