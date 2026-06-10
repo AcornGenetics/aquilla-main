@@ -105,7 +105,7 @@ Resources:
   DBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Aurora — allow Lambda 3 on port 5432
+      GroupDescription: Aurora - allow Lambda 3 on port 5432
       VpcId: !Ref SentriVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -171,7 +171,7 @@ Resources:
     DeletionPolicy: Snapshot
     Properties:
       Engine: aurora-postgresql
-      EngineVersion: "15.4"
+      EngineVersion: "16.6"
       DBClusterIdentifier: !Sub "sentri-analytics-${Environment}"
       MasterUsername: !Ref DBMasterUsername
       MasterUserPassword: !Ref DBMasterPassword
@@ -265,6 +265,31 @@ Resources:
       Policies:
         - S3ReadPolicy:
             BucketName: !Sub "sentri-raw-events-${AWS::AccountId}"
+        - VPCAccessPolicy: {}
+      Environment:
+        Variables:
+          DB_DSN: !Sub
+            - "postgresql://${User}:${Pass}@${Host}/sentri"
+            - User: !Ref DBMasterUsername
+              Pass: !Ref DBMasterPassword
+              Host: !GetAtt AuroraCluster.Endpoint.Address
+
+  # One-time schema migration — invoke manually after first deploy, then ignore
+  SchemaRunnerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sentri-schema-runner
+      CodeUri: handlers/
+      Handler: schema_runner.handler
+      Description: One-time schema migration — run once after initial deploy
+      Timeout: 60
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt LambdaSecurityGroup.GroupId
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+      Policies:
         - VPCAccessPolicy: {}
       Environment:
         Variables:
