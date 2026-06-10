@@ -360,6 +360,35 @@ def _summarize_results_from_file(path: Path) -> str:
     detected -= inconclusive
     return _summarize_results(sorted(detected), sorted(inconclusive))
 
+def _calls_from_file(path: Path) -> list[dict]:
+    _CHANNEL = {"1": "fam", "2": "rox"}
+    try:
+        with path.open() as f:
+            data = json.load(f)
+    except Exception:
+        return []
+    calls = []
+    cq_data = data.get("cq", {})
+    for row_key, channel in _CHANNEL.items():
+        row = data.get(row_key, {})
+        if not isinstance(row, dict):
+            continue
+        cq_row = cq_data.get(row_key, {})
+        for col_key, call_value in row.items():
+            try:
+                well = int(col_key)
+            except ValueError:
+                continue
+            cq = cq_row.get(col_key)
+            calls.append({
+                "well": well,
+                "channel": channel,
+                "call": call_value,
+                "cq": float(cq) if cq is not None else None,
+            })
+    return calls
+
+
 def _plot_filename(profile_slug: str, run_slug: str) -> str:
     return f"{profile_slug}_{run_slug}.png"
 
@@ -480,7 +509,12 @@ async def _simulate_run(profile_name: str) -> None:
     init_local_db()
     enqueue_event(
         "run_complete",
-        {"run_name": run_name, "profile": profile_name, "result": detected_summary},
+        {
+            "run_name": run_name,
+            "profile": profile_name,
+            "result": detected_summary,
+            "calls": _calls_from_file(results_file),
+        },
     )
 
     current_item.screen = "complete"
@@ -632,10 +666,16 @@ class _RunCompleteEventRequest(BaseModel):
 @app.post("/events/run_complete")
 async def events_run_complete(req: _RunCompleteEventRequest):
     init_local_db()
-    result = _summarize_results_from_file(Path(req.results_path)) if req.results_path else ""
+    results_file = Path(req.results_path) if req.results_path else None
+    result = _summarize_results_from_file(results_file) if results_file else ""
     event_id = enqueue_event(
         "run_complete",
-        {"run_name": req.run_name, "profile": req.profile, "result": result},
+        {
+            "run_name": req.run_name,
+            "profile": req.profile,
+            "result": result,
+            "calls": _calls_from_file(results_file) if results_file else [],
+        },
     )
     return {"ok": True, "event_id": event_id}
 
