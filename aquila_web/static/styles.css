@@ -1,5 +1,8 @@
 @import url("icon-colors.css?v=1");
 
+/* Hide cursor in kiosk mode */
+* { cursor: none !important; }
+
 html,
 body {
   height: 100%;

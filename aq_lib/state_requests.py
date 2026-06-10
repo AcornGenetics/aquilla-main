@@ -106,6 +106,14 @@ def advance_run_name():
     except requests.exceptions.RequestException as e:
         logger.exception("Error advancing run name: %s", e)
 
+def emit_run_complete(run_name: str, profile: str, results_path: str) -> None:
+    url = f"{BACKEND_URL}/events/run_complete"
+    payload = {"run_name": run_name, "profile": profile, "results_path": results_path}
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error emitting run_complete event: %s", e)
+
 def reset_exit():
     try:
         requests.post(f"{BACKEND_URL}/exit/reset", timeout=5)
