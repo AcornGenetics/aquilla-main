@@ -28,6 +28,50 @@ def _seed_event(local_db, tmp_path):
     local_db.enqueue_event("run_complete", {"run_name": "Run 1", "profile": "p.json", "result": "ok"})
 
 
+class TestApiKeyHeader:
+    """AQ_SYNC_API_KEY is sent as x-api-key header."""
+
+    def test_api_key_sent_as_header_when_set(self, db_client, tmp_path, monkeypatch):
+        client, local_db = db_client
+        _seed_event(local_db, tmp_path)
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        monkeypatch.setenv("AQ_SYNC_API_KEY", "test-fleet-key-abc")
+
+        captured = {}
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            captured["headers"] = kw.get("headers", {})
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        client.post("/sync/flush")
+        assert captured["headers"].get("x-api-key") == "test-fleet-key-abc"
+
+    def test_no_api_key_header_when_env_var_not_set(self, db_client, tmp_path, monkeypatch):
+        client, local_db = db_client
+        _seed_event(local_db, tmp_path)
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        monkeypatch.delenv("AQ_SYNC_API_KEY", raising=False)
+
+        captured = {}
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            captured["headers"] = kw.get("headers", {})
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        client.post("/sync/flush")
+        assert "x-api-key" not in captured.get("headers", {})
+
+
 class TestSyncFlushEndpoint:
     """POST /sync/flush behaviour."""
 
