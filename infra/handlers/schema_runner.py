@@ -1,4 +1,7 @@
 import os
+from datetime import datetime, date
+from decimal import Decimal
+from uuid import UUID
 import psycopg
 
 SCHEMA = """
@@ -40,7 +43,36 @@ CREATE INDEX IF NOT EXISTS run_results_protocol_idx      ON run_results (protoco
 
 def handler(event, context):
     dsn = os.environ["DB_DSN"]
-    # DB_DSN points to /sentri — connect to /postgres first to create the database
+    action = event.get("action", "migrate")
+
+    if action == "query":
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM devices")
+                devices = cur.fetchall()
+                cur.execute("SELECT run_id, device_id, protocol, run_name, aborted FROM runs")
+                runs = cur.fetchall()
+                cur.execute("SELECT result_id, run_id, well, channel, call, cq FROM run_results")
+                results = cur.fetchall()
+        def _serialize(v):
+            if isinstance(v, (datetime, date)):
+                return v.isoformat()
+            if isinstance(v, Decimal):
+                return float(v)
+            if isinstance(v, UUID):
+                return str(v)
+            return v
+
+        def _row(r):
+            return [_serialize(v) for v in r]
+
+        return {
+            "devices": [_row(r) for r in devices],
+            "runs": [_row(r) for r in runs],
+            "run_results": [_row(r) for r in results],
+        }
+
+    # default: migrate
     bootstrap_dsn = dsn.rsplit("/", 1)[0] + "/postgres"
     with psycopg.connect(bootstrap_dsn, autocommit=True) as conn:
         with conn.cursor() as cur:
