@@ -42,6 +42,7 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.api
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}-api:latest
@@ -53,6 +54,7 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.ui
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}-ui:latest

@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -31,28 +32,52 @@ def _write_wpa_lines(lines):
     WPA_SUPPLICANT_PATH.write_text(content, encoding="utf-8")
 
 
+def _networkmanager_available():
+    if not shutil.which("nmcli"):
+        return False
+    result = subprocess.run(
+        ["nmcli", "general", "status"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _apply_nmcli(ssid, psk):
+    subprocess.run(["nmcli", "connection", "delete", ssid], check=False)
+    subprocess.run(
+        ["nmcli", "device", "wifi", "connect", ssid, "password", psk],
+        check=True,
+    )
+
+
 def _strip_network_block(lines, ssid):
     updated = []
     in_block = False
     block_matches = False
+    block_buf = []
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("network="):
             in_block = True
             block_matches = False
+            block_buf = [line]
+            continue
         if in_block and stripped.startswith("ssid="):
             ssid_value = stripped.split("=", 1)[1].strip().strip('"')
             if ssid_value == ssid:
                 block_matches = True
         if in_block and stripped == "}":
             if not block_matches:
+                updated.extend(block_buf)
                 updated.append(line)
             in_block = False
             block_matches = False
+            block_buf = []
             continue
         if in_block:
-            if not block_matches:
-                updated.append(line)
+            block_buf.append(line)
             continue
         updated.append(line)
     return updated
@@ -74,6 +99,10 @@ def _ensure_header(lines, country):
 
 def apply_wifi_config():
     ssid, psk, country = _load_config()
+    if _networkmanager_available():
+        _apply_nmcli(ssid, psk)
+        return
+
     lines = _read_wpa_lines()
     lines = _ensure_header(lines, country)
     lines = _strip_network_block(lines, ssid)

@@ -10,8 +10,7 @@ sudo apt-get install -y --no-install-recommends \
   ca-certificates \
   curl \
   gnupg \
-  lsb-release \
-  gettext-base
+  lsb-release
 
 echo "Installing Grafana Alloy..."
 sudo apt-get install -y gpg wget
@@ -30,6 +29,7 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 sudo apt-get install -y docker-compose-plugin
+sudo systemctl enable docker
 
 echo "Installing Tailscale..."
 curl -fsSL https://tailscale.com/install.sh | sudo sh
@@ -39,15 +39,23 @@ echo "Creating fleet directories..."
 sudo mkdir -p /opt/fleet
 sudo mkdir -p /opt/aquila/config
 sudo mkdir -p /opt/aquila/results
-sudo mkdir -p /opt/aquila/logs
+sudo mkdir -p /opt/aquila/logs/lid_heater
+sudo mkdir -p /opt/aquila/logs/pcr
+sudo mkdir -p /opt/aquila/logs/optics
+sudo mkdir -p /opt/aquila/logs/results
 sudo mkdir -p /opt/aquila/profiles
 
 echo "Copying fleet configs..."
 sudo cp "${REPO_ROOT}/fleet-config/docker-compose.yml" /opt/fleet/docker-compose.yml
-sudo cp "${REPO_ROOT}/fleet-config/vmagent.yaml" /opt/fleet/vmagent.yaml.template
-sudo cp "${REPO_ROOT}/fleet-config/vector.yaml" /opt/fleet/vector.yaml.template
 sudo cp "${REPO_ROOT}/config_files/device.env" /opt/aquila/config/device.env
 sudo cp "${REPO_ROOT}/config_files/grafana.env" /opt/aquila/config/grafana.env
+
+image_tag="$(grep -E '^IMAGE_TAG=' /opt/aquila/config/device.env | tail -1 | cut -d= -f2-)"
+image_tag="${image_tag:-dev}"
+device_hostname="$(grep -E '^DEVICE_HOSTNAME=' /opt/aquila/config/device.env | tail -1 | cut -d= -f2- | tr -d '\r')"
+device_hostname="${device_hostname:-$(hostname)}"
+printf 'IMAGE_TAG=%s\nDEVICE_HOSTNAME=%s\n' "${image_tag}" "${device_hostname}" | sudo tee /opt/fleet/.env >/dev/null
+echo "Wrote /opt/fleet/.env with IMAGE_TAG=${image_tag} DEVICE_HOSTNAME=${device_hostname}"
 
 if [[ -z "${WATCHTOWER_HTTP_API_TOKEN:-}" ]]; then
   WATCHTOWER_HTTP_API_TOKEN="$(openssl rand -hex 32)"
@@ -56,18 +64,12 @@ fi
 
 sudo sed -i "s/^WATCHTOWER_HTTP_API_TOKEN=.*/WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN}/" \
   /opt/aquila/config/device.env
-
-echo "Rendering Grafana config templates..."
-set -a
-# shellcheck source=/dev/null
-source /opt/aquila/config/grafana.env
-set +a
-envsubst < /opt/fleet/vmagent.yaml.template | sudo tee /opt/fleet/vmagent.yaml >/dev/null
-envsubst < /opt/fleet/vector.yaml.template | sudo tee /opt/fleet/vector.yaml >/dev/null
+sudo chown root:root /opt/aquila/config/device.env
+sudo chmod 600 /opt/aquila/config/device.env
 
 echo "Starting fleet services..."
 sudo docker compose --env-file /opt/aquila/config/device.env -f /opt/fleet/docker-compose.yml up -d
 
 echo "Done. If you just installed Docker, log out/in for group changes."
-echo "Edit /opt/aquila/config/device.env to set DEVICE_ID, IMAGE_TAG, and WATCHTOWER_HTTP_API_TOKEN."
+echo "Edit /opt/aquila/config/device.env to set DEVICE_ID, IMAGE_TAG, WATCHTOWER_HTTP_API_TOKEN, GHCR_USERNAME, and GHCR_TOKEN."
 echo "Optional: run 'pytest tests/fleet_device' to verify scripts."

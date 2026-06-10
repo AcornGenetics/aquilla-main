@@ -1,0 +1,34 @@
+[Unit]
+Description=Aquila Kiosk Control API
+Documentation=https://github.com/AcornGenetics/aquilla-main
+After=network.target graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+User=root
+# root is required so we can sudo -u pi when launching Chromium.
+# The service itself is harmless: it only listens on 127.0.0.1 and only
+# calls pkill/chromium-browser.
+
+Environment=KIOSK_CONTROL_PORT=9191
+Environment=KIOSK_URL=http://localhost:8090
+Environment=KIOSK_USER=pi
+Environment=CHROMIUM_BIN=chromium
+
+ExecStart=/usr/bin/python3 /usr/local/bin/kiosk_control.py
+
+Restart=on-failure
+RestartSec=3
+
+# Harden: no new privileges, restrict filesystem writes
+NoNewPrivileges=no
+ProtectSystem=false
+PrivateTmp=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kiosk-control
+
+[Install]
+WantedBy=multi-user.target

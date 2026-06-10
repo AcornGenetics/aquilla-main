@@ -1,0 +1,828 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <Info>
+    <CompanyName>Meerstetter Engineering GmbH</CompanyName>
+    <IdentificationString>8065-TEC SW G01     </IdentificationString>
+    <ConfigurationSoftwareVersion>6.20.2.453</ConfigurationSoftwareVersion>
+    <DeviceSerialNumber>14297</DeviceSerialNumber>
+    <IgnoreOnlyIfSnIsEqual>False</IgnoreOnlyIfSnIsEqual>
+    <SaveDate>Mon, 24 Nov 2025 12:07:40 GMT</SaveDate>
+    <ComputerInformation>
+      <MachineName>DESKTOP-I0VIROL</MachineName>
+      <UserName>ZackBrueggeman</UserName>
+      <Is64BitOperatingSystem>True</Is64BitOperatingSystem>
+      <OSVersion>Microsoft Windows NT 10.0.19045.0</OSVersion>
+      <CLRVersion>8.0.22</CLRVersion>
+      <ComputerCulture>en-US</ComputerCulture>
+    </ComputerInformation>
+  </Info>
+  <BasicPar>
+    <Window Title="HR Input 1">
+      <Parameter MeParID="1040" MeParInst="1" Name="HR Input 1 / ADC / Raw Value">5111495</Parameter>
+      <Parameter MeParID="1042" MeParInst="1" Name="HR Input 1 / ADC / Resistance">1096.4403</Parameter>
+      <Parameter MeParID="1045" MeParInst="1" Name="HR Input 1 / Temperature Conversion / Measured Temperature">26.33933</Parameter>
+      <Parameter MeParID="1046" MeParInst="1" Name="HR Input 1 / ADC / Differential Voltage">NaN</Parameter>
+      <Parameter MeParID="4001" MeParInst="1" Name="HR Input 1 / Temperature Conversion / Temperature Calibration / Offset">0.8</Parameter>
+      <Parameter MeParID="4002" MeParInst="1" Name="HR Input 1 / Temperature Conversion / Temperature Calibration / Gain">1.031</Parameter>
+      <Parameter MeParID="4010" MeParInst="1" Name="HR Input 1 / Surveillance / Lower Temperature Threshold">13</Parameter>
+      <Parameter MeParID="4011" MeParInst="1" Name="HR Input 1 / Surveillance / Upper Temperature Threshold">120</Parameter>
+      <Parameter MeParID="4012" MeParInst="1" Name="HR Input 1 / Surveillance / Max Temperature Change">200</Parameter>
+      <Parameter MeParID="4020" MeParInst="1" Name="HR Input 1 / Temperature Conversion / NTC Characteristics / Lower Temperature">0</Parameter>
+      <Parameter MeParID="4021" MeParInst="1" Name="HR Input 1 / Temperature Conversion / NTC Characteristics / Lower Resistance">32650</Parameter>
+      <Parameter MeParID="4022" MeParInst="1" Name="HR Input 1 / Temperature Conversion / NTC Characteristics / Middle Temperature">25</Parameter>
+      <Parameter MeParID="4023" MeParInst="1" Name="HR Input 1 / Temperature Conversion / NTC Characteristics / Middle Resistance">10000</Parameter>
+      <Parameter MeParID="4024" MeParInst="1" Name="HR Input 1 / Temperature Conversion / NTC Characteristics / High Temperature">60</Parameter>
+      <Parameter MeParID="4025" MeParInst="1" Name="HR Input 1 / Temperature Conversion / NTC Characteristics / High Resistance">2488</Parameter>
+      <Parameter MeParID="4030" MeParInst="1" Name="HR Input 1 / Measurement Limits / Lowest Resistance">107.27646</Parameter>
+      <Parameter MeParID="4031" MeParInst="1" Name="HR Input 1 / Measurement Limits / Highest Resistance">1791.098</Parameter>
+      <Parameter MeParID="4032" MeParInst="1" Name="HR Input 1 / Measurement Limits / Temperature at Lowest Resistance">-227.31749</Parameter>
+      <Parameter MeParID="4033" MeParInst="1" Name="HR Input 1 / Measurement Limits / Temperature at Highest Resistance">216.13559</Parameter>
+      <Parameter MeParID="4034" MeParInst="1" Name="HR Input 1 / Sensor Type">PT1000</Parameter>
+      <Parameter MeParID="4035" MeParInst="1" Name="HR Input 1 / Measurement Limits / Highest Voltage">NaN</Parameter>
+      <Parameter MeParID="4036" MeParInst="1" Name="HR Input 1 / Measurement Limits / Lowest Voltage">NaN</Parameter>
+      <Parameter MeParID="6000" MeParInst="1" Name="HR Input 1 / ADC / Configuration / PGA Gain">Gain 2</Parameter>
+      <Parameter MeParID="6001" MeParInst="1" Name="HR Input 1 / ADC / Configuration / Current Source">250uA</Parameter>
+      <Parameter MeParID="6002" MeParInst="1" Name="HR Input 1 / ADC / Configuration / Reference Series Resistor">3600</Parameter>
+      <Parameter MeParID="6003" MeParInst="1" Name="HR Input 1 / ADC / Calibration / Offset">124.28394</Parameter>
+      <Parameter MeParID="6004" MeParInst="1" Name="HR Input 1 / ADC / Calibration / Gain">0.99964046</Parameter>
+      <Parameter MeParID="6005" MeParInst="1" Name="HR Input 1 / Temperature Conversion / Conversion Type">PT1000</Parameter>
+      <Parameter MeParID="6006" MeParInst="1" Name="HR Input 1 / ADC / Configuration / Reference Parallel Resistor">0</Parameter>
+      <Parameter MeParID="6007" MeParInst="1" Name="HR Input 1 / ADC / Configuration / PGA Bypass">Disabled</Parameter>
+      <Parameter MeParID="6008" MeParInst="1" Name="HR Input 1 / ADC / Configuration / Current 2 Out">OFF</Parameter>
+      <Parameter MeParID="6009" MeParInst="1" Name="HR Input 1 / ADC / Configuration / Measurement Type">Resistance</Parameter>
+      <Parameter MeParID="6050" MeParInst="1" Name="HR Input 1 / ADC Self Check / Periodic Check">0</Parameter>
+      <Parameter MeParID="6051" MeParInst="1" Name="HR Input 1 / ADC Self Check / Start ADC Self Check">0</Parameter>
+      <Parameter MeParID="6052" MeParInst="1" Name="HR Input 1 / ADC Self Check / IRs Error Enable">No</Parameter>
+      <Parameter MeParID="6053" MeParInst="1" Name="HR Input 1 / ADC Self Check / AVDD">3.3037062</Parameter>
+      <Parameter MeParID="6054" MeParInst="1" Name="HR Input 1 / ADC Self Check / IRs">NaN</Parameter>
+      <Parameter MeParID="6055" MeParInst="1" Name="HR Input 1 / ADC Self Check / VRef">NaN</Parameter>
+      <Parameter MeParID="6301" MeParInst="1" Name="HR Input 1 / ADC / Configuration / Sampling Frequency">10 Hz</Parameter>
+      <Parameter MeParID="6302" MeParInst="1" Name="HR Input 1 / Surveillance / ADC Limit Errors">Both</Parameter>
+      <Parameter MeParID="6303" MeParInst="1" Name="HR Input 1 / Surveillance / Temperature Limit Errors">Both</Parameter>
+      <Parameter MeParID="6400" MeParInst="1" Name="HR Input 1 / Temperature Conversion / Voltage to Temperature Conversion / Reference Temperature">25</Parameter>
+      <Parameter MeParID="6401" MeParInst="1" Name="HR Input 1 / Temperature Conversion / Voltage to Temperature Conversion / Reference Voltage">0.85</Parameter>
+      <Parameter MeParID="6402" MeParInst="1" Name="HR Input 1 / Temperature Conversion / Voltage to Temperature Conversion / Temperature Slope">0.01</Parameter>
+    </Window>
+    <Window Title="HR Input 2">
+      <Parameter MeParID="1040" MeParInst="2" Name="HR Input 2 / ADC / Raw Value">0</Parameter>
+      <Parameter MeParID="1042" MeParInst="2" Name="HR Input 2 / ADC / Resistance">NaN</Parameter>
+      <Parameter MeParID="1045" MeParInst="2" Name="HR Input 2 / Temperature Conversion / Measured Temperature">NaN</Parameter>
+      <Parameter MeParID="1046" MeParInst="2" Name="HR Input 2 / ADC / Differential Voltage">NaN</Parameter>
+      <Parameter MeParID="4001" MeParInst="2" Name="HR Input 2 / Temperature Conversion / Temperature Calibration / Offset">0</Parameter>
+      <Parameter MeParID="4002" MeParInst="2" Name="HR Input 2 / Temperature Conversion / Temperature Calibration / Gain">1</Parameter>
+      <Parameter MeParID="4010" MeParInst="2" Name="HR Input 2 / Surveillance / Lower Temperature Threshold">-10</Parameter>
+      <Parameter MeParID="4011" MeParInst="2" Name="HR Input 2 / Surveillance / Upper Temperature Threshold">120</Parameter>
+      <Parameter MeParID="4012" MeParInst="2" Name="HR Input 2 / Surveillance / Max Temperature Change">200</Parameter>
+      <Parameter MeParID="4020" MeParInst="2" Name="HR Input 2 / Temperature Conversion / NTC Characteristics / Lower Temperature">0</Parameter>
+      <Parameter MeParID="4021" MeParInst="2" Name="HR Input 2 / Temperature Conversion / NTC Characteristics / Lower Resistance">32650</Parameter>
+      <Parameter MeParID="4022" MeParInst="2" Name="HR Input 2 / Temperature Conversion / NTC Characteristics / Middle Temperature">25</Parameter>
+      <Parameter MeParID="4023" MeParInst="2" Name="HR Input 2 / Temperature Conversion / NTC Characteristics / Middle Resistance">10000</Parameter>
+      <Parameter MeParID="4024" MeParInst="2" Name="HR Input 2 / Temperature Conversion / NTC Characteristics / High Temperature">60</Parameter>
+      <Parameter MeParID="4025" MeParInst="2" Name="HR Input 2 / Temperature Conversion / NTC Characteristics / High Resistance">2488</Parameter>
+      <Parameter MeParID="4030" MeParInst="2" Name="HR Input 2 / Measurement Limits / Lowest Resistance">NaN</Parameter>
+      <Parameter MeParID="4031" MeParInst="2" Name="HR Input 2 / Measurement Limits / Highest Resistance">NaN</Parameter>
+      <Parameter MeParID="4032" MeParInst="2" Name="HR Input 2 / Measurement Limits / Temperature at Lowest Resistance">NaN</Parameter>
+      <Parameter MeParID="4033" MeParInst="2" Name="HR Input 2 / Measurement Limits / Temperature at Highest Resistance">NaN</Parameter>
+      <Parameter MeParID="4034" MeParInst="2" Name="HR Input 2 / Sensor Type">PT1000</Parameter>
+      <Parameter MeParID="4035" MeParInst="2" Name="HR Input 2 / Measurement Limits / Highest Voltage">NaN</Parameter>
+      <Parameter MeParID="4036" MeParInst="2" Name="HR Input 2 / Measurement Limits / Lowest Voltage">NaN</Parameter>
+      <Parameter MeParID="6000" MeParInst="2" Name="HR Input 2 / ADC / Configuration / PGA Gain">Gain 2</Parameter>
+      <Parameter MeParID="6001" MeParInst="2" Name="HR Input 2 / ADC / Configuration / Current Source">250uA</Parameter>
+      <Parameter MeParID="6002" MeParInst="2" Name="HR Input 2 / ADC / Configuration / Reference Series Resistor">3600</Parameter>
+      <Parameter MeParID="6003" MeParInst="2" Name="HR Input 2 / ADC / Calibration / Offset">0</Parameter>
+      <Parameter MeParID="6004" MeParInst="2" Name="HR Input 2 / ADC / Calibration / Gain">1</Parameter>
+      <Parameter MeParID="6005" MeParInst="2" Name="HR Input 2 / Temperature Conversion / Conversion Type">PT1000</Parameter>
+      <Parameter MeParID="6006" MeParInst="2" Name="HR Input 2 / ADC / Configuration / Reference Parallel Resistor">0</Parameter>
+      <Parameter MeParID="6007" MeParInst="2" Name="HR Input 2 / ADC / Configuration / PGA Bypass">Disabled</Parameter>
+      <Parameter MeParID="6008" MeParInst="2" Name="HR Input 2 / ADC / Configuration / Current 2 Out">OFF</Parameter>
+      <Parameter MeParID="6009" MeParInst="2" Name="HR Input 2 / ADC / Configuration / Measurement Type">Resistance</Parameter>
+      <Parameter MeParID="6050" MeParInst="2" Name="HR Input 2 / ADC Self Check / Periodic Check">0</Parameter>
+      <Parameter MeParID="6051" MeParInst="2" Name="HR Input 2 / ADC Self Check / Start ADC Self Check">0</Parameter>
+      <Parameter MeParID="6052" MeParInst="2" Name="HR Input 2 / ADC Self Check / IRs Error Enable">No</Parameter>
+      <Parameter MeParID="6053" MeParInst="2" Name="HR Input 2 / ADC Self Check / AVDD">0</Parameter>
+      <Parameter MeParID="6054" MeParInst="2" Name="HR Input 2 / ADC Self Check / IRs">NaN</Parameter>
+      <Parameter MeParID="6055" MeParInst="2" Name="HR Input 2 / ADC Self Check / VRef">NaN</Parameter>
+      <Parameter MeParID="6301" MeParInst="2" Name="HR Input 2 / ADC / Configuration / Sampling Frequency">10 Hz</Parameter>
+      <Parameter MeParID="6302" MeParInst="2" Name="HR Input 2 / Surveillance / ADC Limit Errors">Both</Parameter>
+      <Parameter MeParID="6303" MeParInst="2" Name="HR Input 2 / Surveillance / Temperature Limit Errors">Both</Parameter>
+      <Parameter MeParID="6400" MeParInst="2" Name="HR Input 2 / Temperature Conversion / Voltage to Temperature Conversion / Reference Temperature">25</Parameter>
+      <Parameter MeParID="6401" MeParInst="2" Name="HR Input 2 / Temperature Conversion / Voltage to Temperature Conversion / Reference Voltage">0.85</Parameter>
+      <Parameter MeParID="6402" MeParInst="2" Name="HR Input 2 / Temperature Conversion / Voltage to Temperature Conversion / Temperature Slope">0.01</Parameter>
+    </Window>
+    <Window Title="LR Input 1">
+      <Parameter MeParID="1041" MeParInst="1" Name="LR Input 1 / ADC / Raw Value">4095</Parameter>
+      <Parameter MeParID="1043" MeParInst="1" Name="LR Input 1 / ADC / Resistance">50348.23</Parameter>
+      <Parameter MeParID="1044" MeParInst="1" Name="LR Input 1 / R to Temperature / Measured Temperature">-8.263891</Parameter>
+      <Parameter MeParID="5001" MeParInst="1" Name="LR Input 1 / Temperature Conversion / Temperature Calibration / Offset">0</Parameter>
+      <Parameter MeParID="5002" MeParInst="1" Name="LR Input 1 / Temperature Conversion / Temperature Calibration / Gain">1</Parameter>
+      <Parameter MeParID="5005" MeParInst="1" Name="LR Input 1 / Temperature Conversion / Temperature Filter / PT1 Factor">0.001</Parameter>
+      <Parameter MeParID="5010" MeParInst="1" Name="LR Input 1 / Surveillance / Lower Temperature Threshold">5</Parameter>
+      <Parameter MeParID="5011" MeParInst="1" Name="LR Input 1 / Surveillance / Upper Temperature Threshold">70</Parameter>
+      <Parameter MeParID="5012" MeParInst="1" Name="LR Input 1 / Surveillance / Max Temperature Change">200</Parameter>
+      <Parameter MeParID="5013" MeParInst="1" Name="LR Input 1 / Surveillance / Temperature Limit Errors">None</Parameter>
+      <Parameter MeParID="5020" MeParInst="1" Name="LR Input 1 / Temperature Conversion / NTC Characteristics / Lower Temperature">0</Parameter>
+      <Parameter MeParID="5021" MeParInst="1" Name="LR Input 1 / Temperature Conversion / NTC Characteristics / Lower Resistance">32650</Parameter>
+      <Parameter MeParID="5022" MeParInst="1" Name="LR Input 1 / Temperature Conversion / NTC Characteristics / Middle Temperature">25</Parameter>
+      <Parameter MeParID="5023" MeParInst="1" Name="LR Input 1 / Temperature Conversion / NTC Characteristics / Middle Resistance">10000</Parameter>
+      <Parameter MeParID="5024" MeParInst="1" Name="LR Input 1 / Temperature Conversion / NTC Characteristics / High Temperature">60</Parameter>
+      <Parameter MeParID="5025" MeParInst="1" Name="LR Input 1 / Temperature Conversion / NTC Characteristics / High Resistance">2488</Parameter>
+      <Parameter MeParID="5040" MeParInst="1" Name="LR Input 1 / Measurement Limits / Lowest Resistance">60.331825</Parameter>
+      <Parameter MeParID="5041" MeParInst="1" Name="LR Input 1 / Measurement Limits / Highest Resistance">45315.906</Parameter>
+      <Parameter MeParID="5042" MeParInst="1" Name="LR Input 1 / Measurement Limits / Temperature at Lowest Resistance">204.30688</Parameter>
+      <Parameter MeParID="5043" MeParInst="1" Name="LR Input 1 / Measurement Limits / Temperature at Highest Resistance">-6.294226</Parameter>
+      <Parameter MeParID="6010" MeParInst="1" Name="LR Input 1 / ADC / Configuration / Reference Resistor">5600</Parameter>
+      <Parameter MeParID="6011" MeParInst="1" Name="LR Input 1 / ADC / Calibration / Offset">-1.5014548</Parameter>
+      <Parameter MeParID="6012" MeParInst="1" Name="LR Input 1 / ADC / Calibration / Gain">0.9905066</Parameter>
+      <Parameter MeParID="6013" MeParInst="1" Name="LR Input 1 / ADC / Configuration / Reference Voltage">3.3</Parameter>
+      <Parameter MeParID="6014" MeParInst="1" Name="LR Input 1 / Surveillance / ADC Limit Errors">None</Parameter>
+    </Window>
+    <Window Title="LR Input 2">
+      <Parameter MeParID="1041" MeParInst="2" Name="LR Input 2 / ADC / Raw Value">2035.826</Parameter>
+      <Parameter MeParID="1043" MeParInst="2" Name="LR Input 2 / ADC / Resistance">4616.0605</Parameter>
+      <Parameter MeParID="1044" MeParInst="2" Name="LR Input 2 / R to Temperature / Measured Temperature">43.592033</Parameter>
+      <Parameter MeParID="5001" MeParInst="2" Name="LR Input 2 / Temperature Conversion / Temperature Calibration / Offset">0</Parameter>
+      <Parameter MeParID="5002" MeParInst="2" Name="LR Input 2 / Temperature Conversion / Temperature Calibration / Gain">1</Parameter>
+      <Parameter MeParID="5005" MeParInst="2" Name="LR Input 2 / Temperature Conversion / Temperature Filter / PT1 Factor">0.001</Parameter>
+      <Parameter MeParID="5010" MeParInst="2" Name="LR Input 2 / Surveillance / Lower Temperature Threshold">5</Parameter>
+      <Parameter MeParID="5011" MeParInst="2" Name="LR Input 2 / Surveillance / Upper Temperature Threshold">70</Parameter>
+      <Parameter MeParID="5012" MeParInst="2" Name="LR Input 2 / Surveillance / Max Temperature Change">200</Parameter>
+      <Parameter MeParID="5013" MeParInst="2" Name="LR Input 2 / Surveillance / Temperature Limit Errors">None</Parameter>
+      <Parameter MeParID="5020" MeParInst="2" Name="LR Input 2 / Temperature Conversion / NTC Characteristics / Lower Temperature">0</Parameter>
+      <Parameter MeParID="5021" MeParInst="2" Name="LR Input 2 / Temperature Conversion / NTC Characteristics / Lower Resistance">32650</Parameter>
+      <Parameter MeParID="5022" MeParInst="2" Name="LR Input 2 / Temperature Conversion / NTC Characteristics / Middle Temperature">25</Parameter>
+      <Parameter MeParID="5023" MeParInst="2" Name="LR Input 2 / Temperature Conversion / NTC Characteristics / Middle Resistance">10000</Parameter>
+      <Parameter MeParID="5024" MeParInst="2" Name="LR Input 2 / Temperature Conversion / NTC Characteristics / High Temperature">60</Parameter>
+      <Parameter MeParID="5025" MeParInst="2" Name="LR Input 2 / Temperature Conversion / NTC Characteristics / High Resistance">2488</Parameter>
+      <Parameter MeParID="5040" MeParInst="2" Name="LR Input 2 / Measurement Limits / Lowest Resistance">62.842266</Parameter>
+      <Parameter MeParID="5041" MeParInst="2" Name="LR Input 2 / Measurement Limits / Highest Resistance">49780.516</Parameter>
+      <Parameter MeParID="5042" MeParInst="2" Name="LR Input 2 / Measurement Limits / Temperature at Lowest Resistance">202.09796</Parameter>
+      <Parameter MeParID="5043" MeParInst="2" Name="LR Input 2 / Measurement Limits / Temperature at Highest Resistance">-8.053015</Parameter>
+      <Parameter MeParID="6010" MeParInst="2" Name="LR Input 2 / ADC / Configuration / Reference Resistor">5600</Parameter>
+      <Parameter MeParID="6011" MeParInst="2" Name="LR Input 2 / ADC / Calibration / Offset">0</Parameter>
+      <Parameter MeParID="6012" MeParInst="2" Name="LR Input 2 / ADC / Calibration / Gain">1</Parameter>
+      <Parameter MeParID="6013" MeParInst="2" Name="LR Input 2 / ADC / Configuration / Reference Voltage">3.3</Parameter>
+      <Parameter MeParID="6014" MeParInst="2" Name="LR Input 2 / Surveillance / ADC Limit Errors">None</Parameter>
+    </Window>
+    <Window Title="LR Input 3">
+      <Parameter MeParID="1041" MeParInst="3" Name="LR Input 3 / ADC / Raw Value">4095</Parameter>
+      <Parameter MeParID="1043" MeParInst="3" Name="LR Input 3 / ADC / Resistance">55849.984</Parameter>
+      <Parameter MeParID="1044" MeParInst="3" Name="LR Input 3 / R to Temperature / Measured Temperature">-10.179724</Parameter>
+      <Parameter MeParID="5001" MeParInst="3" Name="LR Input 3 / Temperature Conversion / Temperature Calibration / Offset">0</Parameter>
+      <Parameter MeParID="5002" MeParInst="3" Name="LR Input 3 / Temperature Conversion / Temperature Calibration / Gain">1</Parameter>
+      <Parameter MeParID="5005" MeParInst="3" Name="LR Input 3 / Temperature Conversion / Temperature Filter / PT1 Factor">0.001</Parameter>
+      <Parameter MeParID="5010" MeParInst="3" Name="LR Input 3 / Surveillance / Lower Temperature Threshold">5</Parameter>
+      <Parameter MeParID="5011" MeParInst="3" Name="LR Input 3 / Surveillance / Upper Temperature Threshold">70</Parameter>
+      <Parameter MeParID="5012" MeParInst="3" Name="LR Input 3 / Surveillance / Max Temperature Change">200</Parameter>
+      <Parameter MeParID="5013" MeParInst="3" Name="LR Input 3 / Surveillance / Temperature Limit Errors">None</Parameter>
+      <Parameter MeParID="5020" MeParInst="3" Name="LR Input 3 / Temperature Conversion / NTC Characteristics / Lower Temperature">0</Parameter>
+      <Parameter MeParID="5021" MeParInst="3" Name="LR Input 3 / Temperature Conversion / NTC Characteristics / Lower Resistance">32650</Parameter>
+      <Parameter MeParID="5022" MeParInst="3" Name="LR Input 3 / Temperature Conversion / NTC Characteristics / Middle Temperature">25</Parameter>
+      <Parameter MeParID="5023" MeParInst="3" Name="LR Input 3 / Temperature Conversion / NTC Characteristics / Middle Resistance">10000</Parameter>
+      <Parameter MeParID="5024" MeParInst="3" Name="LR Input 3 / Temperature Conversion / NTC Characteristics / High Temperature">60</Parameter>
+      <Parameter MeParID="5025" MeParInst="3" Name="LR Input 3 / Temperature Conversion / NTC Characteristics / High Resistance">2488</Parameter>
+      <Parameter MeParID="5040" MeParInst="3" Name="LR Input 3 / Measurement Limits / Lowest Resistance">62.842266</Parameter>
+      <Parameter MeParID="5041" MeParInst="3" Name="LR Input 3 / Measurement Limits / Highest Resistance">49780.516</Parameter>
+      <Parameter MeParID="5042" MeParInst="3" Name="LR Input 3 / Measurement Limits / Temperature at Lowest Resistance">202.09796</Parameter>
+      <Parameter MeParID="5043" MeParInst="3" Name="LR Input 3 / Measurement Limits / Temperature at Highest Resistance">-8.053015</Parameter>
+      <Parameter MeParID="6010" MeParInst="3" Name="LR Input 3 / ADC / Configuration / Reference Resistor">5600</Parameter>
+      <Parameter MeParID="6011" MeParInst="3" Name="LR Input 3 / ADC / Calibration / Offset">0</Parameter>
+      <Parameter MeParID="6012" MeParInst="3" Name="LR Input 3 / ADC / Calibration / Gain">1</Parameter>
+      <Parameter MeParID="6013" MeParInst="3" Name="LR Input 3 / ADC / Configuration / Reference Voltage">3.3</Parameter>
+      <Parameter MeParID="6014" MeParInst="3" Name="LR Input 3 / Surveillance / ADC Limit Errors">None</Parameter>
+    </Window>
+    <Window Title="LR Input 4">
+      <Parameter MeParID="1041" MeParInst="4" Name="LR Input 4 / ADC / Raw Value">3656.5193</Parameter>
+      <Parameter MeParID="1043" MeParInst="4" Name="LR Input 4 / ADC / Resistance">24116.094</Parameter>
+      <Parameter MeParID="1044" MeParInst="4" Name="LR Input 4 / R to Temperature / Measured Temperature">6.046655</Parameter>
+      <Parameter MeParID="5001" MeParInst="4" Name="LR Input 4 / Temperature Conversion / Temperature Calibration / Offset">0</Parameter>
+      <Parameter MeParID="5002" MeParInst="4" Name="LR Input 4 / Temperature Conversion / Temperature Calibration / Gain">1</Parameter>
+      <Parameter MeParID="5005" MeParInst="4" Name="LR Input 4 / Temperature Conversion / Temperature Filter / PT1 Factor">0.001</Parameter>
+      <Parameter MeParID="5010" MeParInst="4" Name="LR Input 4 / Surveillance / Lower Temperature Threshold">5</Parameter>
+      <Parameter MeParID="5011" MeParInst="4" Name="LR Input 4 / Surveillance / Upper Temperature Threshold">70</Parameter>
+      <Parameter MeParID="5012" MeParInst="4" Name="LR Input 4 / Surveillance / Max Temperature Change">200</Parameter>
+      <Parameter MeParID="5013" MeParInst="4" Name="LR Input 4 / Surveillance / Temperature Limit Errors">None</Parameter>
+      <Parameter MeParID="5020" MeParInst="4" Name="LR Input 4 / Temperature Conversion / NTC Characteristics / Lower Temperature">0</Parameter>
+      <Parameter MeParID="5021" MeParInst="4" Name="LR Input 4 / Temperature Conversion / NTC Characteristics / Lower Resistance">32650</Parameter>
+      <Parameter MeParID="5022" MeParInst="4" Name="LR Input 4 / Temperature Conversion / NTC Characteristics / Middle Temperature">25</Parameter>
+      <Parameter MeParID="5023" MeParInst="4" Name="LR Input 4 / Temperature Conversion / NTC Characteristics / Middle Resistance">10000</Parameter>
+      <Parameter MeParID="5024" MeParInst="4" Name="LR Input 4 / Temperature Conversion / NTC Characteristics / High Temperature">60</Parameter>
+      <Parameter MeParID="5025" MeParInst="4" Name="LR Input 4 / Temperature Conversion / NTC Characteristics / High Resistance">2488</Parameter>
+      <Parameter MeParID="5040" MeParInst="4" Name="LR Input 4 / Measurement Limits / Lowest Resistance">62.842266</Parameter>
+      <Parameter MeParID="5041" MeParInst="4" Name="LR Input 4 / Measurement Limits / Highest Resistance">49780.516</Parameter>
+      <Parameter MeParID="5042" MeParInst="4" Name="LR Input 4 / Measurement Limits / Temperature at Lowest Resistance">202.09796</Parameter>
+      <Parameter MeParID="5043" MeParInst="4" Name="LR Input 4 / Measurement Limits / Temperature at Highest Resistance">-8.053015</Parameter>
+      <Parameter MeParID="6010" MeParInst="4" Name="LR Input 4 / ADC / Configuration / Reference Resistor">5600</Parameter>
+      <Parameter MeParID="6011" MeParInst="4" Name="LR Input 4 / ADC / Calibration / Offset">0</Parameter>
+      <Parameter MeParID="6012" MeParInst="4" Name="LR Input 4 / ADC / Calibration / Gain">1</Parameter>
+      <Parameter MeParID="6013" MeParInst="4" Name="LR Input 4 / ADC / Configuration / Reference Voltage">3.3</Parameter>
+      <Parameter MeParID="6014" MeParInst="4" Name="LR Input 4 / Surveillance / ADC Limit Errors">None</Parameter>
+    </Window>
+    <Window Title="System">
+      <Parameter MeParID="103" MeParInst="1" Name="System / Device Firmware Version">6.2</Parameter>
+      <Parameter MeParID="105" MeParInst="1" Name="System / Error Parameters / Error Number">0</Parameter>
+      <Parameter MeParID="106" MeParInst="1" Name="System / Error Parameters / Error Instance">0</Parameter>
+      <Parameter MeParID="107" MeParInst="1" Name="System / Error Parameters / Error Parameter">0</Parameter>
+      <Parameter MeParID="1034" MeParInst="1" Name="System / PID Portion Values / CH1 / P Part Output">0</Parameter>
+      <Parameter MeParID="1034" MeParInst="2" Name="System / PID Portion Values / CH2 / P Part Output">0</Parameter>
+      <Parameter MeParID="1034" MeParInst="3" Name="System / PID Portion Values / CH3 / P Part Output">0</Parameter>
+      <Parameter MeParID="1034" MeParInst="4" Name="System / PID Portion Values / CH4 / P Part Output">0</Parameter>
+      <Parameter MeParID="1035" MeParInst="1" Name="System / PID Portion Values / CH1 / P Part Output">0</Parameter>
+      <Parameter MeParID="1035" MeParInst="2" Name="System / PID Portion Values / CH2 / I Part Output">0</Parameter>
+      <Parameter MeParID="1035" MeParInst="3" Name="System / PID Portion Values / CH3 / I Part Output">0</Parameter>
+      <Parameter MeParID="1035" MeParInst="4" Name="System / PID Portion Values / CH4 / I Part Output">0</Parameter>
+      <Parameter MeParID="1036" MeParInst="1" Name="System / PID Portion Values / CH1 / P Part Output">0</Parameter>
+      <Parameter MeParID="1036" MeParInst="2" Name="System / PID Portion Values / CH2 / D Part Output">0</Parameter>
+      <Parameter MeParID="1036" MeParInst="3" Name="System / PID Portion Values / CH3 / D Part Output">0</Parameter>
+      <Parameter MeParID="1036" MeParInst="4" Name="System / PID Portion Values / CH4 / D Part Output">0</Parameter>
+      <Parameter MeParID="1051" MeParInst="1" Name="System / Device Firmware Build Number">724</Parameter>
+      <Parameter MeParID="1060" MeParInst="1" Name="System / Supplies / Driver Input Voltage">24.312195</Parameter>
+      <Parameter MeParID="1061" MeParInst="1" Name="System / Supplies / Medium Internal Supply">8.5121155</Parameter>
+      <Parameter MeParID="1062" MeParInst="1" Name="System / Supplies / 3.3V Internal Supply">3.3365479</Parameter>
+      <Parameter MeParID="1063" MeParInst="1" Name="System / Device Temperature Management / Current Temperature">22.565691</Parameter>
+      <Parameter MeParID="1064" MeParInst="1" Name="System / Supplies / Calculated Input Current">-0.00026755003</Parameter>
+      <Parameter MeParID="1065" MeParInst="1" Name="System / UniqueID">3131-3636-3232-510F-0033-0021</Parameter>
+      <Parameter MeParID="1071" MeParInst="1" Name="System / Supplies / Input Protection: Actual Output Limit">10</Parameter>
+      <Parameter MeParID="1072" MeParInst="1" Name="System / Supplies /Input Protection: Device Limitation">10</Parameter>
+      <Parameter MeParID="1080" MeParInst="1" Name="System / Counters / Operating Time">1109587</Parameter>
+      <Parameter MeParID="1081" MeParInst="1" Name="System / Counters / Operating Time in Run Mode">189095</Parameter>
+      <Parameter MeParID="1082" MeParInst="1" Name="System / Counters / Operating Time Supply CH1">184138</Parameter>
+      <Parameter MeParID="1082" MeParInst="2" Name="System / Counters / Operating Time Supply CH2">179865</Parameter>
+      <Parameter MeParID="1082" MeParInst="3" Name="System / Counters / Operating Time Supply CH3">0</Parameter>
+      <Parameter MeParID="1082" MeParInst="4" Name="System / Counters / Operating Time Supply CH4">0</Parameter>
+      <Parameter MeParID="1083" MeParInst="1" Name="System / Counters / Total Output Energy">359.16782</Parameter>
+      <Parameter MeParID="1110" MeParInst="1" Name="System / Device Temperature Management / Maximum Temperature">90</Parameter>
+      <Parameter MeParID="1111" MeParInst="1" Name="System / Device Temperature Management / Maximum Output Current">10</Parameter>
+    </Window>
+    <Window Title="TEC Configuration Software   v6.20   ">
+      <Parameter MeParID="2040" MeParInst="1" Name="TEC Configuration Software / Operating Mode">Bipolar</Parameter>
+      <Parameter MeParID="6210" MeParInst="1" Name="TEC Configuration Software / Fan Temperature Source [CH1]">LR 1</Parameter>
+      <Parameter MeParID="6210" MeParInst="2" Name="TEC Configuration Software / Fan Temperature Source [CH2]">LR 2</Parameter>
+      <Parameter MeParID="6300" MeParInst="1" Name="TEC Configuration Software / Object Source [CH1]">HR 1</Parameter>
+      <Parameter MeParID="6300" MeParInst="2" Name="TEC Configuration Software / Object Source [CH2]">HR 2</Parameter>
+      <Parameter MeParID="6300" MeParInst="3" Name="TEC Configuration Software / Object Source [CH3]">LR 1</Parameter>
+      <Parameter MeParID="6300" MeParInst="4" Name="TEC Configuration Software / Object Source [CH4]">LR 2</Parameter>
+      <Parameter MeParID="6304" MeParInst="1" Name="TEC Configuration Software / Sink Source [CH1]">Fixed</Parameter>
+      <Parameter MeParID="6304" MeParInst="2" Name="TEC Configuration Software / Sink Source [CH2]">Fixed</Parameter>
+      <Parameter MeParID="6304" MeParInst="3" Name="TEC Configuration Software / Sink Source [CH3]">Fixed</Parameter>
+      <Parameter MeParID="6304" MeParInst="4" Name="TEC Configuration Software / Sink Source [CH4]">Fixed</Parameter>
+      <Parameter MeParID="6305" MeParInst="1" Name="TEC Configuration Software / Target Source [CH1]">Default</Parameter>
+      <Parameter MeParID="6305" MeParInst="2" Name="TEC Configuration Software / Target Source [CH2]">Default</Parameter>
+      <Parameter MeParID="6305" MeParInst="3" Name="TEC Configuration Software / Target Source [CH3]">Default</Parameter>
+      <Parameter MeParID="6305" MeParInst="4" Name="TEC Configuration Software / Target Source [CH4]">Default</Parameter>
+      <Parameter MeParID="52200" MeParInst="1" Name="TEC Configuration Software / Object External Temperature [CH1]">NaN</Parameter>
+      <Parameter MeParID="52200" MeParInst="2" Name="TEC Configuration Software / Object External Temperature [CH2]">NaN</Parameter>
+      <Parameter MeParID="52200" MeParInst="3" Name="TEC Configuration Software / Object External Temperature [CH3]">NaN</Parameter>
+      <Parameter MeParID="52200" MeParInst="4" Name="TEC Configuration Software / Object External Temperature [CH4]">NaN</Parameter>
+      <Parameter MeParID="52201" MeParInst="1" Name="TEC Configuration Software / Sink External Temperature [CH1]">25</Parameter>
+      <Parameter MeParID="52201" MeParInst="2" Name="TEC Configuration Software / Sink External Temperature [CH2]">25</Parameter>
+      <Parameter MeParID="52201" MeParInst="3" Name="TEC Configuration Software / Sink External Temperature [CH3]">25</Parameter>
+      <Parameter MeParID="52201" MeParInst="4" Name="TEC Configuration Software / Sink External Temperature [CH4]">25</Parameter>
+    </Window>
+    <Window Title="License">
+      <Parameter MeParID="53000" MeParInst="1" Name="License / License Key / Key">
+      </Parameter>
+      <Parameter MeParID="53001" MeParInst="1" Name="License / License Key / Status">Empty</Parameter>
+      <Parameter MeParID="53010" MeParInst="1" Name="License / Temperature Estimator / License Status">Locked</Parameter>
+      <Parameter MeParID="53011" MeParInst="1" Name="License / Temperature Estimator / Extended Trial From">0</Parameter>
+      <Parameter MeParID="53012" MeParInst="1" Name="License / Temperature Estimator / Extended Trial To">0</Parameter>
+      <Parameter MeParID="53015" MeParInst="1" Name="License / Cascade Temperature Control / License Status">Locked</Parameter>
+      <Parameter MeParID="53016" MeParInst="1" Name="License / Cascade Temperature Control / Extended Trial From">0</Parameter>
+      <Parameter MeParID="53017" MeParInst="1" Name="License / Cascade Temperature Control / Extended Trial To">0</Parameter>
+      <Parameter MeParID="53020" MeParInst="1" Name="License / Unipolar and Mix Operating Mode / License Status">Locked</Parameter>
+      <Parameter MeParID="53021" MeParInst="1" Name="License / Unipolar and Mix Operating Mode / Extended Trial From">0</Parameter>
+      <Parameter MeParID="53022" MeParInst="1" Name="License / Unipolar and Mix Operating Mode / Extended Trial To">0</Parameter>
+    </Window>
+    <Window Title="Temperature Controller [CH1]">
+      <Parameter MeParID="1000" MeParInst="1" Name="Temperature Controller [CH1] / Object Temperature">26.33933</Parameter>
+      <Parameter MeParID="1001" MeParInst="1" Name="Temperature Controller [CH1] / Sink Temperature">25</Parameter>
+      <Parameter MeParID="1011" MeParInst="1" Name="Temperature Controller [CH1] / Nominal Temperature Ramp">29.76437</Parameter>
+      <Parameter MeParID="1012" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Power Model Current">0</Parameter>
+      <Parameter MeParID="1020" MeParInst="1" Name="Temperature Controller [CH1] / Output Stage / Actual Current">-0.0076773833</Parameter>
+      <Parameter MeParID="1021" MeParInst="1" Name="Temperature Controller [CH1] / Output Stage / Actual Voltage">-0.02641356</Parameter>
+      <Parameter MeParID="1030" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Model / PID Limit Negative">-109.345795</Parameter>
+      <Parameter MeParID="1031" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Model / PID Limit Positive">295.03052</Parameter>
+      <Parameter MeParID="1032" MeParInst="1" Name="Temperature Controller [CH1] / Temperature Control / PID Control Variable">0</Parameter>
+      <Parameter MeParID="1033" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Model / PID Limit Null">-7.1576347</Parameter>
+      <Parameter MeParID="1073" MeParInst="1" Name="Temperature Controller [CH1] / Final Output Limitation">9</Parameter>
+      <Parameter MeParID="1200" MeParInst="1" Name="Temperature Controller [CH1] / Temperature is Stable">0</Parameter>
+      <Parameter MeParID="2000" MeParInst="1" Name="Temperature Controller [CH1] / Output Stage Input Selection">Temperature Controller</Parameter>
+      <Parameter MeParID="2010" MeParInst="1" Name="Temperature Controller [CH1] / Output Enable">OFF</Parameter>
+      <Parameter MeParID="2020" MeParInst="1" Name="Temperature Controller [CH1] / Output Stage / Fixed Current">1</Parameter>
+      <Parameter MeParID="2021" MeParInst="1" Name="Temperature Controller [CH1] / Output Stage / Fixed Voltage">10</Parameter>
+      <Parameter MeParID="2030" MeParInst="1" Name="Temperature Controller [CH1] / Output Stage / Maximum Current">9</Parameter>
+      <Parameter MeParID="2031" MeParInst="1" Name="Temperature Controller [CH1] / Output Stage / Maximum Voltage">10</Parameter>
+      <Parameter MeParID="2032" MeParInst="1" Name="Temperature Controller [CH1] / Output Stage / Current Error Threshold">12</Parameter>
+      <Parameter MeParID="2033" MeParInst="1" Name="Temperature Controller [CH1] / Output Stage / Voltage Error Threshold">22.8</Parameter>
+      <Parameter MeParID="3000" MeParInst="1" Name="Temperature Controller [CH1] / Target Temperature">25</Parameter>
+      <Parameter MeParID="3002" MeParInst="1" Name="Temperature Controller [CH1] / Nominal Temperature Ramp / Proximity Width">3</Parameter>
+      <Parameter MeParID="3003" MeParInst="1" Name="Temperature Controller [CH1] / Nominal Temperature Ramp / Coarse Temp Ramp">1.6</Parameter>
+      <Parameter MeParID="3004" MeParInst="1" Name="Temperature Controller [CH1] / Nominal Temperature Ramp / Sin Ramp Start Point">Object</Parameter>
+      <Parameter MeParID="3010" MeParInst="1" Name="Temperature Controller [CH1] / PID Values / Kp">80</Parameter>
+      <Parameter MeParID="3011" MeParInst="1" Name="Temperature Controller [CH1] / PID Values / Ti">5</Parameter>
+      <Parameter MeParID="3012" MeParInst="1" Name="Temperature Controller [CH1] / PID Values / Td">4</Parameter>
+      <Parameter MeParID="3013" MeParInst="1" Name="Temperature Controller [CH1] / PID Values / D Part PT1">0</Parameter>
+      <Parameter MeParID="3020" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Model / Modelization">Peltier, Full Control</Parameter>
+      <Parameter MeParID="3030" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Model / Peltier Maximal Current">9</Parameter>
+      <Parameter MeParID="3033" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Model / Peltier Maximal Temperature Delta">73</Parameter>
+      <Parameter MeParID="3034" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Model / Peltier Polarity">Cooling</Parameter>
+      <Parameter MeParID="3040" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Model / Resistive Heater Resistance">1</Parameter>
+      <Parameter MeParID="3041" MeParInst="1" Name="Temperature Controller [CH1] / Thermal Model / Resistive Heater Maximal Current">10</Parameter>
+      <Parameter MeParID="3050" MeParInst="1" Name="Temperature Controller [CH1] / Peltier, Heat/Cool Only / Lower Boundary">5</Parameter>
+      <Parameter MeParID="3051" MeParInst="1" Name="Temperature Controller [CH1] / Peltier, Heat/Cool Only / Upper Boundary">50</Parameter>
+      <Parameter MeParID="4040" MeParInst="1" Name="Temperature Controller [CH1] / Stability Indicator / Deviation">1</Parameter>
+      <Parameter MeParID="4041" MeParInst="1" Name="Temperature Controller [CH1] / Stability Indicator / Time">10</Parameter>
+      <Parameter MeParID="4042" MeParInst="1" Name="Temperature Controller [CH1] / Stability Indicator / Maximum Stabilization Time">0</Parameter>
+    </Window>
+    <Window Title="Temperature Controller [CH2]">
+      <Parameter MeParID="1000" MeParInst="2" Name="Temperature Controller [CH2] / Object Temperature">NaN</Parameter>
+      <Parameter MeParID="1001" MeParInst="2" Name="Temperature Controller [CH2] / Sink Temperature">25</Parameter>
+      <Parameter MeParID="1011" MeParInst="2" Name="Temperature Controller [CH2] / Nominal Temperature Ramp">0</Parameter>
+      <Parameter MeParID="1012" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Power Model Current">0</Parameter>
+      <Parameter MeParID="1020" MeParInst="2" Name="Temperature Controller [CH2] / Output Stage / Actual Current">0</Parameter>
+      <Parameter MeParID="1021" MeParInst="2" Name="Temperature Controller [CH2] / Output Stage / Actual Voltage">0</Parameter>
+      <Parameter MeParID="1030" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Model / PID Limit Negative">0</Parameter>
+      <Parameter MeParID="1031" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Model / PID Limit Positive">0</Parameter>
+      <Parameter MeParID="1032" MeParInst="2" Name="Temperature Controller [CH2] / Temperature Control / PID Control Variable">0</Parameter>
+      <Parameter MeParID="1033" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Model / PID Limit Null">0</Parameter>
+      <Parameter MeParID="1073" MeParInst="2" Name="Temperature Controller [CH2] / Final Output Limitation">0</Parameter>
+      <Parameter MeParID="1200" MeParInst="2" Name="Temperature Controller [CH2] / Temperature is Stable">0</Parameter>
+      <Parameter MeParID="2000" MeParInst="2" Name="Temperature Controller [CH2] / Output Stage Input Selection">Temperature Controller</Parameter>
+      <Parameter MeParID="2010" MeParInst="2" Name="Temperature Controller [CH2] / Output Enable">OFF</Parameter>
+      <Parameter MeParID="2020" MeParInst="2" Name="Temperature Controller [CH2] / Output Stage / Fixed Current">1</Parameter>
+      <Parameter MeParID="2021" MeParInst="2" Name="Temperature Controller [CH2] / Output Stage / Fixed Voltage">10</Parameter>
+      <Parameter MeParID="2030" MeParInst="2" Name="Temperature Controller [CH2] / Output Stage / Maximum Current">9</Parameter>
+      <Parameter MeParID="2031" MeParInst="2" Name="Temperature Controller [CH2] / Output Stage / Maximum Voltage">3.6</Parameter>
+      <Parameter MeParID="2032" MeParInst="2" Name="Temperature Controller [CH2] / Output Stage / Current Error Threshold">12</Parameter>
+      <Parameter MeParID="2033" MeParInst="2" Name="Temperature Controller [CH2] / Output Stage / Voltage Error Threshold">22.8</Parameter>
+      <Parameter MeParID="3000" MeParInst="2" Name="Temperature Controller [CH2] / Target Temperature">25</Parameter>
+      <Parameter MeParID="3002" MeParInst="2" Name="Temperature Controller [CH2] / Nominal Temperature Ramp / Proximity Width">3</Parameter>
+      <Parameter MeParID="3003" MeParInst="2" Name="Temperature Controller [CH2] / Nominal Temperature Ramp / Coarse Temp Ramp">1</Parameter>
+      <Parameter MeParID="3004" MeParInst="2" Name="Temperature Controller [CH2] / Nominal Temperature Ramp / Sin Ramp Start Point">Object</Parameter>
+      <Parameter MeParID="3010" MeParInst="2" Name="Temperature Controller [CH2] / PID Values / Kp">20</Parameter>
+      <Parameter MeParID="3011" MeParInst="2" Name="Temperature Controller [CH2] / PID Values / Ti">20</Parameter>
+      <Parameter MeParID="3012" MeParInst="2" Name="Temperature Controller [CH2] / PID Values / Td">0</Parameter>
+      <Parameter MeParID="3013" MeParInst="2" Name="Temperature Controller [CH2] / PID Values / D Part PT1">0.3</Parameter>
+      <Parameter MeParID="3020" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Model / Modelization">Peltier, Full Control</Parameter>
+      <Parameter MeParID="3030" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Model / Peltier Maximal Current">9</Parameter>
+      <Parameter MeParID="3033" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Model / Peltier Maximal Temperature Delta">68</Parameter>
+      <Parameter MeParID="3034" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Model / Peltier Polarity">Cooling</Parameter>
+      <Parameter MeParID="3040" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Model / Resistive Heater Resistance">1.65</Parameter>
+      <Parameter MeParID="3041" MeParInst="2" Name="Temperature Controller [CH2] / Thermal Model / Resistive Heater Maximal Current">10</Parameter>
+      <Parameter MeParID="3050" MeParInst="2" Name="Temperature Controller [CH2] / Peltier, Heat/Cool Only / Lower Boundary">5</Parameter>
+      <Parameter MeParID="3051" MeParInst="2" Name="Temperature Controller [CH2] / Peltier, Heat/Cool Only / Upper Boundary">50</Parameter>
+      <Parameter MeParID="4040" MeParInst="2" Name="Temperature Controller [CH2] / Stability Indicator / Deviation">1</Parameter>
+      <Parameter MeParID="4041" MeParInst="2" Name="Temperature Controller [CH2] / Stability Indicator / Time">10</Parameter>
+      <Parameter MeParID="4042" MeParInst="2" Name="Temperature Controller [CH2] / Stability Indicator / Maximum Stabilization Time">0</Parameter>
+    </Window>
+    <Window Title="Temperature Controller [CH3]">
+      <Parameter MeParID="1000" MeParInst="3" Name="Temperature Controller [CH3] / Object Temperature">-8.263891</Parameter>
+      <Parameter MeParID="1001" MeParInst="3" Name="Temperature Controller [CH3] / Sink Temperature">25</Parameter>
+      <Parameter MeParID="1011" MeParInst="3" Name="Temperature Controller [CH3] / Nominal Temperature Ramp">0</Parameter>
+      <Parameter MeParID="1012" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Power Model Current">0</Parameter>
+      <Parameter MeParID="1020" MeParInst="3" Name="Temperature Controller [CH3] / Output Stage / Actual Current">0</Parameter>
+      <Parameter MeParID="1021" MeParInst="3" Name="Temperature Controller [CH3] / Output Stage / Actual Voltage">0</Parameter>
+      <Parameter MeParID="1030" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Model / PID Limit Negative">0</Parameter>
+      <Parameter MeParID="1031" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Model / PID Limit Positive">0</Parameter>
+      <Parameter MeParID="1032" MeParInst="3" Name="Temperature Controller [CH3] / Temperature Control / PID Control Variable">0</Parameter>
+      <Parameter MeParID="1033" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Model / PID Limit Null">0</Parameter>
+      <Parameter MeParID="1073" MeParInst="3" Name="Temperature Controller [CH3] / Final Output Limitation">0</Parameter>
+      <Parameter MeParID="1200" MeParInst="3" Name="Temperature Controller [CH3] / Temperature is Stable">0</Parameter>
+      <Parameter MeParID="2000" MeParInst="3" Name="Temperature Controller [CH3] / Output Stage Input Selection">Current/Voltage</Parameter>
+      <Parameter MeParID="2010" MeParInst="3" Name="Temperature Controller [CH3] / Output Enable">OFF</Parameter>
+      <Parameter MeParID="2020" MeParInst="3" Name="Temperature Controller [CH3] / Output Stage / Fixed Current">1</Parameter>
+      <Parameter MeParID="2021" MeParInst="3" Name="Temperature Controller [CH3] / Output Stage / Fixed Voltage">10</Parameter>
+      <Parameter MeParID="2030" MeParInst="3" Name="Temperature Controller [CH3] / Output Stage / Maximum Current">10</Parameter>
+      <Parameter MeParID="2031" MeParInst="3" Name="Temperature Controller [CH3] / Output Stage / Maximum Voltage">19</Parameter>
+      <Parameter MeParID="2032" MeParInst="3" Name="Temperature Controller [CH3] / Output Stage / Current Error Threshold">12</Parameter>
+      <Parameter MeParID="2033" MeParInst="3" Name="Temperature Controller [CH3] / Output Stage / Voltage Error Threshold">22.8</Parameter>
+      <Parameter MeParID="3000" MeParInst="3" Name="Temperature Controller [CH3] / Target Temperature">25</Parameter>
+      <Parameter MeParID="3002" MeParInst="3" Name="Temperature Controller [CH3] / Nominal Temperature Ramp / Proximity Width">1</Parameter>
+      <Parameter MeParID="3003" MeParInst="3" Name="Temperature Controller [CH3] / Nominal Temperature Ramp / Coarse Temp Ramp">1</Parameter>
+      <Parameter MeParID="3004" MeParInst="3" Name="Temperature Controller [CH3] / Nominal Temperature Ramp / Sin Ramp Start Point">Object</Parameter>
+      <Parameter MeParID="3010" MeParInst="3" Name="Temperature Controller [CH3] / PID Values / Kp">10</Parameter>
+      <Parameter MeParID="3011" MeParInst="3" Name="Temperature Controller [CH3] / PID Values / Ti">300</Parameter>
+      <Parameter MeParID="3012" MeParInst="3" Name="Temperature Controller [CH3] / PID Values / Td">0</Parameter>
+      <Parameter MeParID="3013" MeParInst="3" Name="Temperature Controller [CH3] / PID Values / D Part PT1">0.3</Parameter>
+      <Parameter MeParID="3020" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Model / Modelization">Peltier, Full Control</Parameter>
+      <Parameter MeParID="3030" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Model / Peltier Maximal Current">15</Parameter>
+      <Parameter MeParID="3033" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Model / Peltier Maximal Temperature Delta">68</Parameter>
+      <Parameter MeParID="3034" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Model / Peltier Polarity">Cooling</Parameter>
+      <Parameter MeParID="3040" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Model / Resistive Heater Resistance">1.65</Parameter>
+      <Parameter MeParID="3041" MeParInst="3" Name="Temperature Controller [CH3] / Thermal Model / Resistive Heater Maximal Current">10</Parameter>
+      <Parameter MeParID="3050" MeParInst="3" Name="Temperature Controller [CH3] / Peltier, Heat/Cool Only / Lower Boundary">5</Parameter>
+      <Parameter MeParID="3051" MeParInst="3" Name="Temperature Controller [CH3] / Peltier, Heat/Cool Only / Upper Boundary">50</Parameter>
+      <Parameter MeParID="4040" MeParInst="3" Name="Temperature Controller [CH3] / Stability Indicator / Deviation">1</Parameter>
+      <Parameter MeParID="4041" MeParInst="3" Name="Temperature Controller [CH3] / Stability Indicator / Time">10</Parameter>
+      <Parameter MeParID="4042" MeParInst="3" Name="Temperature Controller [CH3] / Stability Indicator / Maximum Stabilization Time">0</Parameter>
+    </Window>
+    <Window Title="Temperature Controller [CH4]">
+      <Parameter MeParID="1000" MeParInst="4" Name="Temperature Controller [CH4] / Object Temperature">43.592033</Parameter>
+      <Parameter MeParID="1001" MeParInst="4" Name="Temperature Controller [CH4] / Sink Temperature">25</Parameter>
+      <Parameter MeParID="1011" MeParInst="4" Name="Temperature Controller [CH4] / Nominal Temperature Ramp">0</Parameter>
+      <Parameter MeParID="1012" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Power Model Current">0</Parameter>
+      <Parameter MeParID="1020" MeParInst="4" Name="Temperature Controller [CH4] / Output Stage / Actual Current">0</Parameter>
+      <Parameter MeParID="1021" MeParInst="4" Name="Temperature Controller [CH4] / Output Stage / Actual Voltage">0</Parameter>
+      <Parameter MeParID="1030" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Model / PID Limit Negative">0</Parameter>
+      <Parameter MeParID="1031" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Model / PID Limit Positive">0</Parameter>
+      <Parameter MeParID="1032" MeParInst="4" Name="Temperature Controller [CH4] / Temperature Control / PID Control Variable">0</Parameter>
+      <Parameter MeParID="1033" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Model / PID Limit Null">0</Parameter>
+      <Parameter MeParID="1073" MeParInst="4" Name="Temperature Controller [CH4] / Final Output Limitation">0</Parameter>
+      <Parameter MeParID="1200" MeParInst="4" Name="Temperature Controller [CH4] / Temperature is Stable">0</Parameter>
+      <Parameter MeParID="2000" MeParInst="4" Name="Temperature Controller [CH4] / Output Stage Input Selection">Current/Voltage</Parameter>
+      <Parameter MeParID="2010" MeParInst="4" Name="Temperature Controller [CH4] / Output Enable">OFF</Parameter>
+      <Parameter MeParID="2020" MeParInst="4" Name="Temperature Controller [CH4] / Output Stage / Fixed Current">1</Parameter>
+      <Parameter MeParID="2021" MeParInst="4" Name="Temperature Controller [CH4] / Output Stage / Fixed Voltage">10</Parameter>
+      <Parameter MeParID="2030" MeParInst="4" Name="Temperature Controller [CH4] / Output Stage / Maximum Current">10</Parameter>
+      <Parameter MeParID="2031" MeParInst="4" Name="Temperature Controller [CH4] / Output Stage / Maximum Voltage">19</Parameter>
+      <Parameter MeParID="2032" MeParInst="4" Name="Temperature Controller [CH4] / Output Stage / Current Error Threshold">12</Parameter>
+      <Parameter MeParID="2033" MeParInst="4" Name="Temperature Controller [CH4] / Output Stage / Voltage Error Threshold">22.8</Parameter>
+      <Parameter MeParID="3000" MeParInst="4" Name="Temperature Controller [CH4] / Target Temperature">25</Parameter>
+      <Parameter MeParID="3002" MeParInst="4" Name="Temperature Controller [CH4] / Nominal Temperature Ramp / Proximity Width">1</Parameter>
+      <Parameter MeParID="3003" MeParInst="4" Name="Temperature Controller [CH4] / Nominal Temperature Ramp / Coarse Temp Ramp">1</Parameter>
+      <Parameter MeParID="3004" MeParInst="4" Name="Temperature Controller [CH4] / Nominal Temperature Ramp / Sin Ramp Start Point">Object</Parameter>
+      <Parameter MeParID="3010" MeParInst="4" Name="Temperature Controller [CH4] / PID Values / Kp">10</Parameter>
+      <Parameter MeParID="3011" MeParInst="4" Name="Temperature Controller [CH4] / PID Values / Ti">300</Parameter>
+      <Parameter MeParID="3012" MeParInst="4" Name="Temperature Controller [CH4] / PID Values / Td">0</Parameter>
+      <Parameter MeParID="3013" MeParInst="4" Name="Temperature Controller [CH4] / PID Values / D Part PT1">0.3</Parameter>
+      <Parameter MeParID="3020" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Model / Modelization">Peltier, Full Control</Parameter>
+      <Parameter MeParID="3030" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Model / Peltier Maximal Current">15</Parameter>
+      <Parameter MeParID="3033" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Model / Peltier Maximal Temperature Delta">68</Parameter>
+      <Parameter MeParID="3034" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Model / Peltier Polarity">Cooling</Parameter>
+      <Parameter MeParID="3040" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Model / Resistive Heater Resistance">1.65</Parameter>
+      <Parameter MeParID="3041" MeParInst="4" Name="Temperature Controller [CH4] / Thermal Model / Resistive Heater Maximal Current">10</Parameter>
+      <Parameter MeParID="3050" MeParInst="4" Name="Temperature Controller [CH4] / Peltier, Heat/Cool Only / Lower Boundary">5</Parameter>
+      <Parameter MeParID="3051" MeParInst="4" Name="Temperature Controller [CH4] / Peltier, Heat/Cool Only / Upper Boundary">50</Parameter>
+      <Parameter MeParID="4040" MeParInst="4" Name="Temperature Controller [CH4] / Stability Indicator / Deviation">1</Parameter>
+      <Parameter MeParID="4041" MeParInst="4" Name="Temperature Controller [CH4] / Stability Indicator / Time">10</Parameter>
+      <Parameter MeParID="4042" MeParInst="4" Name="Temperature Controller [CH4] / Stability Indicator / Maximum Stabilization Time">0</Parameter>
+    </Window>
+    <Window Title="Fan [CH1]">
+      <Parameter MeParID="1100" MeParInst="1" Name="Fan [CH1] / Fan Controller Monitoring / Relative Cooling Power">0</Parameter>
+      <Parameter MeParID="1101" MeParInst="1" Name="Fan [CH1] / Fan Controller Monitoring / Nominal Fan Speed">0</Parameter>
+      <Parameter MeParID="1102" MeParInst="1" Name="Fan [CH1] / Fan Controller Monitoring / Actual Fan Speed">0</Parameter>
+      <Parameter MeParID="1103" MeParInst="1" Name="Fan [CH1] / Fan Controller Monitoring / Fan PWM Level">0</Parameter>
+      <Parameter MeParID="6200" MeParInst="1" Name="Fan [CH1] / Fan Control Enable">Disabled</Parameter>
+      <Parameter MeParID="6211" MeParInst="1" Name="Fan [CH1] / Fan Temperature Controller / Target Temperature">40</Parameter>
+      <Parameter MeParID="6212" MeParInst="1" Name="Fan [CH1] / Fan Temperature Controller / Kp">30</Parameter>
+      <Parameter MeParID="6213" MeParInst="1" Name="Fan [CH1] / Fan Temperature Controller / Ti">120</Parameter>
+      <Parameter MeParID="6214" MeParInst="1" Name="Fan [CH1] / Fan Temperature Controller / Td">0</Parameter>
+      <Parameter MeParID="6220" MeParInst="1" Name="Fan [CH1] / Fan Speed Controller / 0% Speed">0</Parameter>
+      <Parameter MeParID="6221" MeParInst="1" Name="Fan [CH1] / Fan Speed Controller / 100% Speed">10000</Parameter>
+      <Parameter MeParID="6222" MeParInst="1" Name="Fan [CH1] / Fan Speed Controller / Kp">0.0005</Parameter>
+      <Parameter MeParID="6223" MeParInst="1" Name="Fan [CH1] / Fan Speed Controller / Ti">2</Parameter>
+      <Parameter MeParID="6224" MeParInst="1" Name="Fan [CH1] / Fan Speed Controller / Td">0</Parameter>
+      <Parameter MeParID="6225" MeParInst="1" Name="Fan [CH1] / Fan Speed Controller / Bypassing Speed Controller">No</Parameter>
+      <Parameter MeParID="6226" MeParInst="1" Name="Fan [CH1] / Fan Speed Controller / Fan Surveillance">Enabled</Parameter>
+      <Parameter MeParID="6227" MeParInst="1" Name="Fan [CH1] / Fan Speed Controller / Min Speed Start">2000</Parameter>
+      <Parameter MeParID="6228" MeParInst="1" Name="Fan [CH1] / Fan Speed Controller / Min Speed Stop">500</Parameter>
+      <Parameter MeParID="6230" MeParInst="1" Name="Fan [CH1] / Fan General Settings / Fan PWM Frequency">25 kHz</Parameter>
+    </Window>
+    <Window Title="Fan [CH2]">
+      <Parameter MeParID="1100" MeParInst="2" Name="Fan [CH2] / Fan Controller Monitoring / Relative Cooling Power">100</Parameter>
+      <Parameter MeParID="1101" MeParInst="2" Name="Fan [CH2] / Fan Controller Monitoring / Nominal Fan Speed">10000</Parameter>
+      <Parameter MeParID="1102" MeParInst="2" Name="Fan [CH2] / Fan Controller Monitoring / Actual Fan Speed">0</Parameter>
+      <Parameter MeParID="1103" MeParInst="2" Name="Fan [CH2] / Fan Controller Monitoring / Fan PWM Level">0</Parameter>
+      <Parameter MeParID="6200" MeParInst="2" Name="Fan [CH2] / Fan Control Enable">Disabled</Parameter>
+      <Parameter MeParID="6211" MeParInst="2" Name="Fan [CH2] / Fan Temperature Controller / Target Temperature">30</Parameter>
+      <Parameter MeParID="6212" MeParInst="2" Name="Fan [CH2] / Fan Temperature Controller / Kp">30</Parameter>
+      <Parameter MeParID="6213" MeParInst="2" Name="Fan [CH2] / Fan Temperature Controller / Ti">120</Parameter>
+      <Parameter MeParID="6214" MeParInst="2" Name="Fan [CH2] / Fan Temperature Controller / Td">0</Parameter>
+      <Parameter MeParID="6220" MeParInst="2" Name="Fan [CH2] / Fan Speed Controller / 0% Speed">0</Parameter>
+      <Parameter MeParID="6221" MeParInst="2" Name="Fan [CH2] / Fan Speed Controller / 100% Speed">10000</Parameter>
+      <Parameter MeParID="6222" MeParInst="2" Name="Fan [CH2] / Fan Speed Controller / Kp">0.0005</Parameter>
+      <Parameter MeParID="6223" MeParInst="2" Name="Fan [CH2] / Fan Speed Controller / Ti">2</Parameter>
+      <Parameter MeParID="6224" MeParInst="2" Name="Fan [CH2] / Fan Speed Controller / Td">0</Parameter>
+      <Parameter MeParID="6225" MeParInst="2" Name="Fan [CH2] / Fan Speed Controller / Bypassing Speed Controller">No</Parameter>
+      <Parameter MeParID="6226" MeParInst="2" Name="Fan [CH2] / Fan Speed Controller / Fan Surveillance">Enabled</Parameter>
+      <Parameter MeParID="6227" MeParInst="2" Name="Fan [CH2] / Fan Speed Controller / Min Speed Start">2000</Parameter>
+      <Parameter MeParID="6228" MeParInst="2" Name="Fan [CH2] / Fan Speed Controller / Min Speed Stop">500</Parameter>
+    </Window>
+    <Window Title="ME Settings">
+      <Parameter MeParID="100" MeParInst="1" Name="ME Settings / System / Device Type">1089</Parameter>
+      <Parameter MeParID="101" MeParInst="1" Name="ME Settings / System / Hardware Version">2.1</Parameter>
+      <Parameter MeParID="102" MeParInst="1" Name="ME Settings / System / Serial Number">14297</Parameter>
+      <Parameter MeParID="200" MeParInst="1" Name="ME Settings / HwTest / Hardware Test Mode">Disabled</Parameter>
+      <Parameter MeParID="201" MeParInst="1" Name="ME Settings / System / Max Output Current">10</Parameter>
+      <Parameter MeParID="202" MeParInst="1" Name="ME Settings / System / Input Power Limit">10000</Parameter>
+      <Parameter MeParID="203" MeParInst="1" Name="ME Settings / System / Input Voltage Range">27V</Parameter>
+      <Parameter MeParID="204" MeParInst="1" Name="ME Settings / HwTest / PowerStage v3 Mode">Disabled</Parameter>
+      <Parameter MeParID="209" MeParInst="1" Name="ME Settings / HwTest / LR ADC Filter Reset">0</Parameter>
+      <Parameter MeParID="210" MeParInst="1" Name="ME Settings / HwTest / Hardware Test Status">Stopped</Parameter>
+      <Parameter MeParID="211" MeParInst="1" Name="ME Settings / HwTest / GPIO Test Error Enable">0</Parameter>
+      <Parameter MeParID="212" MeParInst="1" Name="ME Settings / HwTest / Comm Test Error Enable">0</Parameter>
+      <Parameter MeParID="213" MeParInst="1" Name="ME Settings / Bootloader / Ignore Branch ID">No</Parameter>
+      <Parameter MeParID="214" MeParInst="1" Name="ME Settings / Bootloader / Ignore Feature Firmware Limit">No</Parameter>
+      <Parameter MeParID="800" MeParInst="1" Name="ME Settings / LTR Rack / TEC CH1 Rack Terminal">0</Parameter>
+      <Parameter MeParID="800" MeParInst="2" Name="ME Settings / LTR Rack / TEC CH2 Rack Terminal">0</Parameter>
+      <Parameter MeParID="1054" MeParInst="1" Name="ME Settings / Bootloader / Min Version for Firmware Downgrade">6</Parameter>
+      <Parameter MeParID="6056" MeParInst="1" Name="ME Settings / HR Input 1 / VUB">NaN</Parameter>
+      <Parameter MeParID="6056" MeParInst="2" Name="ME Settings / HR Input 2 / VUB">NaN</Parameter>
+      <Parameter MeParID="6057" MeParInst="1" Name="ME Settings / HR Input 1 / VUA">NaN</Parameter>
+      <Parameter MeParID="6057" MeParInst="2" Name="ME Settings / HR Input 2 / VUA">NaN</Parameter>
+      <Parameter MeParID="6058" MeParInst="1" Name="ME Settings / HR Input 1 / VIA">NaN</Parameter>
+      <Parameter MeParID="6058" MeParInst="2" Name="ME Settings / HR Input 2 / VIA">NaN</Parameter>
+      <Parameter MeParID="6060" MeParInst="1" Name="ME Settings / HR Input 1 / Time Base">0.09955716</Parameter>
+      <Parameter MeParID="6060" MeParInst="2" Name="ME Settings / HR Input 2 / Time Base">0.1</Parameter>
+      <Parameter MeParID="40000" MeParInst="1" Name="ME Settings / Power Stage: Temperatures / T1A">NaN</Parameter>
+      <Parameter MeParID="40000" MeParInst="2" Name="ME Settings / Power Stage: Temperatures / T1B">NaN</Parameter>
+      <Parameter MeParID="40000" MeParInst="3" Name="ME Settings / Power Stage: Temperatures / T2A">NaN</Parameter>
+      <Parameter MeParID="40000" MeParInst="4" Name="ME Settings / Power Stage: Temperatures / T2B">NaN</Parameter>
+      <Parameter MeParID="65004" MeParInst="1" Name="ME Settings / Power Stage: U/I / U1A">0.5011139</Parameter>
+      <Parameter MeParID="65004" MeParInst="2" Name="ME Settings / Power Stage: U/I / U2A">0</Parameter>
+      <Parameter MeParID="65005" MeParInst="1" Name="ME Settings / Power Stage: U/I / I1A">-0.0064086914</Parameter>
+      <Parameter MeParID="65005" MeParInst="2" Name="ME Settings / Power Stage: U/I / I2A">-0</Parameter>
+      <Parameter MeParID="65006" MeParInst="1" Name="ME Settings / Power Stage: U/I / U1B">0.5294037</Parameter>
+      <Parameter MeParID="65006" MeParInst="2" Name="ME Settings / Power Stage: U/I / U2B">0</Parameter>
+      <Parameter MeParID="65007" MeParInst="1" Name="ME Settings / Power Stage: U/I / I1B">-0.005836487</Parameter>
+      <Parameter MeParID="65007" MeParInst="2" Name="ME Settings / Power Stage: U/I / I2B">-0</Parameter>
+      <Parameter MeParID="65008" MeParInst="1" Name="ME Settings / Power Stage: Parallel Common Load / Symmetry Correction A">0</Parameter>
+      <Parameter MeParID="65008" MeParInst="2" Name="ME Settings / Power Stage: Parallel Common Load / Symmetry Correction B">0</Parameter>
+      <Parameter MeParID="65009" MeParInst="1" Name="ME Settings / Power Stage: Relative PWM / Level CH1">6E-45</Parameter>
+      <Parameter MeParID="65009" MeParInst="2" Name="ME Settings / Power Stage: Relative PWM / Level CH2">0</Parameter>
+      <Parameter MeParID="65009" MeParInst="3" Name="ME Settings / Power Stage: Relative PWM / Level CH3">0</Parameter>
+      <Parameter MeParID="65009" MeParInst="4" Name="ME Settings / Power Stage: Relative PWM / Level CH4">0</Parameter>
+      <Parameter MeParID="65010" MeParInst="1" Name="ME Settings / Power Stage: Absolute PWM / Level 1A">0</Parameter>
+      <Parameter MeParID="65010" MeParInst="2" Name="ME Settings / Power Stage: Absolute PWM / Level 2A">0</Parameter>
+      <Parameter MeParID="65011" MeParInst="1" Name="ME Settings / Power Stage: Absolute PWM / Level 1B">0</Parameter>
+      <Parameter MeParID="65011" MeParInst="2" Name="ME Settings / Power Stage: Absolute PWM / Level 2B">0</Parameter>
+      <Parameter MeParID="65020" MeParInst="1" Name="ME Settings / System General / MeParFlashV2 Write Cycles">430</Parameter>
+    </Window>
+    <Window Title="Extra Functions">
+      <Parameter MeParID="53100" MeParInst="1" Name="Extra Functions / Estimator 1 / Enable">OFF</Parameter>
+      <Parameter MeParID="53100" MeParInst="2" Name="Extra Functions / Estimator 2 / Enable">OFF</Parameter>
+      <Parameter MeParID="53101" MeParInst="1" Name="Extra Functions / Estimator 1 / Model Input Temperature">HR 1</Parameter>
+      <Parameter MeParID="53101" MeParInst="2" Name="Extra Functions / Estimator 2 / Model Input Temperature">HR 2</Parameter>
+      <Parameter MeParID="53102" MeParInst="1" Name="Extra Functions / Estimator 1 / Model Ambient Temperature">Fixed</Parameter>
+      <Parameter MeParID="53102" MeParInst="2" Name="Extra Functions / Estimator 2 / Model Ambient Temperature">Fixed</Parameter>
+      <Parameter MeParID="53103" MeParInst="1" Name="Extra Functions / Estimator 1 / Fixed Ambient Temperature">20</Parameter>
+      <Parameter MeParID="53103" MeParInst="2" Name="Extra Functions / Estimator 2 / Fixed Ambient Temperature">20</Parameter>
+      <Parameter MeParID="53104" MeParInst="1" Name="Extra Functions / Estimator 1 / Time Constant Damping">10</Parameter>
+      <Parameter MeParID="53104" MeParInst="2" Name="Extra Functions / Estimator 2 / Time Constant Damping">10</Parameter>
+      <Parameter MeParID="53105" MeParInst="1" Name="Extra Functions / Estimator 1 / Heat Loss Factor">0.1</Parameter>
+      <Parameter MeParID="53105" MeParInst="2" Name="Extra Functions / Estimator 2 / Heat Loss Factor">0.1</Parameter>
+      <Parameter MeParID="53106" MeParInst="1" Name="Extra Functions / Estimator 1 / Monitor: Input">26.334528</Parameter>
+      <Parameter MeParID="53106" MeParInst="2" Name="Extra Functions / Estimator 2 / Monitor: Input">0</Parameter>
+      <Parameter MeParID="53107" MeParInst="1" Name="Extra Functions / Estimator 1 / Monitor: Output">NaN</Parameter>
+      <Parameter MeParID="53107" MeParInst="2" Name="Extra Functions / Estimator 2 / Monitor: Output">0</Parameter>
+      <Parameter MeParID="53120" MeParInst="1" Name="Extra Functions / Cascase 1 / General / Enable">OFF</Parameter>
+      <Parameter MeParID="53120" MeParInst="2" Name="Extra Functions / Cascase 2 / General / Enable">OFF</Parameter>
+      <Parameter MeParID="53121" MeParInst="1" Name="Extra Functions / Cascade 1 / General / Current Temperature Selection">HR 1</Parameter>
+      <Parameter MeParID="53121" MeParInst="2" Name="Extra Functions / Cascade 2 / General / Current Temperature Selection">HR 1</Parameter>
+      <Parameter MeParID="53122" MeParInst="1" Name="Extra Functions / Cascade 1 / General / Sync Run with">Temp CH1</Parameter>
+      <Parameter MeParID="53122" MeParInst="2" Name="Extra Functions / Cascade 2 / General / Sync Run with">Temp CH2</Parameter>
+      <Parameter MeParID="53123" MeParInst="1" Name="Extra Functions / Cascade 1 / Nominal Temperature / Target Temperature">20</Parameter>
+      <Parameter MeParID="53123" MeParInst="2" Name="Extra Functions / Cascade 2 / Nominal Temperature / Target Temperature">20</Parameter>
+      <Parameter MeParID="53124" MeParInst="1" Name="Extra Functions / Cascade 1 / Nominal Temperature / Coarse Temp Ramp">1</Parameter>
+      <Parameter MeParID="53124" MeParInst="2" Name="Extra Functions / Cascade 2 / Nominal Temperature / Coarse Temp Ramp">1</Parameter>
+      <Parameter MeParID="53125" MeParInst="1" Name="Extra Functions / Cascade 1 / Nominal Temperature / Proximity Width">0</Parameter>
+      <Parameter MeParID="53125" MeParInst="2" Name="Extra Functions / Cascade 2 / Nominal Temperature / Proximity Width">0</Parameter>
+      <Parameter MeParID="53126" MeParInst="1" Name="Extra Functions / Cascade 1 / Nominal Temperature / Start Point">Target</Parameter>
+      <Parameter MeParID="53126" MeParInst="2" Name="Extra Functions / Cascade 2 / Nominal Temperature / Start Point">Target</Parameter>
+      <Parameter MeParID="53128" MeParInst="1" Name="Extra Functions / Cascade 1 / PID Controller / Kp">5</Parameter>
+      <Parameter MeParID="53128" MeParInst="2" Name="Extra Functions / Cascade 2 / PID Controller / Kp">5</Parameter>
+      <Parameter MeParID="53129" MeParInst="1" Name="Extra Functions / Cascade 1 / PID Controller / Ti">20</Parameter>
+      <Parameter MeParID="53129" MeParInst="2" Name="Extra Functions / Cascade 2 / PID Controller / Ti">20</Parameter>
+      <Parameter MeParID="53130" MeParInst="1" Name="Extra Functions / Cascade 1 / PID Controller / Td">0</Parameter>
+      <Parameter MeParID="53130" MeParInst="2" Name="Extra Functions / Cascade 2 / PID Controller / Td">0</Parameter>
+      <Parameter MeParID="53131" MeParInst="1" Name="Extra Functions / Cascade 1 / PID Controller / D Part PT1">0.3</Parameter>
+      <Parameter MeParID="53131" MeParInst="2" Name="Extra Functions / Cascade 2 / PID Controller / D Part PT1">0.3</Parameter>
+      <Parameter MeParID="53132" MeParInst="1" Name="Extra Functions / Cascade 1 / Output Limitation / I Freeze triggered by">Temp CH1</Parameter>
+      <Parameter MeParID="53132" MeParInst="2" Name="Extra Functions / Cascade 2 / Output Limitation / I Freeze triggered by">Temp CH2</Parameter>
+      <Parameter MeParID="53133" MeParInst="1" Name="Extra Functions / Cascade 1 / Output Limitation / PID Upper Limit">80</Parameter>
+      <Parameter MeParID="53133" MeParInst="2" Name="Extra Functions / Cascade 2 / Output Limitation / PID Upper Limit">80</Parameter>
+      <Parameter MeParID="53134" MeParInst="1" Name="Extra Functions / Cascade 1 / Output Limitation / PID Lower Limit">-10</Parameter>
+      <Parameter MeParID="53134" MeParInst="2" Name="Extra Functions / Cascade 2 / Output Limitation / PID Lower Limit">-10</Parameter>
+      <Parameter MeParID="53135" MeParInst="1" Name="Extra Functions / Cascade 1 / Output Limitation / Range around Target Temp">20</Parameter>
+      <Parameter MeParID="53135" MeParInst="2" Name="Extra Functions / Cascade 2 / Output Limitation / Range around Target Temp">20</Parameter>
+      <Parameter MeParID="53136" MeParInst="1" Name="Extra Functions / Cascade 1 / Output Monitor / Current Temperature">26.334528</Parameter>
+      <Parameter MeParID="53136" MeParInst="2" Name="Extra Functions / Cascade 2 / Output Monitor / Current Temperature">26.334528</Parameter>
+      <Parameter MeParID="53137" MeParInst="1" Name="Extra Functions / Cascade 1 / Output Monitor / Nominal Temperature Ramp">0</Parameter>
+      <Parameter MeParID="53137" MeParInst="2" Name="Extra Functions / Cascade 2 / Output Monitor / Nominal Temperature Ramp">0</Parameter>
+      <Parameter MeParID="53138" MeParInst="1" Name="Extra Functions / Cascade 1 / Output Monitor / PID Upper Limit">0</Parameter>
+      <Parameter MeParID="53138" MeParInst="2" Name="Extra Functions / Cascade 2 / Output Monitor / PID Upper Limit">0</Parameter>
+      <Parameter MeParID="53139" MeParInst="1" Name="Extra Functions / Cascade 1 / Output Monitor / PID Lower Limit">0</Parameter>
+      <Parameter MeParID="53139" MeParInst="2" Name="Extra Functions / Cascade 2 / Output Monitor / PID Lower Limit">0</Parameter>
+      <Parameter MeParID="53140" MeParInst="1" Name="Extra Functions / Cascade 1 / Output Monitor / Output">NaN</Parameter>
+      <Parameter MeParID="53140" MeParInst="2" Name="Extra Functions / Cascade 2 / Output Monitor / Output">NaN</Parameter>
+    </Window>
+    <Window Title="Auto Tuning [CH1]">
+      <Parameter MeParID="51000" MeParInst="1" Name="Auto Tuning [CH1] / Start">0</Parameter>
+      <Parameter MeParID="51001" MeParInst="1" Name="Auto Tuning [CH1] / Stop">0</Parameter>
+      <Parameter MeParID="51002" MeParInst="1" Name="Auto Tuning [CH1] / Thermal Model Speed">Fast Model</Parameter>
+      <Parameter MeParID="51010" MeParInst="1" Name="Auto Tuning [CH1] / 2a Raw Result">0</Parameter>
+      <Parameter MeParID="51011" MeParInst="1" Name="Auto Tuning [CH1] / 2d Raw Result">0</Parameter>
+      <Parameter MeParID="51012" MeParInst="1" Name="Auto Tuning [CH1] / Ku Raw Result">0</Parameter>
+      <Parameter MeParID="51013" MeParInst="1" Name="Auto Tuning [CH1] / Tu Raw Result">0</Parameter>
+      <Parameter MeParID="51014" MeParInst="1" Name="Auto Tuning [CH1] / PID Result Kp">0</Parameter>
+      <Parameter MeParID="51015" MeParInst="1" Name="Auto Tuning [CH1] / PID Result Ti">0</Parameter>
+      <Parameter MeParID="51016" MeParInst="1" Name="Auto Tuning [CH1] / PID Result Td">0</Parameter>
+      <Parameter MeParID="51017" MeParInst="1" Name="Auto Tuning [CH1] / Coarse Temp Ramp Result">0</Parameter>
+      <Parameter MeParID="51018" MeParInst="1" Name="Auto Tuning [CH1] / Proximity Width Result">0</Parameter>
+      <Parameter MeParID="51020" MeParInst="1" Name="Auto Tuning [CH1] / Status">Idle</Parameter>
+      <Parameter MeParID="51021" MeParInst="1" Name="Auto Tuning [CH1] / Progress">0</Parameter>
+      <Parameter MeParID="51022" MeParInst="1" Name="Auto Tuning [CH1] / PI Result Kp">0</Parameter>
+      <Parameter MeParID="51023" MeParInst="1" Name="Auto Tuning [CH1] / PI Result Ti">0</Parameter>
+      <Parameter MeParID="51024" MeParInst="1" Name="Auto Tuning [CH1] / D Part Damping Result">0</Parameter>
+    </Window>
+    <Window Title="Auto Tuning [CH2]">
+      <Parameter MeParID="51000" MeParInst="2" Name="Auto Tuning [CH2] / Start">0</Parameter>
+      <Parameter MeParID="51001" MeParInst="2" Name="Auto Tuning [CH2] / Stop">0</Parameter>
+      <Parameter MeParID="51002" MeParInst="2" Name="Auto Tuning [CH2] / Thermal Model Speed">Fast Model</Parameter>
+      <Parameter MeParID="51010" MeParInst="2" Name="Auto Tuning [CH2] / 2a Raw Result">0</Parameter>
+      <Parameter MeParID="51011" MeParInst="2" Name="Auto Tuning [CH2] / 2d Raw Result">0</Parameter>
+      <Parameter MeParID="51012" MeParInst="2" Name="Auto Tuning [CH2] / Ku Raw Result">0</Parameter>
+      <Parameter MeParID="51013" MeParInst="2" Name="Auto Tuning [CH2] / Tu Raw Result">0</Parameter>
+      <Parameter MeParID="51014" MeParInst="2" Name="Auto Tuning [CH2] / PID Result Kp">0</Parameter>
+      <Parameter MeParID="51015" MeParInst="2" Name="Auto Tuning [CH2] / PID Result Ti">0</Parameter>
+      <Parameter MeParID="51016" MeParInst="2" Name="Auto Tuning [CH2] / PID Result Td">0</Parameter>
+      <Parameter MeParID="51017" MeParInst="2" Name="Auto Tuning [CH2] / Coarse Temp Ramp Result">0</Parameter>
+      <Parameter MeParID="51018" MeParInst="2" Name="Auto Tuning [CH2] / Proximity Width Result">0</Parameter>
+      <Parameter MeParID="51020" MeParInst="2" Name="Auto Tuning [CH2] / Status">Idle</Parameter>
+      <Parameter MeParID="51021" MeParInst="2" Name="Auto Tuning [CH2] / Progress">0</Parameter>
+      <Parameter MeParID="51022" MeParInst="2" Name="Auto Tuning [CH2] / PI Result Kp">0</Parameter>
+      <Parameter MeParID="51023" MeParInst="2" Name="Auto Tuning [CH2] / PI Result Ti">0</Parameter>
+      <Parameter MeParID="51024" MeParInst="2" Name="Auto Tuning [CH2] / D Part Damping Result">0</Parameter>
+    </Window>
+    <Window Title="Auto Tuning [CH3]">
+      <Parameter MeParID="51000" MeParInst="3" Name="Auto Tuning [CH3] / Start">0</Parameter>
+      <Parameter MeParID="51001" MeParInst="3" Name="Auto Tuning [CH3] / Stop">0</Parameter>
+      <Parameter MeParID="51002" MeParInst="3" Name="Auto Tuning [CH3] / Thermal Model Speed">Fast Model</Parameter>
+      <Parameter MeParID="51010" MeParInst="3" Name="Auto Tuning [CH3] / 2a Raw Result">0</Parameter>
+      <Parameter MeParID="51011" MeParInst="3" Name="Auto Tuning [CH3] / 2d Raw Result">0</Parameter>
+      <Parameter MeParID="51012" MeParInst="3" Name="Auto Tuning [CH3] / Ku Raw Result">0</Parameter>
+      <Parameter MeParID="51013" MeParInst="3" Name="Auto Tuning [CH3] / Tu Raw Result">0</Parameter>
+      <Parameter MeParID="51014" MeParInst="3" Name="Auto Tuning [CH3] / PID Result Kp">0</Parameter>
+      <Parameter MeParID="51015" MeParInst="3" Name="Auto Tuning [CH3] / PID Result Ti">0</Parameter>
+      <Parameter MeParID="51016" MeParInst="3" Name="Auto Tuning [CH3] / PID Result Td">0</Parameter>
+      <Parameter MeParID="51017" MeParInst="3" Name="Auto Tuning [CH3] / Coarse Temp Ramp Result">0</Parameter>
+      <Parameter MeParID="51018" MeParInst="3" Name="Auto Tuning [CH3] / Proximity Width Result">0</Parameter>
+      <Parameter MeParID="51020" MeParInst="3" Name="Auto Tuning [CH3] / Status">Idle</Parameter>
+      <Parameter MeParID="51021" MeParInst="3" Name="Auto Tuning [CH3] / Progress">0</Parameter>
+      <Parameter MeParID="51022" MeParInst="3" Name="Auto Tuning [CH3] / PI Result Kp">0</Parameter>
+      <Parameter MeParID="51023" MeParInst="3" Name="Auto Tuning [CH3] / PI Result Ti">0</Parameter>
+      <Parameter MeParID="51024" MeParInst="3" Name="Auto Tuning [CH3] / D Part Damping Result">0</Parameter>
+    </Window>
+    <Window Title="Auto Tuning [CH4]">
+      <Parameter MeParID="51000" MeParInst="4" Name="Auto Tuning [CH4] / Start">0</Parameter>
+      <Parameter MeParID="51001" MeParInst="4" Name="Auto Tuning [CH4] / Stop">0</Parameter>
+      <Parameter MeParID="51002" MeParInst="4" Name="Auto Tuning [CH4] / Thermal Model Speed">Fast Model</Parameter>
+      <Parameter MeParID="51010" MeParInst="4" Name="Auto Tuning [CH4] / 2a Raw Result">0</Parameter>
+      <Parameter MeParID="51011" MeParInst="4" Name="Auto Tuning [CH4] / 2d Raw Result">0</Parameter>
+      <Parameter MeParID="51012" MeParInst="4" Name="Auto Tuning [CH4] / Ku Raw Result">0</Parameter>
+      <Parameter MeParID="51013" MeParInst="4" Name="Auto Tuning [CH4] / Tu Raw Result">0</Parameter>
+      <Parameter MeParID="51014" MeParInst="4" Name="Auto Tuning [CH4] / PID Result Kp">0</Parameter>
+      <Parameter MeParID="51015" MeParInst="4" Name="Auto Tuning [CH4] / PID Result Ti">0</Parameter>
+      <Parameter MeParID="51016" MeParInst="4" Name="Auto Tuning [CH4] / PID Result Td">0</Parameter>
+      <Parameter MeParID="51017" MeParInst="4" Name="Auto Tuning [CH4] / Coarse Temp Ramp Result">0</Parameter>
+      <Parameter MeParID="51018" MeParInst="4" Name="Auto Tuning [CH4] / Proximity Width Result">0</Parameter>
+      <Parameter MeParID="51020" MeParInst="4" Name="Auto Tuning [CH4] / Status">Idle</Parameter>
+      <Parameter MeParID="51021" MeParInst="4" Name="Auto Tuning [CH4] / Progress">0</Parameter>
+      <Parameter MeParID="51022" MeParInst="4" Name="Auto Tuning [CH4] / PI Result Kp">0</Parameter>
+      <Parameter MeParID="51023" MeParInst="4" Name="Auto Tuning [CH4] / PI Result Ti">0</Parameter>
+      <Parameter MeParID="51024" MeParInst="4" Name="Auto Tuning [CH4] / D Part Damping Result">0</Parameter>
+    </Window>
+    <Window Title="Display">
+      <Parameter MeParID="6020" MeParInst="1" Name="Display / Display Type">OFF</Parameter>
+      <Parameter MeParID="6021" MeParInst="1" Name="Display / Periodic Display Re-Initialization">0</Parameter>
+      <Parameter MeParID="6023" MeParInst="1" Name="Display / Line 1 / Alternative Mode">Toggle on Error</Parameter>
+      <Parameter MeParID="6023" MeParInst="2" Name="Display / Line 2 / Alternative Mode">Toggle on Error</Parameter>
+      <Parameter MeParID="6023" MeParInst="3" Name="Display / Line 3 / Alternative Mode">Toggle on Error</Parameter>
+      <Parameter MeParID="6023" MeParInst="4" Name="Display / Line 4 / Alternative Mode">Toggle on Error</Parameter>
+      <Parameter MeParID="6024" MeParInst="1" Name="Display / Line 1 / Default Text">Temp: {1000;1;3;8}°C</Parameter>
+      <Parameter MeParID="6024" MeParInst="2" Name="Display / Line 2 / Default Text">{1020;1;1;6}A  {1021;1;1;6}V</Parameter>
+      <Parameter MeParID="6024" MeParInst="3" Name="Display / Line 3 / Default Text">Default 3</Parameter>
+      <Parameter MeParID="6024" MeParInst="4" Name="Display / Line 4 / Default Text">Default 4</Parameter>
+      <Parameter MeParID="6025" MeParInst="1" Name="Display / Line 1 / Alternative Text">{ERRMSG}</Parameter>
+      <Parameter MeParID="6025" MeParInst="2" Name="Display / Line 2 / Alternative Text">{ERRINF}</Parameter>
+      <Parameter MeParID="6025" MeParInst="3" Name="Display / Line 3 / Alternative Text">Alternative 3</Parameter>
+      <Parameter MeParID="6025" MeParInst="4" Name="Display / Line 4 / Alternative Text">Alternative 4</Parameter>
+      <Parameter MeParID="6026" MeParInst="1" Name="Display / Line 1 / Startup Text">TEC-{100;1;0;4} SN{102;1;0;5}</Parameter>
+      <Parameter MeParID="6026" MeParInst="2" Name="Display / Line 2 / Startup Text">Software   v{103;1;2;4}</Parameter>
+      <Parameter MeParID="6026" MeParInst="3" Name="Display / Line 3 / Startup Text">Startup 3</Parameter>
+      <Parameter MeParID="6026" MeParInst="4" Name="Display / Line 4 / Startup Text">Startup 4</Parameter>
+    </Window>
+    <Window Title="I/O">
+      <Parameter MeParID="6100" MeParInst="1" Name="I/O / GPIO 1 Function">Fix 0</Parameter>
+      <Parameter MeParID="6100" MeParInst="2" Name="I/O / GPIO 2 Function">No Function</Parameter>
+      <Parameter MeParID="6100" MeParInst="3" Name="I/O / GPIO 3 Function">No Function</Parameter>
+      <Parameter MeParID="6100" MeParInst="4" Name="I/O / GPIO 4 Function">No Function</Parameter>
+      <Parameter MeParID="6100" MeParInst="5" Name="I/O / GPIO 5 Function">No Function</Parameter>
+      <Parameter MeParID="6100" MeParInst="6" Name="I/O / GPIO 6 Function">No Function</Parameter>
+      <Parameter MeParID="6100" MeParInst="7" Name="I/O / GPIO 7 Function">No Function</Parameter>
+      <Parameter MeParID="6100" MeParInst="8" Name="I/O / GPIO 8 Function">No Function</Parameter>
+      <Parameter MeParID="6100" MeParInst="9" Name="I/O / GPIO 9 Function">No Function</Parameter>
+      <Parameter MeParID="6100" MeParInst="10" Name="I/O / GPIO 10 Function">No Function</Parameter>
+      <Parameter MeParID="6101" MeParInst="1" Name="I/O / GPIO 1 Level Assignment">Negative</Parameter>
+      <Parameter MeParID="6101" MeParInst="2" Name="I/O / GPIO 2 Level Assignment">Positive</Parameter>
+      <Parameter MeParID="6101" MeParInst="3" Name="I/O / GPIO 3 Level Assignment">Positive</Parameter>
+      <Parameter MeParID="6101" MeParInst="4" Name="I/O / GPIO 4 Level Assignment">Positive</Parameter>
+      <Parameter MeParID="6101" MeParInst="5" Name="I/O / GPIO 5 Level Assignment">Positive</Parameter>
+      <Parameter MeParID="6101" MeParInst="6" Name="I/O / GPIO 6 Level Assignment">Positive</Parameter>
+      <Parameter MeParID="6101" MeParInst="7" Name="I/O / GPIO 7 Level Assignment">Positive</Parameter>
+      <Parameter MeParID="6101" MeParInst="8" Name="I/O / GPIO 8 Level Assignment">Positive</Parameter>
+      <Parameter MeParID="6101" MeParInst="9" Name="I/O / GPIO 9 Level Assignment">Positive</Parameter>
+      <Parameter MeParID="6101" MeParInst="10" Name="I/O / GPIO 10 Level Assignment">Positive</Parameter>
+      <Parameter MeParID="6102" MeParInst="1" Name="I/O / GPIO 1 Hardware Configuration">OUT PushPull</Parameter>
+      <Parameter MeParID="6102" MeParInst="2" Name="I/O / GPIO 2 Hardware Configuration">IN WeakNo</Parameter>
+      <Parameter MeParID="6102" MeParInst="3" Name="I/O / GPIO 3 Hardware Configuration">IN WeakNo</Parameter>
+      <Parameter MeParID="6102" MeParInst="4" Name="I/O / GPIO 4 Hardware Configuration">IN WeakNo</Parameter>
+      <Parameter MeParID="6102" MeParInst="5" Name="I/O / GPIO 5 Hardware Configuration">IN WeakNo</Parameter>
+      <Parameter MeParID="6102" MeParInst="6" Name="I/O / GPIO 6 Hardware Configuration">IN WeakNo</Parameter>
+      <Parameter MeParID="6102" MeParInst="7" Name="I/O / GPIO 7 Hardware Configuration">IN WeakNo</Parameter>
+      <Parameter MeParID="6102" MeParInst="8" Name="I/O / GPIO 8 Hardware Configuration">IN WeakNo</Parameter>
+      <Parameter MeParID="6102" MeParInst="9" Name="I/O / GPIO 9 Hardware Configuration">IN WeakNo</Parameter>
+      <Parameter MeParID="6102" MeParInst="10" Name="I/O / GPIO 10 Hardware Configuration">IN WeakNo</Parameter>
+      <Parameter MeParID="6103" MeParInst="1" Name="I/O / GPIO 1 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6103" MeParInst="2" Name="I/O / GPIO 2 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6103" MeParInst="3" Name="I/O / GPIO 3 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6103" MeParInst="4" Name="I/O / GPIO 4 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6103" MeParInst="5" Name="I/O / GPIO 5 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6103" MeParInst="6" Name="I/O / GPIO 6 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6103" MeParInst="7" Name="I/O / GPIO 7 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6103" MeParInst="8" Name="I/O / GPIO 8 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6103" MeParInst="9" Name="I/O / GPIO 9 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6103" MeParInst="10" Name="I/O / GPIO 10 Channel">Channel 1</Parameter>
+      <Parameter MeParID="6110" MeParInst="1" Name="I/O / Lower Temperature Limit [CH1]">15</Parameter>
+      <Parameter MeParID="6110" MeParInst="2" Name="I/O / Lower Temperature Limit [CH2]">15</Parameter>
+      <Parameter MeParID="6110" MeParInst="3" Name="I/O / Lower Temperature Limit [CH3]">0</Parameter>
+      <Parameter MeParID="6110" MeParInst="4" Name="I/O / Lower Temperature Limit [CH4]">0</Parameter>
+      <Parameter MeParID="6111" MeParInst="1" Name="I/O / Upper Temperature Limit [CH1]">60</Parameter>
+      <Parameter MeParID="6111" MeParInst="2" Name="I/O / Upper Temperature Limit [CH2]">60</Parameter>
+      <Parameter MeParID="6111" MeParInst="3" Name="I/O / Upper Temperature Limit [CH3]">0</Parameter>
+      <Parameter MeParID="6111" MeParInst="4" Name="I/O / Upper Temperature Limit [CH4]">0</Parameter>
+      <Parameter MeParID="6112" MeParInst="1" Name="I/O / Step Size [CH1]">0.1</Parameter>
+      <Parameter MeParID="6112" MeParInst="2" Name="I/O / Step Size [CH2]">0.1</Parameter>
+      <Parameter MeParID="6112" MeParInst="3" Name="I/O / Step Size [CH3]">0</Parameter>
+      <Parameter MeParID="6112" MeParInst="4" Name="I/O / Step Size [CH4]">0</Parameter>
+      <Parameter MeParID="6120" MeParInst="1" Name="I/O / Actual Temperature Source [CH1]">LR 1</Parameter>
+      <Parameter MeParID="6120" MeParInst="2" Name="I/O / Actual Temperature Source [CH2]">LR 2</Parameter>
+      <Parameter MeParID="6121" MeParInst="1" Name="I/O / ON Threshold [CH1]">40</Parameter>
+      <Parameter MeParID="6121" MeParInst="2" Name="I/O / ON Threshold [CH2]">40</Parameter>
+      <Parameter MeParID="6122" MeParInst="1" Name="I/O / OFF Threshold [CH1]">35</Parameter>
+      <Parameter MeParID="6122" MeParInst="2" Name="I/O / OFF Threshold [CH2]">35</Parameter>
+      <Parameter MeParID="6130" MeParInst="1" Name="I/O / Temperature 1 [CH1]">26</Parameter>
+      <Parameter MeParID="6130" MeParInst="2" Name="I/O / Temperature 1 [CH2]">26</Parameter>
+      <Parameter MeParID="6130" MeParInst="3" Name="I/O / Temperature 1 [CH3]">0</Parameter>
+      <Parameter MeParID="6130" MeParInst="4" Name="I/O / Temperature 1 [CH4]">0</Parameter>
+      <Parameter MeParID="6131" MeParInst="1" Name="I/O / Temperature 2 [CH1]">27</Parameter>
+      <Parameter MeParID="6131" MeParInst="2" Name="I/O / Temperature 2 [CH2]">27</Parameter>
+      <Parameter MeParID="6131" MeParInst="3" Name="I/O / Temperature 2 [CH3]">0</Parameter>
+      <Parameter MeParID="6131" MeParInst="4" Name="I/O / Temperature 2 [CH4]">0</Parameter>
+      <Parameter MeParID="6132" MeParInst="1" Name="I/O / Temperature 3 [CH1]">28</Parameter>
+      <Parameter MeParID="6132" MeParInst="2" Name="I/O / Temperature 3 [CH2]">28</Parameter>
+      <Parameter MeParID="6132" MeParInst="3" Name="I/O / Temperature 3 [CH3]">0</Parameter>
+      <Parameter MeParID="6132" MeParInst="4" Name="I/O / Temperature 3 [CH4]">0</Parameter>
+      <Parameter MeParID="6133" MeParInst="1" Name="I/O / Temperature 0 [CH1]">0</Parameter>
+      <Parameter MeParID="6133" MeParInst="2" Name="I/O / Temperature 0 [CH2]">0</Parameter>
+      <Parameter MeParID="6133" MeParInst="3" Name="I/O / Temperature 0 [CH3]">0</Parameter>
+      <Parameter MeParID="6133" MeParInst="4" Name="I/O / Temperature 0 [CH4]">0</Parameter>
+      <Parameter MeParID="52103" MeParInst="1" Name="I/O / GPIO Read Input States">6</Parameter>
+    </Window>
+    <Window Title="Lookup Table">
+      <Parameter MeParID="52000" MeParInst="1" Name="Lookup Table / Start [CH1]">0</Parameter>
+      <Parameter MeParID="52000" MeParInst="2" Name="Lookup Table / Start [CH2]">0</Parameter>
+      <Parameter MeParID="52000" MeParInst="3" Name="Lookup Table / Start [CH3]">0</Parameter>
+      <Parameter MeParID="52000" MeParInst="4" Name="Lookup Table / Start [CH4]">0</Parameter>
+      <Parameter MeParID="52001" MeParInst="1" Name="Lookup Table / Stop [CH1]">0</Parameter>
+      <Parameter MeParID="52001" MeParInst="2" Name="Lookup Table / Stop [CH2]">0</Parameter>
+      <Parameter MeParID="52001" MeParInst="3" Name="Lookup Table / Stop [CH3]">0</Parameter>
+      <Parameter MeParID="52001" MeParInst="4" Name="Lookup Table / Stop [CH4]">0</Parameter>
+      <Parameter MeParID="52010" MeParInst="1" Name="Lookup Table / Table ID Selection [CH1]">0</Parameter>
+      <Parameter MeParID="52010" MeParInst="2" Name="Lookup Table / Table ID Selection [CH2]">0</Parameter>
+      <Parameter MeParID="52010" MeParInst="3" Name="Lookup Table / Table ID Selection [CH3]">0</Parameter>
+      <Parameter MeParID="52010" MeParInst="4" Name="Lookup Table / Table ID Selection [CH4]">0</Parameter>
+      <Parameter MeParID="52012" MeParInst="1" Name="Lookup Table / Nr of Executions of the Repetition Field [CH1]">0</Parameter>
+      <Parameter MeParID="52012" MeParInst="2" Name="Lookup Table / Nr of Executions of the Repetition Field [CH2]">0</Parameter>
+      <Parameter MeParID="52012" MeParInst="3" Name="Lookup Table / Nr of Executions of the Repetition Field [CH3]">0</Parameter>
+      <Parameter MeParID="52012" MeParInst="4" Name="Lookup Table / Nr of Executions of the Repetition Field [CH4]">0</Parameter>
+      <Parameter MeParID="52013" MeParInst="1" Name="Lookup Table / Redirect Actions [CH1]">Cascade 1</Parameter>
+      <Parameter MeParID="52013" MeParInst="2" Name="Lookup Table / Redirect Actions [CH2]">Cascade 2</Parameter>
+    </Window>
+    <Window Title="Communication">
+      <Parameter MeParID="2050" MeParInst="1" Name="Communication / UART Interface 1 / Base Baud Rate">57600</Parameter>
+      <Parameter MeParID="2050" MeParInst="2" Name="Communication / UART Interface 2 / Base Baud Rate">57600</Parameter>
+      <Parameter MeParID="2050" MeParInst="3" Name="Communication / UART Interface 3 / Base Baud Rate">57600</Parameter>
+      <Parameter MeParID="2051" MeParInst="1" Name="Communication / Device Address">2</Parameter>
+      <Parameter MeParID="2052" MeParInst="2" Name="Communication / UART Interface 2 / Response Delay">0</Parameter>
+      <Parameter MeParID="2052" MeParInst="3" Name="Communication / UART Interface 3 / Response Delay">0</Parameter>
+      <Parameter MeParID="2060" MeParInst="1" Name="Communication / Communication Watchdog / Timeout">0</Parameter>
+      <Parameter MeParID="2070" MeParInst="1" Name="Communication / CANopen Interface / Node ID">127</Parameter>
+      <Parameter MeParID="2071" MeParInst="1" Name="Communication / CANopen Interface / Bit Rate">10</Parameter>
+      <Parameter MeParID="2072" MeParInst="1" Name="Communication / CANopen Interface / CAN1">Disabled</Parameter>
+    </Window>
+    <Window Title="Advanced Misc Settings">
+      <Parameter MeParID="6310" MeParInst="1" Name="Advanced Misc Settings / Error State Auto Reset Delay / Delay until Reset">0</Parameter>
+      <Parameter MeParID="6320" MeParInst="1" Name="Advanced Misc Settings / Output Stage Controller Limit / Error Delay [CH1]">1</Parameter>
+      <Parameter MeParID="6320" MeParInst="2" Name="Advanced Misc Settings / Output Stage Controller Limit / Error Delay [CH2]">1</Parameter>
+      <Parameter MeParID="6320" MeParInst="3" Name="Advanced Misc Settings / Output Stage Controller Limit / Error Delay [CH3]">1</Parameter>
+      <Parameter MeParID="6320" MeParInst="4" Name="Advanced Misc Settings / Output Stage Controller Limit / Error Delay [CH4]">1</Parameter>
+      <Parameter MeParID="6330" MeParInst="1" Name="Advanced Misc Settings / Device Temperature Mode">Standard</Parameter>
+    </Window>
+  </BasicPar>
+  <StatusDisplay>
+    <Item ParName="TEC Configuration Software / System Status" MeParID="104" MeParInst="1">
+      <Status>Ready</Status>
+      <Error Nr="0">&lt;No Error&gt;</Error>
+    </Item>
+  </StatusDisplay>
+</root>

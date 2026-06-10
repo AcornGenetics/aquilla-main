@@ -82,24 +82,37 @@ class Curve:
 
         position = well + dpos
 
+        # Intentionally uses 4 readings per cycle (indices 6–9 of each group of 10).
+        # The reference notebook uses 5; Aquila hardware outputs 4 valid LED-on readings.
         sub_data = [d for n, d in enumerate(dye_subdata) if ((n % 10) > 5)]
+        if not sub_data:
+            raise ValueError(f"No optics data found for dye '{dye}' in {logfilename!r} — wrong file type?")
         max_cycle = max([int(d[5]) for d in sub_data])
         y0 = [0] * max_cycle
         y1 = [0] * max_cycle
+        cycle_has_data = [False] * max_cycle
         xdata = list(range(1, max_cycle + 1))
 
         for cycle in range(max_cycle):
             sub_data2 = [d for d in sub_data if (int(d[5]) == cycle + 1) and (int(d[6]) == position)]
 
             try:
+                if not sub_data2:
+                    continue
                 # fluorescence value is in col2. 
                 # On off designator is in col 3. 
                 y0_valid = self._reject_outliers(numpy.array([float(d[2]) for d in sub_data2 if (int(d[3]) == 0)]))
                 y0[cycle] = mean(y0_valid)
                 y1_valid = self._reject_outliers(numpy.array([float(d[2]) for d in sub_data2 if (int(d[3]) == 1)]))
                 y1[cycle] = mean(y1_valid)
+                cycle_has_data[cycle] = True
             except ZeroDivisionError:
                 continue
+        if any(cycle_has_data):
+            last_valid = len(cycle_has_data) - 1 - cycle_has_data[::-1].index(True)
+            xdata = xdata[: last_valid + 1]
+            y0 = y0[: last_valid + 1]
+            y1 = y1[: last_valid + 1]
         return (xdata, y0, y1,)
 
     def baseline(self, xdata, ydata):
@@ -153,6 +166,12 @@ class Curve:
 
     def get_curve(self, run_id, dye, channel):
         xdata, y0, y1 = self.extract_data(run_id, dye, channel)
+        y1_array = numpy.array(y1)
+        nonzero_indices = numpy.where(y1_array != 0)[0]
+        if nonzero_indices.size:
+            last_valid = int(nonzero_indices[-1])
+            xdata = xdata[: last_valid + 1]
+            y1 = y1[: last_valid + 1]
         xdata = numpy.array(xdata)
         if len(xdata) < 20:
             self.test_run = True
@@ -182,7 +201,7 @@ class Curve:
             logging.error(e)
             raise e
 
-    def results_to_json(self, raw_logfile, results_logfile):
+    def results_to_json(self, raw_logfile, results_logfile, rox_unavailable=False):
         self.test_run = False
         src = raw_logfile
         # Previous endpoint-based detection (kept for reference):
@@ -216,34 +235,36 @@ class Curve:
                 return None
             return round(float(cq), 2)
 
-        result = {
-            "1": {
-                "1": resolve_status(0, "fam", 1),
-                "2": resolve_status(0, "fam", 2),
-                "3": resolve_status(0, "fam", 3),
-                "4": resolve_status(0, "fam", 4),
-            },
-            "2": {
-                "1": resolve_status(1, "rox", 1),
-                "2": resolve_status(1, "rox", 2),
-                "3": resolve_status(1, "rox", 3),
-                "4": resolve_status(1, "rox", 4),
-            }
-        }
+        _ROX_UNAVAILABLE = "ROX Unavailable"
+        _WELLS = [1, 2, 3, 4]
 
-        result["cq"] = {
-            "1": {
-                "1": resolve_cq("fam", 1),
-                "2": resolve_cq("fam", 2),
-                "3": resolve_cq("fam", 3),
-                "4": resolve_cq("fam", 4),
+        fam_status = {w: resolve_status(0, "fam", w) for w in _WELLS}
+        fam_cq = {w: resolve_cq("fam", w) for w in _WELLS}
+
+        if rox_unavailable:
+            rox_status = {w: _ROX_UNAVAILABLE for w in _WELLS}
+            rox_cq = {w: None for w in _WELLS}
+        else:
+            rox_status = {w: resolve_status(1, "rox", w) for w in _WELLS}
+            rox_cq = {w: resolve_cq("rox", w) for w in _WELLS}
+
+            # FAM undetected + late ROX Cq → suppress ROX.
+            # A late-rising ROX with no FAM signal is non-specific; treat as undetected.
+            late_cq_threshold = config.get_int("PCR_LATE_CQ_THRESHOLD")
+            for w in _WELLS:
+                if (fam_status[w] == "Not Detected"
+                        and rox_cq[w] is not None
+                        and rox_cq[w] >= late_cq_threshold):
+                    rox_status[w] = "Not Detected"
+                    rox_cq[w] = None
+
+        result = {
+            "1": {str(w): fam_status[w] for w in _WELLS},
+            "2": {str(w): rox_status[w] for w in _WELLS},
+            "cq": {
+                "1": {str(w): fam_cq[w] for w in _WELLS},
+                "2": {str(w): rox_cq[w] for w in _WELLS},
             },
-            "2": {
-                "1": resolve_cq("rox", 1),
-                "2": resolve_cq("rox", 2),
-                "3": resolve_cq("rox", 3),
-                "4": resolve_cq("rox", 4),
-            }
         }
 
         base_dir = Path(self.src_basedir).resolve()

@@ -17,6 +17,7 @@ Define acceptance criteria for PCR amplification curves used in analysis and QC.
 - **Monotonic rise:** no post-threshold drop worse than `PCR_MAX_DROP`.
 - **Smooth features:** max derivative stays within `PCR_SPIKE_MULTIPLIER` of the median.
 - **Sustained increase:** rise persists for at least `PCR_MIN_RISE_CYCLES`.
+- **No rapid terminal rise:** true PCR amplification takes many cycles to develop. A signal whose sustained rise starts within the last `PCR_RAPID_RISE_MAX_REMAINING` cycles of the run AND covers more than `PCR_RAPID_RISE_FRACTION` of the total signal range in the first 3 post-rise cycles is classified as an artifact and rejected. A genuine slow late-Cq rise (barely emerging near run-end with a small per-cycle gain) is not rejected by this rule.
 
 ## Fit Quality
 - **High linearity in log phase:** `R² ≥ PCR_LOG_PHASE_R2_MIN` on log-transformed data.
@@ -29,7 +30,7 @@ Define acceptance criteria for PCR amplification curves used in analysis and QC.
 ## Additional QC Checks
 - **Signal range:** raw peak meets `PCR_SIGNAL_RANGE_PEAK_FRACTION` or `PCR_MIN_FOLD`.
 - **Sigmoidal profile:** amplitude fraction ≥ `PCR_MIN_PEAK_FRACTION` and positive slope.
-- **Single transition:** strong slope peaks ≤ `PCR_MAX_TRANSITIONS`.
+- **Single transition:** strong slope peaks ≤ `PCR_MAX_TRANSITIONS`. A dip between peaks that stays within `PCR_TRANSITION_DIP_TOLERANCE` (default 5%) of the peak threshold is treated as a continuation of the same group, not a new transition.
 - **Cycle location:** `PCR_CQ_MIN ≤ Cq ≤ PCR_CQ_MAX`.
 - **Threshold oscillation:** threshold crossings ≤ 1.
 
@@ -42,13 +43,13 @@ Define acceptance criteria for PCR amplification curves used in analysis and QC.
 - **Stable slope (biphasic):** log-phase slope CV ≤ `BIPHASIC_LOG_PHASE_SLOPE_CV_MAX`.
 
 ## Result Classification
-- **Not detected:** sample never crosses the threshold.
-- **Inconclusive:** threshold fails but the curve drops below `PCR_NEGATIVE_DROP_MIN` (default `-0.2`) in the last `PCR_NEGATIVE_DROP_WINDOW` cycles (default `20`).
-- **Detected:** sample crosses the threshold and meets typical or biphasic criteria.
-- **Inconclusive:** sample crosses the threshold but fails both check suites.
+- **Not detected:** sample never crosses the threshold, or the crossing is caused by an isolated spike, a mountain shape, a rapid terminal rise, or the absence of any sustained increase.
+- **Detected:** sample crosses the threshold and meets typical or biphasic criteria, or is a confirmed slow late-Cq signal (`late_confident` path).
+- **Inconclusive:** sample crosses the threshold but fails both typical and biphasic check suites and does not qualify as late-Cq confident.
 
 ## Rejection Criteria
 - Multiple rises, erratic spikes, or oscillations.
 - Threshold crossing without sustained amplification.
 - Poor R² or rapidly changing slope during the rise.
 - Excessive late-cycle drift.
+- **Rapid terminal rise:** signal shoots up only in the final few cycles and covers most of the signal range within 3 cycles — characteristic of optical artifacts, not PCR exponential growth.

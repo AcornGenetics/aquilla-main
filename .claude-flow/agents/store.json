@@ -1,0 +1,57 @@
+{
+  "agents": {
+    "analyzer-profile-loader": {
+      "agentId": "analyzer-profile-loader",
+      "agentType": "analyzer",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "swarmId": "swarm-1776651440121-vbqbup",
+        "role": "analyzer",
+        "outputFor": "coder-agent",
+        "model": "sonnet"
+      },
+      "createdAt": "2026-04-20T02:17:27.844Z",
+      "domain": "profile-loading",
+      "model": "sonnet",
+      "modelRoutedBy": "explicit"
+    },
+    "coder-profile-test": {
+      "agentId": "coder-profile-test",
+      "agentType": "coder",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "swarmId": "swarm-1776651440121-vbqbup",
+        "role": "coder",
+        "dependsOn": "analyzer-profile-loader",
+        "outputFile": "test_bundled_profiles.py",
+        "model": "sonnet"
+      },
+      "createdAt": "2026-04-20T02:17:37.987Z",
+      "domain": "profile-loading",
+      "model": "sonnet",
+      "modelRoutedBy": "explicit"
+    },
+    "tester-profile-validate": {
+      "agentId": "tester-profile-validate",
+      "agentType": "tester",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "swarmId": "swarm-1776651440121-vbqbup",
+        "role": "tester",
+        "dependsOn": "coder-profile-test",
+        "model": "sonnet"
+      },
+      "createdAt": "2026-04-20T02:17:45.690Z",
+      "domain": "profile-loading",
+      "model": "sonnet",
+      "modelRoutedBy": "explicit"
+    }
+  },
+  "version": "3.0.0"
+}

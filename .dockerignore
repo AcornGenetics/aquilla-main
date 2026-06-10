@@ -1,0 +1,33 @@
+*.md
+docs/
+.swarm/
+ruvector.db
+pcr_curve_tests/
+logs/
+data/
+.git
+
+# AI / dev tool state
+.claude/
+.claude-flow/
+.swarm/
+.hive/
+.hive-mind/
+.mcp.json
+ruvector.db
+
+# Python build artifacts
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Generated outputs
+*.csv
+
+# Editor backups
+*~
+*.swp
+*.swo

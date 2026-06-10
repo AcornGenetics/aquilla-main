@@ -1,34 +1,89 @@
 const TUBE_NAME_KEY = "aqTubeNames";
 const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
 
-const getTubeNames = () => {
-  try {
-    const stored = localStorage.getItem(TUBE_NAME_KEY);
-    if (!stored) {
-      return DEFAULT_TUBE_NAMES.slice();
-    }
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) {
-      return DEFAULT_TUBE_NAMES.slice();
-    }
-    return DEFAULT_TUBE_NAMES.map((fallback, index) => {
-      const value = parsed[index];
-      return typeof value === "string" && value.trim() ? value.trim() : fallback;
-    });
-  } catch (error) {
-    return DEFAULT_TUBE_NAMES.slice();
+const normalizeTubeNames = (names) =>
+  DEFAULT_TUBE_NAMES.map((fallback, index) => {
+    const value = Array.isArray(names) ? names[index] : null;
+    return typeof value === "string" && value.trim() ? value.trim() : fallback;
+  });
+
+const resolveTubeNames = (entry) => {
+  if (entry && Array.isArray(entry.tube_names)) {
+    return normalizeTubeNames(entry.tube_names);
   }
+  return DEFAULT_TUBE_NAMES.slice();
 };
 
-const formatResultLabels = (result) => {
+const formatResultLabels = (result, entry) => {
   if (typeof result !== "string") {
     return result;
   }
-  const tubeNames = getTubeNames();
+  const tubeNames = resolveTubeNames(entry);
   return tubeNames.reduce((updated, name, index) => {
     const pattern = new RegExp(`\\bTube ${index + 1}\\b`, "g");
     return updated.replace(pattern, name);
   }, result);
+};
+
+const summarizeResults = (resultsData, tubeNames) => {
+  const perTube = tubeNames.map(() => "not-detected");
+  if (!resultsData || typeof resultsData !== "object") {
+    return perTube;
+  }
+  for (let tube = 1; tube <= 4; tube += 1) {
+    const fam = resultsData?.["1"]?.[String(tube)];
+    const rox = resultsData?.["2"]?.[String(tube)];
+    if (fam === "Inconclusive" || rox === "Inconclusive") {
+      perTube[tube - 1] = "inconclusive";
+    } else if (fam === "Detected" || rox === "Detected") {
+      perTube[tube - 1] = "detected";
+    }
+  }
+  return perTube;
+};
+
+const formatResultSummary = (perTube, tubeNames) => {
+  const detectedLabels = [];
+  const inconclusiveLabels = [];
+  perTube.forEach((status, index) => {
+    if (status === "detected") {
+      detectedLabels.push(tubeNames[index]);
+    } else if (status === "inconclusive") {
+      inconclusiveLabels.push(`${tubeNames[index]} inconclusive`);
+    }
+  });
+  if (!detectedLabels.length && !inconclusiveLabels.length) {
+    return "No targets detected";
+  }
+  const parts = [];
+  if (detectedLabels.length) {
+    parts.push(`Detected: ${detectedLabels.join(", ")}`);
+  }
+  if (inconclusiveLabels.length) {
+    parts.push(inconclusiveLabels.join(", "));
+  }
+  return parts.join(" · ");
+};
+
+const fetchResultText = async (entry, tubeNames) => {
+  const resultsPath = entry?.results_path;
+  if (!resultsPath) {
+    return formatResultLabels(entry.result || "--", entry);
+  }
+  try {
+    const response = await fetch(`/results/by-path?path=${encodeURIComponent(resultsPath)}`);
+    if (!response.ok) {
+      return formatResultLabels(entry.result || "--", entry);
+    }
+    const data = await response.json();
+    if (data?.data?.failed) {
+      return formatResultLabels(entry.result || "--", entry);
+    }
+    const perTube = summarizeResults(data, tubeNames);
+    return formatResultSummary(perTube, tubeNames);
+  } catch {
+    return formatResultLabels(entry.result || "--", entry);
+  }
 };
 
 async function loadHistory() {
@@ -55,8 +110,9 @@ async function loadHistory() {
       return;
     }
 
-    entries.slice().reverse().forEach((entry, displayIndex) => {
+    const rowPromises = entries.slice().reverse().map(async (entry, displayIndex) => {
       const actualIndex = entries.length - 1 - displayIndex;
+      const tubeNames = resolveTubeNames(entry);
       const row = document.createElement("tr");
       const checkboxCell = document.createElement("td");
       checkboxCell.className = "checkbox-cell";
@@ -80,7 +136,7 @@ async function loadHistory() {
       row.appendChild(profileCell);
 
       const resultCell = document.createElement("td");
-      resultCell.textContent = formatResultLabels(entry.result || "--");
+      resultCell.textContent = await fetchResultText(entry, tubeNames);
       row.appendChild(resultCell);
 
       const graphCell = document.createElement("td");
@@ -95,8 +151,11 @@ async function loadHistory() {
       }
       row.appendChild(graphCell);
 
-      tableBody.appendChild(row);
+      return row;
     });
+
+    const rows = await Promise.all(rowPromises);
+    rows.forEach((row) => tableBody.appendChild(row));
   } catch (error) {
     console.error("Failed to load history", error);
   }

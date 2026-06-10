@@ -10,7 +10,7 @@ if [[ -f /opt/aquila/config/device.env ]]; then
 fi
 
 echo "Checking running containers..."
-docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "aquila-(backend|ui|watchtower|node-exporter|vmagent|vector)" || true
+docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "aquila-(backend|ui|watchtower|node-exporter)" || true
 
 echo "Checking backend health (if running)..."
 if docker ps --format "{{.Names}}" | grep -q "aquila-backend"; then
@@ -31,8 +31,3 @@ fi
 echo "Checking node-exporter metrics endpoint..."
 curl -s -o /dev/null -w "Node exporter status: %{http_code}\n" http://localhost:9100/metrics || true
 
-echo "Recent vmagent logs (if running)..."
-docker logs --tail 20 aquila-vmagent 2>/dev/null || true
-
-echo "Recent vector logs (if running)..."
-docker logs --tail 20 aquila-vector 2>/dev/null || true

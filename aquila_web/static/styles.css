@@ -1,5 +1,8 @@
 @import url("icon-colors.css?v=1");
 
+/* Hide cursor in kiosk mode */
+* { cursor: none !important; }
+
 html,
 body {
   height: 100%;
@@ -17,6 +20,14 @@ body {
 * {
   -webkit-tap-highlight-color: transparent !important;
   outline: none !important;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 button,
@@ -279,6 +290,25 @@ a:active {
   transform: translateY(0);
 }
 
+.help-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+  border: 1.5px solid #f8fafc;
+}
+
 .help-content {
   max-width: 680px;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -421,6 +451,13 @@ a:active {
 
 .help-content section + section {
   margin-top: 32px;
+}
+
+.help-version {
+  margin-top: 24px;
+  color: #9ca3af;
+  font-size: 0.75rem;
+  padding: 0 4px;
 }
 
 .run-divider {
@@ -625,6 +662,35 @@ a:active {
   z-index: 2;
 }
 
+.run-start-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.run-start-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 18px;
+}
+
+.run-start-summary__profile {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #1a1c1c;
+}
+
+.run-start-summary__runname {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #64748b;
+}
+
 .run-start-status {
   display: flex;
   flex-direction: column;
@@ -636,6 +702,13 @@ a:active {
 .run-start-header h2 {
   margin: 0;
   font-size: 24px;
+}
+
+.run-start-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background-color: #8b5cf6;
 }
 
 .run-ready-pill {
@@ -805,6 +878,17 @@ a:active {
   color: #111827;
 }
 
+.run-modal__card--stopping {
+  background-color: var(--icon-white);
+  border: 1px solid #b91c1c;
+  color: #b91c1c;
+}
+
+.run-modal__card--stopping p {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
 .run-modal__close {
   position: absolute;
   top: 14px;
@@ -845,13 +929,13 @@ a:active {
   left: 0;
   right: 0;
   bottom: 0;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-  padding: 16px 20px 24px;
+  background: rgba(240, 242, 245, 0.97);
+  border-top: 1px solid #c8cdd5;
+  padding: 10px 16px 18px;
   display: none;
   flex-direction: column;
-  gap: 10px;
-  box-shadow: 0 -12px 24px rgba(15, 23, 42, 0.12);
+  gap: 8px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
   z-index: 20;
 }
 
@@ -859,52 +943,127 @@ a:active {
   display: flex;
 }
 
+.keyboard-top-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -2px;
+}
+
+.keyboard-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1.5px solid #444;
+  background: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+
 .keyboard-row {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .keyboard-row--actions {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  column-gap: 12px;
-}
-
-.keyboard-actions {
   display: flex;
-  gap: 8px;
-}
-
-.keyboard-actions--left {
-  justify-content: flex-end;
-}
-
-.keyboard-actions--right {
-  justify-content: flex-start;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: nowrap;
+  margin-top: 2px;
 }
 
 .keyboard-key {
-  min-width: 48px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: var(--icon-white);
-  font-size: 18px;
-  color: #1f2937;
+  flex: 1;
+  min-width: 0;
+  padding: 11px 6px;
+  border-radius: 10px;
+  border: 1px solid #c0c5cc;
+  background: #ffffff;
+  font-size: 17px;
+  color: #1a1a1a;
   cursor: pointer;
-  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 0 #aab0ba;
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.keyboard-key--action {
-  background: #eef2f7;
+.keyboard-key:active {
+  box-shadow: none;
+  transform: translateY(2px);
+  background: #e8eaed;
+}
+
+.keyboard-key--delete {
+  flex: 0 0 auto;
+  width: 80px;
+  font-size: 14px;
   font-weight: 600;
 }
 
-.keyboard-key--wide {
-  min-width: 240px;
+.keyboard-key--shift {
+  flex: 0 0 auto;
+  width: 78px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.keyboard-key--shift.is-active {
+  background: #1f2937;
+  border-color: #1f2937;
+  color: #fff;
+  box-shadow: 0 2px 0 #111827;
+}
+
+.keyboard-key--clear {
+  flex: 0 0 auto;
+  width: 110px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.keyboard-key--space {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: #555;
+}
+
+.keyboard-key--enter {
+  flex: 0 0 auto;
+  width: 110px;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+
+.keyboard-key--symbols {
+  flex: 0 0 auto;
+  width: 78px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.keyboard-key--symbols.is-active {
+  background: #1f2937;
+  border-color: #1f2937;
+  color: #fff;
+  box-shadow: 0 2px 0 #111827;
+}
+
+.keyboard-symbols-panel {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
 }
 
 
@@ -1218,6 +1377,17 @@ a:active {
   background-color: #f2c97d;
 }
 
+.results-dot__half.is-unavailable {
+  background-color: #d1d5db;
+}
+
+.profile-lock-icon {
+  font-size: 16px;
+  line-height: 1;
+  display: inline-block;
+  opacity: 0.6;
+}
+
 .results-summary-row {
   display: flex;
   align-items: center;
@@ -1435,6 +1605,8 @@ a:active {
   font-size: 22px;
   color: #111827;
   font-weight: 400;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .run-detail-pills {
@@ -1454,15 +1626,17 @@ a:active {
 }
 
 .run-detail-pill--detected {
-  background-color: #2f6e32;
+  background-color: #fc6002;
 }
 
 .run-detail-pill--inconclusive {
-  background-color: #f59e0b;
+  background-color: #f2c97d;
+  color: #1f2937;
 }
 
 .run-detail-pill--not-detected {
-  background-color: #94a3b8;
+  background-color: #c2f282;
+  color: #1f2937;
 }
 
 .run-detail-kpis {

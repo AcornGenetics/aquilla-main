@@ -378,6 +378,19 @@ If a device fails:
 
 Device automatically rejoins fleet.
 
+### What you can do remotely (Tailscale SSH)
+
+- Restart Docker or app containers
+- Update `device.env` (`IMAGE_TAG`, `DEVICE_ID`, `WATCHTOWER_HTTP_API_TOKEN`, `GHCR_USERNAME`, `GHCR_TOKEN`)
+- Re-run provisioning scripts (`scripts/setup_fleet_device.sh`)
+- Pull new images or trigger Watchtower
+
+### What requires physical access
+
+- Reflash SD card / reimage the OS
+- Replace hardware (SD card, PSU, peripherals)
+- Recover a device that will not boot
+
 ------------------------------------------------------------------------
 
 # Final System Summary

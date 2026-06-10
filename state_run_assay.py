@@ -8,6 +8,7 @@ import RPi.GPIO as GPIO
 import sys
 import time
 import subprocess
+import requests as _requests
 import re
 import os
 from pathlib import Path
@@ -20,15 +21,15 @@ from aq_lib.config_module import Config
 from aq_lib.utils import load_json
 from aq_lib.utils import LogFileName
 from aq_lib.utils import LOGGING_CONFIG
-from aq_lib.plot_utils import generate_optics_plot
+from aq_curve.plot_utils import generate_optics_plot
 from aq_lib.regulate import lid_heater_worker
 from config import get_src_basedir
 import aq_lib.state_requests as sr
 from aq_lib.motor_class import Axis, Drawer
 
 from aq_curve.main import results_to_json
-from fan_class import Fan
-from adc_class import OpticalRead
+from aq_lib.fan_class import Fan
+from aq_lib.adc_class import OpticalRead
 
 logging.config.dictConfig( LOGGING_CONFIG )
 logger = logging.getLogger( "aquila" )
@@ -41,7 +42,8 @@ class AssayInterface():
 
         self.axis = Axis()
         self.drawer = Drawer()
-        self.pcr_fan = Fan() 
+        self.pcr_fan = Fan()
+        self.pcr_fan.set_state(1)
 
         self.message_queue = Queue()
         self.lid_heater_stop_event = Event()
@@ -59,8 +61,7 @@ class AssayInterface():
         self.axis.reset_position()
         self.drawer.home()
         sr.change_screen("0")
-        self.drawer.open()
-        sr.update_drawer_state(is_open=True, is_closed=False)
+        sr.update_drawer_state(is_open=False, is_closed=True)
 
     def configure_thermal_control(self):
         device_type = int (config.pcr["device_type"] )
@@ -173,6 +174,14 @@ class AssayInterface():
         self.run_aborted = False
         sr.reset_stop_request()
 
+        # Drain any stale tasks/quit left over from a previous run so the
+        # new executor starts with a clean queue.
+        while not self.message_queue.empty():
+            try:
+                self.message_queue.get_nowait()
+            except Empty:
+                break
+
         stop_event = Event()
         stop_monitor_event = Event()
         stop_thread = Thread(
@@ -220,10 +229,15 @@ class AssayInterface():
                 t0_sync = set_time()
                 print ( "# Starting log t0 = %f"% t0_sync, file = pcr_fp )
                 actions = thermal_parser( steps )
-                thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
-
-                self.message_queue.put("quit")
-                execution_thread.join()
+                try:
+                    thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
+                finally:
+                    # Drain the executor while files are still open so capture
+                    # threads cannot write to a closed file handle.
+                    # Use a generous timeout: a 40-cycle run with optics can
+                    # take several seconds per capture position.
+                    self.message_queue.put("quit")
+                    execution_thread.join(timeout=60)
 
         except RunStopped:
             logger.info("Run stopped by user")
@@ -236,43 +250,52 @@ class AssayInterface():
             sr.change_screen("-1")
             raise ( e )
         finally:
+            if execution_thread.is_alive():
+                # Safety net: executor did not finish within the inner timeout
+                self.message_queue.put("quit")
+                execution_thread.join(timeout=2)
+            self.hw_deinitialize()
+            sr.timer_control("stop")
+            if self.run_aborted:
+                sr.timer_control("reset")
+            self.drawer.open()
+            # Stop monitor only after drawer is open — keeps the stop button
+            # functional during teardown motor movement (which can take
+            # 30-90 s if the drawer missed steps and needs to re-home).
             stop_monitor_event.set()
             if stop_thread.is_alive():
                 stop_thread.join(timeout=2)
-            if execution_thread.is_alive():
-                self.message_queue.put("quit")
-                execution_thread.join(timeout=5)
-            self.hw_deinitialize()
-            self.drawer.open()
+            sr.update_drawer_state(is_open=True, is_closed=False)
             if self.run_aborted:
-                sr.timer_control( "stop" )
-                sr.timer_control( "reset" )
                 sr.change_screen("1")
-                return
-            try:
-                os.makedirs("logs/results", exist_ok=True)
-                results_to_json( optics_log, results_json )
-                sr.mark_results_ready(results_json)
-            except Exception as e:
-                logger.error("Failed to generate results: %s", e)
-            graph_path = None
-            try:
-                os.makedirs("logs/plots", exist_ok=True)
-                generate_optics_plot(optics_log, plot_path)
-                graph_path = f"/plots/{plot_filename}"
-            except Exception as e:
-                logger.error("Failed to generate plot: %s", e)
-            sr.log_history(self.thermal_profile.replace("profiles/", ""), self.run_name, results_json, graph_path)
-            sr.advance_run_name()
-            sr.change_screen("3")
+            else:
+                try:
+                    os.makedirs("logs/results", exist_ok=True)
+                    results_to_json( optics_log, results_json )
+                    sr.mark_results_ready(results_json)
+                except Exception as e:
+                    logger.error("Failed to generate results: %s", e)
+                graph_path = None
+                try:
+                    os.makedirs("logs/plots", exist_ok=True)
+                    generate_optics_plot(optics_log, plot_path)
+                    graph_path = f"/plots/{plot_filename}"
+                except Exception as e:
+                    logger.error("Failed to generate plot: %s", e)
+                profile_name = self.thermal_profile.replace("profiles/", "")
+                sr.log_history(profile_name, self.run_name, results_json, graph_path)
+                sr.emit_run_complete(self.run_name, profile_name, str(results_json))
+                sr.advance_run_name()
+                sr.change_screen("3")
 
 
     def hw_deinitialize(self):
         self.meer.setTargetObjectTemperature ( 25.0 )
         self.meer.output_stage_enable ( 0 )
 
-        #self.lid_heater_stop_event.set()
-        #self.lid_thread.join( timeout = 5 )
+        self.lid_heater_stop_event.set()
+        if hasattr(self, "lid_thread") and self.lid_thread.is_alive():
+            self.lid_thread.join( timeout = 5 )
 
 
     def end( self ):
@@ -322,6 +345,7 @@ class AssayInterface():
             drawer_open = ret.get("drawer_open_status")
             drawer_close = ret.get("drawer_close_status")
             exit_status = ret.get("exit_button_status")
+            force_exit = ret.get("force_exit")
             run_complete_ack = ret.get("run_complete_ack")
 
             if( run is True and profile is not None ):
@@ -348,32 +372,53 @@ class AssayInterface():
                     ret = sr.wait_for_button(include_run_complete_ack)
                 elif( state == "end" ):
                     break
+            elif force_exit:
+                sr.change_screen("-4")
+                time.sleep(3)
+                self._exit_kiosk()
+                sr.change_screen(screens[1])
+                ret = sr.wait_for_button(include_run_complete_ack)
             elif( exit_status is True ):
+                sr.change_screen("-5")
                 ret = sr.wait_for_button(include_run_complete_ack)
                 if(ret.get("exit_button_status")):
+                    sr.change_screen("-4")
+                    time.sleep(3)
+                    self._exit_kiosk()
+                    sr.change_screen(screens[1])
                     ret = sr.wait_for_button(include_run_complete_ack)
-                    if(ret.get("exit_button_status")):
-                        sr.change_screen("-4")
-                        time.sleep(3)
-                        base_dir = Path(get_src_basedir())
-                        exit_script = base_dir / "exit_kiosk.sh"
-                        subprocess.run(
-                                [str(exit_script)], 
-                                check=False
-                                )
-                        time.sleep(3)
-                        sr.change_screen( screens[1] )
-                        ret = sr.wait_for_button(include_run_complete_ack) 
-                    else:
-                        pass
                 else:
-                    pass
+                    sr.change_screen( screens[1] )
+                    ret = sr.wait_for_button(include_run_complete_ack)
             elif run_complete_ack and state == "end":
                 sr.change_screen("1")
                 sr.reset_run_complete_ack()
                 ret = sr.wait_for_button(include_run_complete_ack)
 
         return profile, run_name
+
+    def _exit_kiosk(self) -> None:
+        """Ask the host kiosk-control service to kill Chromium.
+
+        Tries the HTTP API first (works in both Docker and native deployments
+        because kiosk-control always listens on 127.0.0.1:9191 on the host).
+        Falls back to running exit_kiosk.sh as a subprocess in case the service
+        is not yet running.
+        """
+        kiosk_control_url = os.getenv("KIOSK_CONTROL_URL", "http://127.0.0.1:9191")
+        try:
+            resp = _requests.post(f"{kiosk_control_url}/exit-kiosk", timeout=5)
+            if resp.ok:
+                logger.info("kiosk-control: exit-kiosk OK")
+                return
+            logger.warning("kiosk-control returned %s", resp.status_code)
+        except Exception as e:
+            logger.warning("kiosk-control unreachable, falling back to script: %s", e)
+
+        # Fallback: run the shell script directly
+        base_dir = Path(get_src_basedir())
+        exit_script = base_dir / "exit_kiosk.sh"
+        subprocess.run([str(exit_script)], check=False)
 
     def _safe_name(self, value: str | None) -> str:
         if not value:

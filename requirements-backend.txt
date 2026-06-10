@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 pydantic
 requests
+httpx
 numpy
 pandas
 matplotlib

@@ -24,6 +24,9 @@ const runNameInput = document.getElementById("run-name-input");
 const runWarning = document.getElementById("run-warning");
 const drawerWarning = document.getElementById("drawer-warning");
 const stopRunButton = document.getElementById("stop-run-button");
+const runStoppingModal = document.getElementById("run-stopping-modal");
+const runStoppingText = runStoppingModal ? runStoppingModal.querySelector("p") : null;
+let stoppingDotsTimer = null;
 
 let seconds = 0;
 let currentScreen = null;
@@ -38,6 +41,7 @@ const DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"];
 let tubeNames = DEFAULT_TUBE_NAMES.slice();
 const DEFAULT_DYE_LABELS = { fam: "FAM", rox: "ROX" };
 let dyeLabels = { ...DEFAULT_DYE_LABELS };
+let roxUnavailable = false;
 let stopWarningTimer = null;
 let lastElapsedSeconds = null;
 let isStoppingRun = false;
@@ -62,6 +66,18 @@ const loadTubeNames = () => {
   }
 };
 
+const syncTubeNames = async (names) => {
+  try {
+    await fetch("/tube_names", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ names })
+    });
+  } catch (error) {
+    return;
+  }
+};
+
 const saveTubeNames = (names) => {
   tubeNames = names.map((name, index) => {
     const fallback = DEFAULT_TUBE_NAMES[index];
@@ -72,6 +88,7 @@ const saveTubeNames = (names) => {
   } catch (error) {
     return;
   }
+  syncTubeNames(tubeNames);
 };
 
 const updateTubeLabels = () => {
@@ -99,11 +116,12 @@ const setupTubeNameInputs = () => {
   });
 };
 
-const applyDyeLabels = (labels = {}) => {
+const applyDyeLabels = (labels = {}, isRoxUnavailable = false) => {
   dyeLabels = {
     fam: labels.fam || DEFAULT_DYE_LABELS.fam,
     rox: labels.rox || DEFAULT_DYE_LABELS.rox
   };
+  roxUnavailable = isRoxUnavailable;
   if (typeof loadResults === "function") {
     loadResults();
   }
@@ -121,7 +139,7 @@ const loadProfileLabels = async (profileId) => {
       return;
     }
     const data = await response.json();
-    applyDyeLabels(data.labels || {});
+    applyDyeLabels(data.labels || {}, Boolean(data.rox_unavailable));
   } catch (error) {
     applyDyeLabels();
   }
@@ -169,6 +187,33 @@ const completeSection = document.getElementById("complete-section");
 const normalizedPath = window.location.pathname.replace(/\/$/, "");
 const isDashboard = normalizedPath === "/run" || Boolean(readySection);
 
+function updateStartHeader(screen) {
+  const summary = document.getElementById("run-start-summary");
+  if (!summary) {
+    return;
+  }
+
+  const isActive = screen === "running" || screen === "complete";
+  if (isActive) {
+    const select = document.getElementById("mySelect");
+    const selectedOption = select && select.selectedOptions ? select.selectedOptions[0] : null;
+    const profileText = selectedOption ? selectedOption.textContent.trim() : "";
+    const runName = runNameInput ? runNameInput.value.trim() : "";
+
+    const profileEl = document.getElementById("run-start-profile");
+    const runNameEl = document.getElementById("run-start-runname");
+    if (profileEl) {
+      profileEl.textContent = profileText;
+    }
+    if (runNameEl) {
+      runNameEl.textContent = runName;
+    }
+    summary.classList.remove("is-hidden");
+  } else {
+    summary.classList.add("is-hidden");
+  }
+}
+
 function updateDashboardSections(screen) {
   if (!isDashboard) {
     return false;
@@ -188,6 +233,8 @@ function updateDashboardSections(screen) {
   }
 
   currentScreen = screen;
+
+  updateStartHeader(screen);
 
   const sections = [
     { key: "ready", element: readySection },
@@ -244,6 +291,7 @@ function resetResultsUI(message = "Run for results!") {
         half.classList.remove("is-detected");
         half.classList.remove("is-inconclusive");
         half.classList.remove("is-not-detected");
+        half.classList.remove("is-unavailable");
       });
     }
   });
@@ -349,6 +397,36 @@ function showRunCompleteModal() {
   runCompleteModal.classList.remove("is-hidden");
 }
 
+function showRunStoppingModal() {
+  if (!runStoppingModal) {
+    return;
+  }
+  runStoppingModal.classList.remove("is-hidden");
+  if (!runStoppingText) {
+    return;
+  }
+  let dots = 1;
+  runStoppingText.textContent = "Stopping Run.";
+  if (stoppingDotsTimer) {
+    clearInterval(stoppingDotsTimer);
+  }
+  stoppingDotsTimer = setInterval(() => {
+    dots = (dots % 3) + 1;
+    runStoppingText.textContent = "Stopping Run" + ".".repeat(dots);
+  }, 500);
+}
+
+function hideRunStoppingModal() {
+  if (!runStoppingModal) {
+    return;
+  }
+  runStoppingModal.classList.add("is-hidden");
+  if (stoppingDotsTimer) {
+    clearInterval(stoppingDotsTimer);
+    stoppingDotsTimer = null;
+  }
+}
+
 function hideRunCompleteModal() {
   if (!runCompleteModal) {
     return;
@@ -383,6 +461,9 @@ function resetRunScreen() {
     setDrawerActionsVisibility(true);
     updateDashboardSections("ready");
     resetResultsUI();
+    tubeNames = DEFAULT_TUBE_NAMES.slice();
+    updateTubeLabels();
+    try { localStorage.removeItem(TUBE_NAME_KEY); } catch (e) {}
   }
   fetch("/results/clear", { method: "POST" }).catch(() => null);
   acknowledgeRunComplete();
@@ -398,9 +479,11 @@ function acknowledgeRunComplete() {
 // Connect to WebSocket backend
 const host = window.location.host;
 const wsUrl = `ws://${host}/ws`;
-const socket = new WebSocket( wsUrl ); // adjust URL if needed
 
-socket.onmessage = function(event) {
+let socket;
+let wsReconnectTimer = null;
+
+function wsHandleMessage(event) {
   try {
     const panel = JSON.parse(event.data);
     console.log("Elapsed secs:", panel.elapsed);
@@ -420,6 +503,7 @@ socket.onmessage = function(event) {
       setStopRunState(true);
       isStoppingRun = false;
       lastElapsedSeconds = null;
+      hideRunStoppingModal();
       if (isDashboard && runWarning && runWarning.textContent === STOPPING_MESSAGE) {
         setRunWarning("");
       }
@@ -488,7 +572,7 @@ socket.onmessage = function(event) {
             targetPath = "/complete";
             console.log("COMPLETE PATH", targetPath);
         }
-        
+
         if (targetPath !== window.location.pathname){
             currentScreen = screen;
             window.location.href = targetPath;
@@ -505,19 +589,40 @@ socket.onmessage = function(event) {
   } catch (e) {
     console.error("Invalid panel data", e);
   }
-};
+}
 
-socket.onopen = function() {
-  console.log("WebSocket connection established.");
-};
+function connectWebSocket() {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
+  if (socket) {
+    socket.onclose = null;
+    socket.close();
+  }
+  socket = new WebSocket(wsUrl);
+  socket.onmessage = wsHandleMessage;
+  let _wsWasConnected = false;
+  socket.onopen = function() {
+    console.log("WebSocket connection established.");
+    // Reload the page if we reconnected after a drop during an active update so
+    // the stale overlay and polling state are cleared.
+    if (_wsWasConnected && document.getElementById("update-overlay")) {
+      window.location.reload();
+      return;
+    }
+    _wsWasConnected = true;
+  };
+  socket.onerror = function(error) {
+    console.error("WebSocket error:", error);
+  };
+  socket.onclose = function() {
+    console.warn("WebSocket connection closed. Reconnecting in 2s...");
+    wsReconnectTimer = setTimeout(connectWebSocket, 2000);
+  };
+}
 
-socket.onerror = function(error) {
-  console.error("WebSocket error:", error);
-};
-
-socket.onclose = function() {
-  console.warn("WebSocket connection closed.");
-};
+connectWebSocket();
 
 async function notifyRun(){
     if (runButton && runButton.disabled) {
@@ -548,6 +653,19 @@ async function notifyRun(){
 
     setRunWarning("");
 
+    // Re-sync selected profile to backend immediately before run,
+    // in case the dropdown was pre-selected on load without a POST
+    // (e.g. after server restart or navigation).
+    try {
+        await fetch("/profile/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ profile })
+        });
+    } catch (err) {
+        console.error("Failed to sync profile before run:", err);
+    }
+
     try {
         const ret = await fetch("/button/run", {
             method:"POST"
@@ -577,6 +695,7 @@ async function notifyStopRun(){
       formatElapsed(lastElapsedSeconds);
     }
     setRunWarning(STOPPING_MESSAGE);
+    showRunStoppingModal();
     try {
         const ret = await fetch("/button/stop", {
             method:"POST"
@@ -585,6 +704,8 @@ async function notifyStopRun(){
     } catch (err) {
         console.error("Stop button failed", err);
         setStopRunState(true);
+        isStoppingRun = false;
+        hideRunStoppingModal();
     }
 }
 
@@ -651,13 +772,14 @@ async function notifyDrawerClose(){
 }
 
 async function notifyExit(){
+    // Tells the backend the exit button was pressed.
+    // The backend forwards the kill signal to the host kiosk-control service
+    // via _kiosk_post("/exit-kiosk"). The nginx proxy also handles
+    // /kiosk-control/ directly as a fallback for the Docker deployment.
     try {
-        const ret = await fetch("/button/exit", {
-            method:"POST"
-        });
-        console.log("Exit button clicked", await ret.text());
+        await fetch("/button/exit", { method: "POST" });
     } catch (err) {
-        console.error("Button failed", err);
+        console.warn("notifyExit backend signal failed", err);
     }
 }
 
@@ -761,11 +883,15 @@ async function loadResults(){
         }
     }
 
-        const setHalfStatus = (halfEl, value) => {
+        const setHalfStatus = (halfEl, value, forceUnavailable = false) => {
             if (!halfEl) {
                 return;
             }
-            halfEl.classList.remove("is-detected", "is-inconclusive", "is-not-detected");
+            halfEl.classList.remove("is-detected", "is-inconclusive", "is-not-detected", "is-unavailable");
+            if (forceUnavailable) {
+                halfEl.classList.add("is-unavailable");
+                return;
+            }
             if (value === "Detected") {
                 halfEl.classList.add("is-detected");
             } else if (value === "Inconclusive") {
@@ -794,6 +920,7 @@ async function loadResults(){
                     half.classList.remove("is-detected");
                     half.classList.remove("is-inconclusive");
                     half.classList.remove("is-not-detected");
+                    half.classList.remove("is-unavailable");
                 });
             });
             return;
@@ -801,6 +928,9 @@ async function loadResults(){
         const tubeDetected = Array(4).fill(false);
         const tubeInconclusive = Array(4).fill(false);
         ["1", "2"].forEach((rowKey) => {
+            if (rowKey === "2" && roxUnavailable) {
+                return;
+            }
             const row = data?.[rowKey];
             if (!row || typeof row !== "object") {
                 return;
@@ -833,7 +963,7 @@ async function loadResults(){
             const famHalf = dot.querySelector(".results-dot__half--fam");
             const roxHalf = dot.querySelector(".results-dot__half--rox");
             setHalfStatus(famHalf, famStatus);
-            setHalfStatus(roxHalf, roxStatus);
+            setHalfStatus(roxHalf, roxStatus, roxUnavailable);
         });
     }
 }
@@ -951,9 +1081,23 @@ async function loadProfiles(){
 
 
 document.addEventListener("DOMContentLoaded", () => {
-    tubeNames = loadTubeNames();
-    updateTubeLabels();
     setupTubeNameInputs();
+    fetch("/tube_names")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+          if (data && Array.isArray(data.names)) {
+              tubeNames = data.names.map((n, i) =>
+                  typeof n === "string" && n.trim() ? n.trim() : DEFAULT_TUBE_NAMES[i]
+              );
+          } else {
+              tubeNames = loadTubeNames();
+          }
+          updateTubeLabels();
+      })
+      .catch(() => {
+          tubeNames = loadTubeNames();
+          updateTubeLabels();
+      });
     applyDyeLabels();
     try {
         runDoneAcknowledged = window.sessionStorage.getItem(RUN_ACK_KEY) === "true";
@@ -1025,7 +1169,3 @@ document.addEventListener("DOMContentLoaded", () => {
 window.addEventListener("beforeunload", () => {
     return;
 });
-
-
-
-

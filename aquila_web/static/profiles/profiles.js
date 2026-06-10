@@ -78,17 +78,27 @@
 
   const buildRow = (profile) => {
     const row = document.createElement("tr");
+    const isBundled = Boolean(profile.bundled);
+
     const checkboxCell = document.createElement("td");
     checkboxCell.className = "checkbox-cell";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.className = "profile-checkbox";
-    checkbox.dataset.profileId = profile.id || "";
-    checkbox.dataset.profileName = profile.name || profile.label || profile.id || "profile";
-    checkbox.addEventListener("click", (event) => {
-      event.stopPropagation();
-    });
-    checkboxCell.appendChild(checkbox);
+    if (isBundled) {
+      const lockIcon = document.createElement("span");
+      lockIcon.className = "profile-lock-icon";
+      lockIcon.textContent = "🔒";
+      lockIcon.title = "Bundled profile — read only";
+      checkboxCell.appendChild(lockIcon);
+    } else {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "profile-checkbox";
+      checkbox.dataset.profileId = profile.id || "";
+      checkbox.dataset.profileName = profile.name || profile.label || profile.id || "profile";
+      checkbox.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+      checkboxCell.appendChild(checkbox);
+    }
     row.appendChild(checkboxCell);
 
     row.appendChild(createCell(profile.display_name || profile.name || profile.id || "Untitled"));
@@ -116,18 +126,25 @@
     row.appendChild(runCell);
 
     const editCell = document.createElement("td");
-    const idParam = encodeURIComponent(profile.id || "");
-    editCell.appendChild(createActionLink("Edit", `/profiles/edit-form?id=${idParam}`));
+    if (!isBundled) {
+      const idParam = encodeURIComponent(profile.id || "");
+      editCell.appendChild(createActionLink("Edit", `/profiles/edit-form?id=${idParam}`));
+    }
     row.appendChild(editCell);
 
-    row.addEventListener("click", (event) => {
-      const target = event.target;
-      if (target.closest("button, a, input, select, textarea, label")) {
-        return;
-      }
-      checkbox.checked = !checkbox.checked;
-      updateSelectAllState();
-    });
+    if (!isBundled) {
+      row.addEventListener("click", (event) => {
+        const target = event.target;
+        if (target.closest("button, a, input, select, textarea, label")) {
+          return;
+        }
+        const cb = row.querySelector(".profile-checkbox");
+        if (cb) {
+          cb.checked = !cb.checked;
+          updateSelectAllState();
+        }
+      });
+    }
 
     return row;
   };
