@@ -1,9 +1,6 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
 from aq_lib.device_id import inject_hw_serial_env
-<<<<<<< HEAD
-=======
 from aquila_web.local_db import enqueue_event, init_local_db
->>>>>>> origin
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
