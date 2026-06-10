@@ -1692,6 +1692,11 @@ async def _inject_device_id() -> None:
 
 
 @app.on_event("startup")
+async def _inject_device_id() -> None:
+    inject_hw_serial_env()
+
+
+@app.on_event("startup")
 async def start_background_update_poller() -> None:
     asyncio.create_task(_background_update_poller())
 
