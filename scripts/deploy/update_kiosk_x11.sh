@@ -61,10 +61,15 @@ cat > /etc/lightdm/lightdm.conf.d/autologin.conf <<'EOF'
 [Seat:*]
 autologin-user=pi
 autologin-session=openbox
+# Start X with no cursor — this is a touchscreen kiosk, the pointer must never render.
+# Disabling the cursor at the X server level means it is never drawn at boot and never
+# reappears on pointer/touch events (unlike unclutter, which only hides on an idle timer).
+xserver-command=X -nocursor
 EOF
 
 run_test "autologin.conf written"     "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-session=openbox"  "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
+run_test "cursor disabled (-nocursor)" "grep -q 'X -nocursor' /etc/lightdm/lightdm.conf.d/autologin.conf"
 
 pass "LightDM configured for X11/Openbox autologin"
 
@@ -107,8 +112,12 @@ xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
   "Coordinate Transformation Matrix" \
   0 1 0 -1 0 1 0 0 1
 
-# Hide cursor after 0.5s idle
-unclutter -idle 0.5 &
+# Clear the root-window cursor as a belt-and-suspenders backup.
+# The X server is already started with `-nocursor` (see LightDM autologin.conf),
+# so the pointer is never rendered. We deliberately do NOT run unclutter here:
+# unclutter only hides on an idle timer and re-shows the cursor on every pointer/touch
+# event, which made the cursor flash on startup and linger over dropdowns on each tap.
+xsetroot -cursor_name none
 
 # Allow display and compositor to settle before launching Chromium
 sleep 3
