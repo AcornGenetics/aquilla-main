@@ -1,0 +1,38 @@
+{
+  "output_dir": "pcr_data",
+  "steps": [
+    {
+      "repeat": [
+        {
+          "setpoint": 20,
+          "duration": 30
+        },
+        {
+          "ramp_rate": 1.5
+        },
+        {
+          "setpoint": 20,
+          "duration": 30
+        }
+      ],
+      "cycles": 30
+    },
+    {
+      "ramp_rate": 1.7
+    },
+    {
+      "setpoint": 27,
+      "duration": 30
+    },
+    {
+      "disable": 0,
+      "duration": 30
+    }
+  ],
+  "title": "Nicole_test1",
+  "post_in_gui": "True",
+  "labels": {
+    "fam": "FAM",
+    "rox": "ROX"
+  }
+}
