@@ -149,6 +149,33 @@ run_test "pi in docker group"       "groups pi | grep -q docker"
 phase_pass "Docker installed and running, pi in docker group"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3b — NetworkManager: disable BSSID pinning
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "3b" "NetworkManager BSSID policy"
+
+# Hotspots rotate their BSSID when toggled off/on. A dispatcher script that
+# clears the pinned BSSID from every profile on each 'up' event ensures NM
+# never refuses to reconnect because the AP's MAC address changed.
+cat > /etc/NetworkManager/dispatcher.d/99-no-bssid <<'EOF'
+#!/usr/bin/env bash
+# Clear pinned BSSID from all WiFi profiles on every connection-up event so
+# that hotspot BSSID rotation never prevents reconnection.
+INTERFACE="$1"
+EVENT="$2"
+[[ "$EVENT" != "up" ]] && exit 0
+nmcli -t -f NAME,TYPE connection show \
+    | awk -F: '/wireless/{print $1}' \
+    | while read -r name; do
+        nmcli connection modify "$name" 802-11-wireless.bssid "" 2>/dev/null || true
+      done
+EOF
+chmod +x /etc/NetworkManager/dispatcher.d/99-no-bssid
+
+run_test "NM dispatcher installed" "test -x /etc/NetworkManager/dispatcher.d/99-no-bssid"
+
+phase_pass "NetworkManager BSSID dispatcher installed"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 4 — Autologin (X11/Openbox)
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 4 "Autologin (X11/Openbox)"
@@ -220,6 +247,7 @@ rm -f "${PI_HOME}/.config/labwc/autostart"
 
 # Install boot splash page
 curl -fsSL \
+    -H "Authorization: token ${GHCR_TOKEN}" \
     "${RAW_REPO_URL}/aquila_web/static/splash.html" \
     -o /opt/aquila/splash.html
 
@@ -269,6 +297,7 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --disable-web-security \
     --allow-file-access-from-files \
     --user-data-dir=/tmp/chromium-kiosk \
+    --disk-cache-size=0 \
     --start-maximized \
     --hide-scrollbars \
     >/dev/null 2>&1 &
@@ -354,6 +383,10 @@ prompt_if_unset DEVICE_HOSTNAME "Enter device hostname (e.g. sn04)"
 prompt_if_unset IMAGE_TAG       "Enter IMAGE_TAG (dev/pilot/prod)"
 prompt_if_unset GHCR_USER       "Enter GHCR username"
 prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token"
+# Optional: second token for zero-downtime rotation (leave blank to skip)
+if [[ -z "${GHCR_TOKEN_2:-}" ]]; then
+    read -r -p "  Enter GHCR_TOKEN_2 for rotation (leave blank to skip): " GHCR_TOKEN_2 </dev/tty || true
+fi
 prompt_if_unset LID_HEATER_UPPER_BOUND "Enter lid heater upper bound voltage (e.g. 0.34)"
 prompt_if_unset LID_HEATER_LOWER_BOUND "Enter lid heater lower bound voltage (e.g. 0.20)"
 prompt_if_unset DRAWER_READ_STEPS      "Enter drawer read_steps for this device (e.g. 160)"
@@ -372,6 +405,7 @@ RUN_MODE=prod
 WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN}
 GHCR_USERNAME=${GHCR_USER}
 GHCR_TOKEN=${GHCR_TOKEN}
+GHCR_TOKEN_2=${GHCR_TOKEN_2:-}
 AQ_SRC_BASEDIR=/opt/aquila
 AQ_SYNC_ENDPOINT=${AQ_SYNC_ENDPOINT}
 AQ_SYNC_API_KEY=${AQ_SYNC_API_KEY}
@@ -543,6 +577,16 @@ phase_pass "device.env, fleet .env, host_config.json, and state_config.json writ
 # Phase 9 — GHCR Login, Download Compose File, and Pull Images
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 9 "GHCR Login, Download Compose File, and Pull Images"
+
+# Resolve active token: validate primary, fall back to GHCR_TOKEN_2 if set
+if [[ -n "${GHCR_TOKEN_2:-}" ]]; then
+    if ! curl -fsSL -o /dev/null \
+            -H "Authorization: token ${GHCR_TOKEN}" \
+            "https://api.github.com/repos/${GHCR_REPO}" 2>/dev/null; then
+        echo "  Primary GHCR_TOKEN failed — switching to GHCR_TOKEN_2"
+        GHCR_TOKEN="${GHCR_TOKEN_2}"
+    fi
+fi
 
 echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
 run_test "GHCR login succeeded" "grep -q 'ghcr.io' /root/.docker/config.json"
@@ -732,14 +776,14 @@ phase_pass "fleet config set, containers running, backend reachable on :8090, wa
 phase_start "11b" "Kiosk Control Service"
 
 KIOSK_RAW="${RAW_REPO_URL}/scripts/kiosk-control"
-curl -fsSL "${KIOSK_RAW}/kiosk_control.py" -o /usr/local/bin/kiosk_control.py
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" "${KIOSK_RAW}/kiosk_control.py" -o /usr/local/bin/kiosk_control.py
 chmod +x /usr/local/bin/kiosk_control.py
-curl -fsSL "${KIOSK_RAW}/kiosk-control.service" -o /etc/systemd/system/kiosk-control.service
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" "${KIOSK_RAW}/kiosk-control.service" -o /etc/systemd/system/kiosk-control.service
 systemctl daemon-reload
 systemctl enable --now kiosk-control
 
 # Install wifi-recovery startup service — cleans broken profiles and reconnects on boot
-curl -fsSL "${RAW_REPO_URL}/scripts/setup/wifi_recovery.sh" -o /opt/aquila/wifi_recovery.sh
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" "${RAW_REPO_URL}/scripts/setup/wifi_recovery.sh" -o /opt/aquila/wifi_recovery.sh
 chmod +x /opt/aquila/wifi_recovery.sh
 cat > /etc/systemd/system/wifi-recovery.service <<'EOF'
 [Unit]
@@ -902,7 +946,8 @@ fi
 
 # Download acornlogo SVG from repo if not already on device
 if [[ ! -f "${ACORN_LOGO_SVG}" ]]; then
-    curl -fsSL "${RAW_REPO_URL}/aquila_web/static/acornlogo.svg" \
+    curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+        "${RAW_REPO_URL}/aquila_web/static/acornlogo.svg" \
         -o "${ACORN_LOGO_SVG}" 2>/dev/null || true
 fi
 
@@ -933,9 +978,11 @@ else
 fi
 
 # Install theme files from repo
-curl -fsSL "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.plymouth" \
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+    "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.plymouth" \
     -o "${PLYMOUTH_THEME_DIR}/acorn.plymouth" 2>/dev/null
-curl -fsSL "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.script" \
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+    "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.script" \
     -o "${PLYMOUTH_THEME_DIR}/acorn.script" 2>/dev/null
 
 # Set Acorn as default theme and rebuild initramfs

@@ -111,6 +111,8 @@ def _start_chromium() -> tuple[bool, str]:
         "--enable-gpu-rasterization",
         "--use-angle=gles",
         "--ozone-platform=x11",
+        "--user-data-dir=/tmp/chromium-kiosk",
+        "--disk-cache-size=0",
         "--start-maximized",
         KIOSK_URL,
     ]
@@ -208,12 +210,27 @@ def _wifi_connect(ssid: str, password: str) -> dict:
             "ssid", ssid,
             "wifi-sec.key-mgmt", "wpa-psk",
             "wifi-sec.psk", password,
+            "wifi-sec.psk-flags", "0",
+            "connection.permissions", "",
+            "802-11-wireless.bssid", "",
         )
         if code != 0:
             return {"ok": False, "error": err}
         code, _, err = _nmcli("connection", "up", ssid)
     else:
-        code, _, err = _nmcli("device", "wifi", "connect", ssid)
+        code, _, err = _nmcli(
+            "connection", "add",
+            "type", "wifi",
+            "con-name", ssid,
+            "ssid", ssid,
+            "802-11-wireless.bssid", "",
+            "connection.permissions", "",
+        )
+        if code != 0:
+            return {"ok": False, "error": err}
+        code, _, err = _nmcli("connection", "up", ssid)
+    if code == 0:
+        _nmcli("connection", "modify", ssid, "802-11-wireless.bssid", "")
     return {"ok": code == 0, "error": err if code != 0 else None}
 
 
