@@ -383,6 +383,10 @@ prompt_if_unset DEVICE_HOSTNAME "Enter device hostname (e.g. sn04)"
 prompt_if_unset IMAGE_TAG       "Enter IMAGE_TAG (dev/pilot/prod)"
 prompt_if_unset GHCR_USER       "Enter GHCR username"
 prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token"
+# Optional: second token for zero-downtime rotation (leave blank to skip)
+if [[ -z "${GHCR_TOKEN_2:-}" ]]; then
+    read -r -p "  Enter GHCR_TOKEN_2 for rotation (leave blank to skip): " GHCR_TOKEN_2 </dev/tty || true
+fi
 prompt_if_unset LID_HEATER_UPPER_BOUND "Enter lid heater upper bound voltage (e.g. 0.34)"
 prompt_if_unset LID_HEATER_LOWER_BOUND "Enter lid heater lower bound voltage (e.g. 0.20)"
 prompt_if_unset DRAWER_READ_STEPS      "Enter drawer read_steps for this device (e.g. 160)"
@@ -401,6 +405,7 @@ RUN_MODE=prod
 WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN}
 GHCR_USERNAME=${GHCR_USER}
 GHCR_TOKEN=${GHCR_TOKEN}
+GHCR_TOKEN_2=${GHCR_TOKEN_2:-}
 AQ_SRC_BASEDIR=/opt/aquila
 AQ_SYNC_ENDPOINT=${AQ_SYNC_ENDPOINT}
 AQ_SYNC_API_KEY=${AQ_SYNC_API_KEY}
@@ -572,6 +577,16 @@ phase_pass "device.env, fleet .env, host_config.json, and state_config.json writ
 # Phase 9 — GHCR Login, Download Compose File, and Pull Images
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 9 "GHCR Login, Download Compose File, and Pull Images"
+
+# Resolve active token: validate primary, fall back to GHCR_TOKEN_2 if set
+if [[ -n "${GHCR_TOKEN_2:-}" ]]; then
+    if ! curl -fsSL -o /dev/null \
+            -H "Authorization: token ${GHCR_TOKEN}" \
+            "https://api.github.com/repos/${GHCR_REPO}" 2>/dev/null; then
+        echo "  Primary GHCR_TOKEN failed — switching to GHCR_TOKEN_2"
+        GHCR_TOKEN="${GHCR_TOKEN_2}"
+    fi
+fi
 
 echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
 run_test "GHCR login succeeded" "grep -q 'ghcr.io' /root/.docker/config.json"
