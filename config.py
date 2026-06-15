@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-DEFAULT_SRC_BASEDIR = "/opt/aquila"
+DEFAULT_SRC_BASEDIR = "/Users/jackh/OneDrive/Documents/acorn-genetics/aquilla-main/"
 CONFIG_PATH = Path(__file__).with_name("config.json")
 
 
