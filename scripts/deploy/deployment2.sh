@@ -195,6 +195,10 @@ cat > /etc/lightdm/lightdm.conf <<'EOF'
 autologin-user=pi
 autologin-session=openbox
 user-session=openbox
+# Start X with no cursor — touchscreen kiosk, the pointer must never render.
+# Disabling the cursor at the X server level means it is never drawn at boot and
+# never reappears on pointer/touch events.
+xserver-command=X -nocursor
 EOF
 
 mkdir -p /etc/lightdm/lightdm.conf.d
@@ -202,6 +206,7 @@ cat > /etc/lightdm/lightdm.conf.d/autologin.conf <<'EOF'
 [Seat:*]
 autologin-user=pi
 autologin-session=openbox
+xserver-command=X -nocursor
 EOF
 
 # Fix double-load of modesetting driver (dixRegisterPrivateKey crash on Pi):
@@ -230,6 +235,7 @@ run_test "autologin.conf exists"           "test -f /etc/lightdm/lightdm.conf.d/
 run_test "autologin-user=pi"               "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-session=openbox"       "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "main lightdm.conf not rpd-labwc" "! grep -q 'autologin-session=rpd-labwc' /etc/lightdm/lightdm.conf"
+run_test "cursor disabled (-nocursor)"     "grep -q 'X -nocursor' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "lightdm enabled"                 "systemctl is-enabled lightdm | grep -q enabled"
 run_test "xorg.conf has AutoAddGPU off"    "grep -q 'AutoAddGPU' /etc/X11/xorg.conf"
 run_test "fbdev not installed"            "! dpkg -l xserver-xorg-video-fbdev 2>/dev/null | grep -q '^ii'"
@@ -269,9 +275,12 @@ xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
   "Coordinate Transformation Matrix" \
   0 1 0 -1 0 1 0 0 1
 
-# Hide cursor at X11 root level (covers terminal and behind Chromium)
+# Clear the root-window cursor (covers terminal and behind Chromium).
+# X is already started with `-nocursor` (see LightDM autologin.conf) so the pointer
+# is never rendered. We deliberately do NOT run unclutter: it only hides on an idle
+# timer and re-shows the cursor on pointer/touch events, causing a startup flash and
+# a lingering cursor over dropdowns on every tap.
 xsetroot -cursor_name none
-unclutter -idle 0 -root -noevents &
 
 # Allow display and compositor to settle before launching Chromium
 sleep 3

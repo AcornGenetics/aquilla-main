@@ -44,7 +44,7 @@ def check_threshold_oscillation(curve_data, curve):
         return True
     post_rise = y_corrected[rise_index:]
     crossings = count_threshold_crossings(post_rise, threshold)
-    return crossings <= 1
+    return crossings <= 2
 
 
 def check_baseline_length(curve_data, curve):
