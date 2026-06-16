@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
+  <title>Settings</title>
+  <link rel="stylesheet" href="/static/styles.css?v=211" />
+  <link rel="stylesheet" href="/static/icon-colors.css?v=1" />
+  <style>
+    .settings-sub {
+      font-family: "ABC Favorit Mono", "Courier New", monospace;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin: 0 0 14px;
+    }
+
+    /* Tab pills (shared visual language with Help) */
+    .help-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .help-tab {
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 1.5px solid #cbd5e1;
+      background: transparent;
+      font-size: 15px;
+      font-family: "Neue Haas Grotesk Display Pro", "Segoe UI", sans-serif;
+      color: #475569;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .help-tab:focus { outline: none; }
+    .help-tab.is-active {
+      background-color: var(--icon-dark-green);
+      color: var(--icon-acorn-green);
+      border-color: var(--icon-dark-green);
+      font-weight: 600;
+    }
+
+    .help-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 0 16px;
+    }
+    .help-card {
+      background: #ffffff;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      padding: 24px 24px 20px;
+    }
+    .help-section { display: none; }
+    .help-section.is-active { display: block; }
+    .help-section h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--icon-dark-green);
+      margin: 0 0 10px;
+    }
+    .help-section p {
+      font-size: 15px;
+      color: #1a1c1c;
+      line-height: 1.6;
+      margin: 0 0 6px;
+    }
+
+    /* Footer row (mirrors Help) */
+    .help-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 12px;
+      position: relative;
+    }
+    .help-footer__meta {
+      font-family: "ABC Favorit Mono", "Courier New", monospace;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .help-exit-btn {
+      font-family: "ABC Favorit Mono", "Courier New", monospace;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #dc2626;
+      border: 1.5px solid #dc2626;
+      border-radius: 6px;
+      background: transparent;
+      padding: 9px 16px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .help-exit-btn:active { background: #dc2626; color: #fff; }
+
+    /* Wi-Fi sub-page */
+    .wifi-status-bar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px; border-radius: 12px;
+      background: #f0f4f8; border: 1px solid #d1d9e0;
+      margin-bottom: 24px; font-size: 16px;
+    }
+    .wifi-status-dot { width: 12px; height: 12px; border-radius: 50%; background: #9ca3af; flex-shrink: 0; }
+    .wifi-status-dot.connected { background: #22c55e; }
+    .wifi-status-label { font-weight: 600; color: #1f2937; }
+    .wifi-status-ssid { color: #4b5563; }
+    .wifi-section-title {
+      font-size: 14px; font-weight: 600; color: #6b7280;
+      text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px;
+    }
+    .wifi-network-list { border: 1px solid #d1d9e0; border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+    .wifi-network-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px; background: #fff;
+      border-bottom: 1px solid #e5e7eb; cursor: pointer; transition: background 0.1s;
+    }
+    .wifi-network-row:last-child { border-bottom: none; }
+    .wifi-network-row:active, .wifi-network-row.is-selected { background: #f0f4f8; }
+    .wifi-signal-icon { font-size: 18px; flex-shrink: 0; }
+    .wifi-network-name { flex: 1; font-size: 16px; color: #1f2937; font-weight: 500; }
+    .wifi-network-lock { font-size: 14px; color: #9ca3af; }
+    .wifi-network-check { color: #22c55e; font-weight: 700; font-size: 16px; }
+    .wifi-connect-form {
+      padding: 14px 18px 18px; background: #f8fafc;
+      border-top: 1px solid #e5e7eb; display: none;
+    }
+    .wifi-connect-form.is-open { display: block; }
+    .wifi-password-row { display: flex; gap: 8px; margin-bottom: 10px; }
+    .wifi-password-row input { flex: 1; padding: 10px 12px; border: 1px solid #d1d9e0; border-radius: 8px; font-size: 15px; }
+    .wifi-show-btn { padding: 10px 12px; border: 1px solid #d1d9e0; border-radius: 8px; background: #fff; font-size: 14px; cursor: pointer; color: #4b5563; }
+    .wifi-connect-btn {
+      width: 100%; padding: 11px; border-radius: 8px; border: none;
+      background: var(--icon-dark-green); color: var(--icon-acorn-green);
+      font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    .wifi-error { display: none; color: #dc2626; font-size: 13px; margin-top: 8px; }
+    .wifi-error.is-visible { display: block; }
+    .wifi-spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid var(--icon-acorn-green); border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .wifi-rescan-btn {
+      padding: 9px 18px; border-radius: 8px; border: 1px solid #d1d9e0;
+      background: #fff; font-size: 15px; font-weight: 500; cursor: pointer;
+      color: #374151; margin-bottom: 12px;
+    }
+    .wifi-rescan-btn:disabled { color: #9ca3af; cursor: default; }
+    .wifi-empty { padding: 24px; text-align: center; color: #9ca3af; font-size: 15px; }
+    .wifi-forget-btn {
+      width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #fca5a5;
+      background: #fff; color: #dc2626; font-size: 15px; font-weight: 500;
+      cursor: pointer; margin-top: 8px;
+    }
+    .wifi-forget-btn:disabled { color: #fca5a5; border-color: #fecaca; cursor: default; }
+  </style>
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <main class="main run-main" style="display:flex; flex-direction:column; height:100vh; overflow:hidden;">
+
+      <!-- Standard nav header -->
+      <header class="run-header">
+        <h1 class="run-header__title">Settings</h1>
+        <nav class="run-header__nav">
+          <a class="run-nav-link" href="/run">Run</a>
+          <a class="run-nav-link" href="/history">History</a>
+          <a class="run-nav-link" href="/profiles-page">Profiles</a>
+          <a class="run-nav-link settings-link" href="/settings">Settings</a>
+          <a class="help-link" href="/help">
+            <span>?</span>
+            <span class="help-tooltip">How to run a test</span>
+          </a>
+        </nav>
+      </header>
+      <div class="run-divider"></div>
+
+      <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; padding: 16px 24px 0;">
+
+        <p class="settings-sub">Device configuration</p>
+
+        <div class="help-tabs" role="tablist">
+          <button class="help-tab is-active" data-target="tab-wifi">Wi-Fi &amp; System</button>
+          <button class="help-tab" data-target="tab-updates" id="tab-updates-btn" style="position:relative;">Updates<span id="updates-tab-dot" style="display:none;position:absolute;top:4px;right:6px;width:7px;height:7px;border-radius:50%;background:#dc2626;"></span></button>
+        </div>
+
+        <div class="help-scroll">
+          <div class="help-card">
+
+            <!-- Wi-Fi & System -->
+            <div class="help-section is-active" id="tab-wifi">
+              <div class="wifi-status-bar">
+                <div class="wifi-status-dot" id="wifi-dot"></div>
+                <span class="wifi-status-label" id="wifi-status-label">Checking…</span>
+                <span class="wifi-status-ssid" id="wifi-status-ssid"></span>
+              </div>
+
+              <button class="wifi-rescan-btn" id="rescan-btn" onclick="doScan()">&#x21BA; Scan for networks</button>
+
+              <p class="wifi-section-title">Available Networks</p>
+              <div class="wifi-network-list" id="network-list">
+                <div class="wifi-empty" id="network-empty">Press Scan to find networks</div>
+              </div>
+
+              <p class="wifi-section-title">Saved Connections</p>
+              <div class="wifi-network-list" id="saved-list">
+                <div class="wifi-empty">Loading…</div>
+              </div>
+            </div>
+
+            <!-- Updates -->
+            <div class="help-section" id="tab-updates">
+              <h2>Software Updates</h2>
+              <p>Updates are applied only when you choose to. Nothing is downloaded or restarted automatically.</p>
+              <div id="update-status-area" style="margin-top:16px;">
+                <p style="color:#6b7280;font-size:15px;">Open this tab to check for updates.</p>
+              </div>
+            </div>
+
+          </div><!-- /.help-card -->
+        </div><!-- /.help-scroll -->
+
+        <div class="help-footer" style="padding-bottom:16px;">
+          <span class="help-footer__meta" id="settings-version-info">V 1.2.6.6</span>
+          <button class="help-exit-btn" onclick="notifyExitForce()">Exit GUI</button>
+        </div>
+
+      </div><!-- /inner flex -->
+    </main>
+  </div>
+
+  <script>
+    // ── Tab switching ──────────────────────────────────────────────
+    const tabs = document.querySelectorAll(".help-tab");
+    const sections = document.querySelectorAll(".help-section");
+    tabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        tabs.forEach(t => t.classList.remove("is-active"));
+        sections.forEach(s => s.classList.remove("is-active"));
+        tab.classList.add("is-active");
+        document.getElementById(tab.dataset.target).classList.add("is-active");
+        if (tab.dataset.target === "tab-wifi") loadStatus();
+        if (tab.dataset.target === "tab-updates") openUpdateTab();
+      });
+    });
+
+    // ── OTA Updates ──────────────────────────────────────────────
+    let _updateCheckPollTimer = null;
+
+    async function openUpdateTab() {
+      const area = document.getElementById("update-status-area");
+      const r = await fetch("/update/status").catch(() => null);
+      const data = r ? await r.json().catch(() => null) : null;
+      if (data && (data.available || data.status === "available")) { renderUpdateStatus(data); return; }
+      if (data && data.status === "updating") { renderUpdateStatus(data); return; }
+      area.innerHTML = '<p style="color:#6b7280;font-size:15px;">Checking for updates…</p>';
+      const cr = await fetch("/update/check", { method: "POST" }).catch(() => null);
+      if (!cr || !cr.ok) {
+        const cd = cr ? await cr.json().catch(() => ({})) : {};
+        renderUpdateStatus({ status: "error", error: cd.error || "Check request failed" });
+        return;
+      }
+      _pollUpdateStatus(0);
+    }
+
+    function _pollUpdateStatus(attempt) {
+      if (_updateCheckPollTimer) clearTimeout(_updateCheckPollTimer);
+      if (attempt > 20) { renderUpdateStatus({ status: "error", error: "Check timed out" }); return; }
+      _updateCheckPollTimer = setTimeout(async () => {
+        const r = await fetch("/update/status").catch(() => null);
+        const data = r ? await r.json().catch(() => null) : null;
+        if (!data || data.status === "checking") { _pollUpdateStatus(attempt + 1); }
+        else { renderUpdateStatus(data); }
+      }, 1500);
+    }
+
+    function renderUpdateStatus(data) {
+      const area = document.getElementById("update-status-area");
+      const dot = document.getElementById("updates-tab-dot");
+      if (data.available || data.status === "available") {
+        if (dot) dot.style.display = "block";
+        area.innerHTML = `
+          <p style="font-size:15px;color:#1a1c1c;line-height:1.6;margin:0 0 18px;">
+            A software update is available. Do you want to update now?
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button id="update-now-btn"
+              style="padding:10px 22px;border-radius:8px;border:none;background:var(--icon-dark-green);color:var(--icon-acorn-green);font-size:15px;font-weight:600;cursor:pointer;"
+              onclick="applyUpdate()">Update Now</button>
+            <button
+              style="padding:10px 22px;border-radius:8px;border:1.5px solid #cbd5e1;background:transparent;font-size:15px;color:#475569;cursor:pointer;"
+              onclick="dismissUpdate()">Later</button>
+          </div>
+        `;
+      } else if (data.status === "updating") {
+        _showUpdateOverlay();
+      } else if (data.status === "error") {
+        area.innerHTML = `
+          <p style="color:#dc2626;font-size:15px;">Could not check for updates: ${_escHtml(data.error || "unknown error")}</p>
+          <button onclick="openUpdateTab()"
+            style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;font-size:14px;cursor:pointer;color:#374151;">Try again</button>
+        `;
+      } else {
+        if (dot) dot.style.display = "none";
+        let html = '<p style="color:#16a34a;font-size:15px;font-weight:600;">✓ Software is up to date.</p>';
+        if (data.last_checked) html += `<p style="font-size:12px;color:#6b7280;margin-top:6px;">Last checked: ${_escHtml(data.last_checked.replace("T"," ").replace("Z"," UTC"))}</p>`;
+        area.innerHTML = html;
+      }
+    }
+
+    function _showUpdateOverlay() {
+      let overlay = document.getElementById("update-overlay");
+      if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "update-overlay";
+        overlay.style.cssText = [
+          "position:fixed","top:0","left:0","width:100%","height:100%",
+          "background:rgba(255,255,255,0.97)","z-index:9999",
+          "display:flex","flex-direction:column","align-items:center","justify-content:center","gap:16px"
+        ].join(";");
+        overlay.innerHTML = `
+          <p id="update-overlay-label" style="font-size:20px;font-weight:700;color:#1a1c1c;margin:0;">Applying update…</p>
+          <p style="font-size:15px;color:#6b7280;margin:0;">Please wait. Do not power off the device.</p>
+          <div style="width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:var(--icon-dark-green);border-radius:50%;animation:spin 1s linear infinite;"></div>
+        `;
+        document.body.appendChild(overlay);
+      }
+    }
+
+    function _hideUpdateOverlay() {
+      const overlay = document.getElementById("update-overlay");
+      if (overlay) overlay.remove();
+    }
+
+    async function applyUpdate() {
+      const btn = document.getElementById("update-now-btn");
+      if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
+      _showUpdateOverlay();
+      document.querySelectorAll(".help-badge").forEach(b => b.remove());
+      const r = await fetch("/update/apply", { method: "POST" }).catch(() => null);
+      const d = r ? await r.json().catch(() => null) : null;
+      if (d && d.ok === false && d.error) { _pollForUpdateComplete(0, d.error); }
+      else { _pollForUpdateComplete(0, null); }
+    }
+
+    function _pollForUpdateComplete(attempt, fallbackError) {
+      if (attempt > 200) {
+        _hideUpdateOverlay();
+        const msg = fallbackError
+          ? `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(fallbackError)}</p>`
+          : '<p style="color:#6b7280;font-size:15px;">Update timed out. Please check the device and try again.</p>';
+        document.getElementById("update-status-area").innerHTML = msg;
+        return;
+      }
+      if (attempt === 60) {
+        const lbl = document.getElementById("update-overlay-label");
+        if (lbl) lbl.textContent = "Still updating, please wait…";
+      }
+      setTimeout(async () => {
+        const r = await fetch("/update/status").catch(() => null);
+        const data = r ? await r.json().catch(() => null) : null;
+        if (!data || data.status === "updating" || data.available) { _pollForUpdateComplete(attempt + 1, fallbackError); return; }
+        if (data.status === "error") {
+          _hideUpdateOverlay();
+          const errMsg = fallbackError || data.error || "unknown error";
+          document.getElementById("update-status-area").innerHTML =
+            `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(errMsg)}</p>`;
+          return;
+        }
+        _hideUpdateOverlay();
+        const area = document.getElementById("update-status-area");
+        const dot = document.getElementById("updates-tab-dot");
+        if (dot) dot.style.display = "none";
+        const checkedAt = data.last_checked ? data.last_checked.replace("T", " ").replace("Z", " UTC") : "";
+        area.innerHTML = `
+          <p style="font-size:20px;font-weight:700;color:#16a34a;margin:0 0 8px;">✓ Update complete</p>
+          <p style="font-size:15px;color:#1a1c1c;margin:0 0 6px;">The device is running the latest software.</p>
+          ${checkedAt ? `<p style="font-size:12px;color:#6b7280;margin:0;">Verified: ${_escHtml(checkedAt)}</p>` : ""}
+        `;
+      }, 3000);
+    }
+
+    async function dismissUpdate() {
+      await fetch("/update/dismiss", { method: "POST" }).catch(() => {});
+      document.getElementById("update-status-area").innerHTML =
+        '<p style="color:#6b7280;font-size:15px;">Update reminder dismissed. You can check again by reopening this tab.</p>';
+      const dot = document.getElementById("updates-tab-dot");
+      if (dot) dot.style.display = "none";
+      document.querySelectorAll(".help-badge").forEach(b => b.remove());
+    }
+
+    function _escHtml(str) {
+      return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    // Show tab dot if update is already known available on page load
+    fetch("/update/status").then(r => r.ok ? r.json() : null).then(data => {
+      if (!data || !data.available || data.dismissed) return;
+      const dot = document.getElementById("updates-tab-dot");
+      if (dot) dot.style.display = "block";
+    }).catch(() => {});
+
+    // ── WiFi ──────────────────────────────────────────────
+    let selectedRow = null;
+
+    function signalIcon(signal) {
+      if (signal >= 75) return "▂▄▆█";
+      if (signal >= 50) return "▂▄▆░";
+      if (signal >= 25) return "▂▄░░";
+      return "▂░░░";
+    }
+
+    async function loadStatus() {
+      try {
+        const r = await fetch("/wifi/status");
+        const d = await r.json();
+        const dot = document.getElementById("wifi-dot");
+        const label = document.getElementById("wifi-status-label");
+        const ssid = document.getElementById("wifi-status-ssid");
+        if (d.connected) {
+          dot.classList.add("connected");
+          label.textContent = "Connected";
+          ssid.textContent = d.ssid + (d.signal != null ? `  (${d.signal}%)` : "");
+        } else {
+          dot.classList.remove("connected");
+          label.textContent = "Not connected";
+          ssid.textContent = "";
+        }
+      } catch (e) {
+        document.getElementById("wifi-status-label").textContent = "Status unavailable";
+      }
+    }
+
+    async function doScan() {
+      const btn = document.getElementById("rescan-btn");
+      const list = document.getElementById("network-list");
+      btn.disabled = true;
+      btn.textContent = "Scanning…";
+      list.innerHTML = '<div class="wifi-empty">Scanning — this takes a few seconds…</div>';
+      selectedRow = null;
+      try {
+        const r = await fetch("/wifi/scan");
+        const d = await r.json();
+        list.innerHTML = "";
+        if (!d.networks || d.networks.length === 0) {
+          list.innerHTML = '<div class="wifi-empty">No networks found</div>';
+          return;
+        }
+        d.networks.forEach((net, index) => {
+          const row = document.createElement("div");
+          row.className = "wifi-network-row";
+          if (net.in_use) row.classList.add("is-selected");
+          row.innerHTML = `
+            <span class="wifi-signal-icon">${signalIcon(net.signal)}</span>
+            <span class="wifi-network-name">${escHtml(net.ssid)}</span>
+            ${net.secured ? '<span class="wifi-network-lock">🔒</span>' : ''}
+            ${net.in_use ? '<span class="wifi-network-check">✓</span>' : ''}
+          `;
+          const form = buildConnectForm(net, index);
+          row.addEventListener("click", () => toggleForm(row, form, net));
+          list.appendChild(row);
+          list.appendChild(form);
+        });
+      } catch (e) {
+        list.innerHTML = '<div class="wifi-empty">Scan failed — try again</div>';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "↺ Scan for networks";
+        await loadStatus();
+      }
+    }
+
+    function buildConnectForm(net, index) {
+      const form = document.createElement("div");
+      form.className = "wifi-connect-form";
+      form.dataset.ssid = net.ssid;
+      const safeId = `wifi-net-${index}`;
+      const safeLabel = escHtml(net.ssid);
+      form.innerHTML = `
+        ${net.secured ? `
+        <div class="wifi-password-row">
+          <input type="password" id="pw-${safeId}" placeholder="Password" autocomplete="off" />
+          <button class="wifi-show-btn" type="button" onclick="togglePw('${safeId}', this)">Show</button>
+        </div>` : ""}
+        <button class="wifi-connect-btn" type="button" id="conn-btn-${safeId}" onclick="doConnect('${safeId}', ${net.secured})">
+          Connect to ${safeLabel}
+        </button>
+        <div class="wifi-error" id="err-${safeId}"></div>
+        ${(net.in_use || net.saved) ? `
+        <button class="wifi-forget-btn" type="button" id="forget-btn-${safeId}" onclick="doForget('${safeId}')">
+          Forget ${safeLabel}
+        </button>` : ""}
+      `;
+      return form;
+    }
+
+    function toggleForm(row, form, net) {
+      if (selectedRow && selectedRow !== form) {
+        selectedRow.classList.remove("is-open");
+        selectedRow.previousElementSibling.classList.remove("is-selected");
+      }
+      const opening = !form.classList.contains("is-open");
+      form.classList.toggle("is-open", opening);
+      row.classList.toggle("is-selected", opening);
+      selectedRow = opening ? form : null;
+    }
+
+    function togglePw(id, btn) {
+      const input = document.getElementById("pw-" + id);
+      if (!input) return;
+      const showing = input.type === "text";
+      input.type = showing ? "password" : "text";
+      btn.textContent = showing ? "Show" : "Hide";
+    }
+
+    async function doConnect(ssidId, secured) {
+      const pwInput = document.getElementById("pw-" + ssidId);
+      const errEl = document.getElementById("err-" + ssidId);
+      const btn = errEl.previousElementSibling;
+      const form = errEl.closest(".wifi-connect-form");
+      const ssid = form ? form.dataset.ssid : ssidId;
+      const password = pwInput ? pwInput.value : "";
+      errEl.classList.remove("is-visible");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="wifi-spinner"></span>Connecting…';
+      try {
+        const r = await fetch("/wifi/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ssid, password }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          await loadStatus();
+          btn.innerHTML = "✓ Connected!";
+          btn.style.background = "#16a34a";
+        } else {
+          errEl.textContent = d.error || "Connection failed — check password";
+          errEl.classList.add("is-visible");
+          btn.disabled = false;
+          btn.innerHTML = `Connect to ${escHtml(ssid)}`;
+        }
+      } catch (e) {
+        errEl.textContent = "Request failed — try again";
+        errEl.classList.add("is-visible");
+        btn.disabled = false;
+        btn.innerHTML = `Connect to ${escHtml(ssid)}`;
+      }
+    }
+
+    async function doForget(ssidId) {
+      const btn = document.getElementById("forget-btn-" + ssidId);
+      const errEl = document.getElementById("err-" + ssidId);
+      const form = errEl.closest(".wifi-connect-form");
+      const ssid = form ? form.dataset.ssid : ssidId;
+      if (!window.confirm(`Forget network "${ssid}"?`)) return;
+      errEl.classList.remove("is-visible");
+      btn.disabled = true;
+      btn.textContent = "Forgetting…";
+      try {
+        const r = await fetch("/wifi/forget", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ssid }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          await loadStatus();
+          await doScan();
+        } else {
+          errEl.textContent = d.error || "Failed to forget network";
+          errEl.classList.add("is-visible");
+          btn.disabled = false;
+          btn.textContent = `Forget ${escHtml(ssid)}`;
+        }
+      } catch (e) {
+        errEl.textContent = "Request failed — try again";
+        errEl.classList.add("is-visible");
+        btn.disabled = false;
+        btn.textContent = `Forget ${escHtml(ssid)}`;
+      }
+    }
+
+    async function loadSaved() {
+      const list = document.getElementById("saved-list");
+      try {
+        const r = await fetch("/wifi/saved");
+        const d = await r.json();
+        if (!d.profiles || d.profiles.length === 0) {
+          list.innerHTML = '<div class="wifi-empty">No saved connections</div>';
+          return;
+        }
+        list.innerHTML = "";
+        d.profiles.forEach((p, index) => {
+          const row = document.createElement("div");
+          row.className = "wifi-network-row";
+          row.style.cursor = "default";
+          row.innerHTML = `<span class="wifi-network-name">${escHtml(p.ssid)}</span>`;
+          const btn = document.createElement("button");
+          btn.className = "wifi-forget-btn";
+          btn.style.cssText = "width:auto;padding:6px 14px;margin:0 0 0 auto;flex-shrink:0";
+          btn.textContent = "Forget";
+          btn.addEventListener("click", () => forgetSaved(p.ssid, btn, list));
+          row.appendChild(btn);
+          list.appendChild(row);
+        });
+      } catch (e) {
+        list.innerHTML = '<div class="wifi-empty">Could not load saved connections</div>';
+      }
+    }
+
+    async function forgetSaved(ssid, btn, list) {
+      if (!window.confirm(`Forget "${ssid}"?`)) return;
+      btn.disabled = true;
+      btn.textContent = "Forgetting…";
+      try {
+        const r = await fetch("/wifi/forget", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ssid }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          await loadSaved();
+          await loadStatus();
+        } else {
+          btn.disabled = false;
+          btn.textContent = "Forget";
+          alert(d.error || "Failed to forget network");
+        }
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "Forget";
+        alert("Request failed — try again");
+      }
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    async function notifyExitForce() {
+      if (!window.confirm("Exit GUI?")) return;
+      try { await fetch("/button/exit/force", { method: "POST" }); }
+      catch (err) { console.error("Exit failed", err); }
+    }
+
+    // Initial load: Wi-Fi tab is default-active
+    loadStatus();
+    loadSaved();
+
+    fetch("/button_status")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const el = document.getElementById("settings-version-info");
+        const parts = [];
+        if (data.firmware) parts.push("Firmware " + data.firmware);
+        if (data.device_id) parts.push("Device " + data.device_id);
+        if (parts.length) el.textContent = parts.join(" · ");
+      }).catch(() => {});
+  </script>
+  <script src="/static/keyboard.js?v=14"></script>
+  <script src="/static/nav.js?v=1"></script>
+</body>
+</html>

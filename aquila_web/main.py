@@ -838,6 +838,10 @@ async def history_run_page():
 async def help_page():
     return FileResponse(static_dir / "help.html")
 
+@app.get("/settings")
+async def settings_page():
+    return FileResponse(static_dir / "settings.html")
+
 @app.post("/button/open")
 async def button_open():
     global drawer_open, drawer_close, drawer_task
@@ -1444,8 +1448,9 @@ async def _kiosk_post(path: str, body: dict) -> dict:
 
 @app.get("/wifi")
 async def wifi_page():
-    return FileResponse(static_dir / "wifi.html",
-                        headers={"Cache-Control": "no-store"})
+    # Wi-Fi UI now lives under Settings (ADR-012). Keep /wifi working for any
+    # old bookmark/deep link by redirecting to the consolidated page.
+    return RedirectResponse(url="/settings")
 
 @app.get("/wifi/status")
 async def wifi_status():
