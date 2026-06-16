@@ -77,3 +77,23 @@ class TestAnalyze:
         flags = sr.analyze(rows)  # must not raise
         assert "app_fds" not in {f.metric for f in flags}
         assert "soc_temp" not in {f.metric for f in flags}
+
+
+class TestHistoryBytes:
+    def test_finds_logs_history_json(self, tmp_path):
+        # The real device path is logs/history.json (BASE_DIR/logs/history.json).
+        logs = tmp_path / "logs"
+        logs.mkdir()
+        (logs / "history.json").write_text("x" * 123)
+        size = sr.first_existing_size([
+            str(tmp_path / "data" / "history.json"),   # absent
+            str(logs / "history.json"),                # present
+        ])
+        assert size == "123"
+
+    def test_returns_blank_when_none_exist(self, tmp_path):
+        assert sr.first_existing_size([str(tmp_path / "nope.json")]) == ""
+
+    def test_default_candidates_include_logs_path_first(self):
+        # Regression guard for the reported bug: logs/ must be checked.
+        assert "logs/history.json" in sr.HISTORY_CANDIDATES

@@ -187,6 +187,20 @@ def _button_p95(app_url, n=20):
     return "%.3f" % lat[int(0.95 * len(lat)) - 1]
 
 
+# Where the run history file may live, most-specific first. The real device
+# path is logs/history.json (aquila_web.main: BASE_DIR/"logs"/"history.json");
+# data/ and bare are fallbacks for Docker/other layouts.
+HISTORY_CANDIDATES = ("logs/history.json", "data/history.json", "history.json")
+
+
+def first_existing_size(candidates):
+    """Size (as str) of the first existing path in candidates, else ''."""
+    for cand in candidates:
+        if os.path.exists(cand):
+            return str(os.path.getsize(cand))
+    return ""
+
+
 def collect(label, backend_pid=None, app_pid=None, app_url=None):
     """Gather one snapshot from the host. Missing sources yield blank cells."""
     statvfs_free = ""
@@ -195,11 +209,7 @@ def collect(label, backend_pid=None, app_pid=None, app_url=None):
         statvfs_free = str(round(st.f_bavail * st.f_frsize / 1e6))
     except Exception:
         pass
-    history = ""
-    for cand in ("data/history.json", "history.json"):
-        if os.path.exists(cand):
-            history = str(os.path.getsize(cand))
-            break
+    history = first_existing_size(HISTORY_CANDIDATES)
     return {
         "label": label,
         "soc_temp": _soc_temp(),
