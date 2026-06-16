@@ -23,6 +23,7 @@ from aq_lib.utils import LogFileName
 from aq_lib.utils import LOGGING_CONFIG
 from aq_curve.plot_utils import generate_optics_plot
 from aq_lib.regulate import lid_heater_worker
+from aq_lib import lid_worker_metrics as lwm
 from config import get_src_basedir
 import aq_lib.state_requests as sr
 from aq_lib.motor_class import Axis, Drawer
@@ -54,6 +55,7 @@ class AssayInterface():
         self.optics.read_config()
 
         self.run_aborted = False
+        self._run_index = 0
 
         self.configure_thermal_control()
          
@@ -168,6 +170,8 @@ class AssayInterface():
     
     def run( self ):
         #Run screen
+        self._run_index += 1
+        logger.info("RUN START index=%d", self._run_index)
         sr.change_screen("2")
         time.sleep(1)
         sr.timer_control( status = "start" )
@@ -296,6 +300,14 @@ class AssayInterface():
         self.lid_heater_stop_event.set()
         if hasattr(self, "lid_thread") and self.lid_thread.is_alive():
             self.lid_thread.join( timeout = 5 )
+
+        # issue #157: pin a lid-thread leak to this run. thread_still_alive=True
+        # or lid_live>0 here means the join above gave up and the worker leaked.
+        still_alive = hasattr(self, "lid_thread") and self.lid_thread.is_alive()
+        logger.info(
+            "LID JOIN DONE run_index=%d thread_still_alive=%s lid_live=%d",
+            getattr(self, "_run_index", -1), still_alive, lwm.live_count(),
+        )
 
 
     def end( self ):
