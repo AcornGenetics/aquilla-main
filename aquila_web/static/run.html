@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Run</title>
-  <link rel="stylesheet" href="static/styles.css?v=217" />
+  <link rel="stylesheet" href="static/styles.css?v=218" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -13,7 +13,12 @@
         <h1 class="run-header__title">Run</h1>
         <div class="run-optics-tab" id="run-optics-tab">
           <span>Optics:</span>
-          <input id="dev-optics-path" type="text" placeholder="/path/to/optics.log" />
+          <div class="optics-combo" id="optics-combo">
+            <input id="dev-optics-path" type="text" placeholder="/path/to/optics.log"
+                   autocomplete="off" role="combobox" aria-expanded="false"
+                   aria-controls="optics-suggestions" aria-autocomplete="list" />
+            <ul class="optics-suggestions is-hidden" id="optics-suggestions" role="listbox"></ul>
+          </div>
         </div>
         <nav class="run-header__nav">
           <a class="run-nav-link" href="/run">Run</a>
@@ -35,7 +40,7 @@
             </div>
             <div class="run-meta-item">
               <span class="run-meta-label">Run Name</span>
-              <input id="run-name-input" class="run-name-input" type="text" />
+              <input id="run-name-input" class="run-name-input" type="text" autocomplete="off" />
             </div>
             <div class="run-secondary-actions" id="drawer-actions">
               <button class="run-secondary-btn" onclick="notifyDrawerOpen()" type="button">Open Drawer</button>
@@ -148,7 +153,7 @@
     </main>
   </div>
   <script src="static/nav.js?v=1"></script>
-  <script src="static/script.js?v=67"></script>
+  <script src="static/script.js?v=68"></script>
   <script src="static/keyboard.js?v=14"></script>
 </body>
 </html>

@@ -20,6 +20,7 @@ const runReadyPill = document.querySelector(".run-ready-pill");
 const drawerActions = document.getElementById("drawer-actions");
 const devOpticsPath = document.getElementById("dev-optics-path");
 const devOpticsWrapper = document.getElementById("run-optics-tab");
+const devOpticsSuggestions = document.getElementById("optics-suggestions");
 const runNameInput = document.getElementById("run-name-input");
 const runWarning = document.getElementById("run-warning");
 const drawerWarning = document.getElementById("drawer-warning");
@@ -1079,6 +1080,116 @@ async function loadProfiles(){
     }
 }
 
+// Custom optics-path combobox: a styled, app-controlled dropdown (consistent
+// across browsers/machines) backed by server-stored path history.
+function setupOpticsCombo(history) {
+    if (!devOpticsPath || !devOpticsSuggestions) {
+        return;
+    }
+    let opticsHistory = Array.isArray(history) ? history.slice() : [];
+    let activeIndex = -1;
+    let visiblePaths = [];
+
+    const closeList = () => {
+        devOpticsSuggestions.classList.add("is-hidden");
+        devOpticsPath.setAttribute("aria-expanded", "false");
+        activeIndex = -1;
+    };
+
+    const renderList = (filterText) => {
+        const query = (filterText || "").trim().toLowerCase();
+        visiblePaths = opticsHistory.filter((p) => p.toLowerCase().includes(query));
+        devOpticsSuggestions.innerHTML = "";
+        if (visiblePaths.length === 0) {
+            closeList();
+            return;
+        }
+        visiblePaths.forEach((path, idx) => {
+            const li = document.createElement("li");
+            li.className = "optics-suggestion";
+            li.setAttribute("role", "option");
+            li.textContent = path;
+            li.dataset.index = String(idx);
+            // mousedown fires before the input's blur, so the click registers
+            li.addEventListener("mousedown", (event) => {
+                event.preventDefault();
+                selectPath(path);
+            });
+            devOpticsSuggestions.appendChild(li);
+        });
+        activeIndex = -1;
+        devOpticsSuggestions.classList.remove("is-hidden");
+        devOpticsPath.setAttribute("aria-expanded", "true");
+    };
+
+    const highlight = () => {
+        Array.from(devOpticsSuggestions.children).forEach((li, idx) => {
+            li.classList.toggle("is-active", idx === activeIndex);
+        });
+    };
+
+    const savePath = async (path) => {
+        try {
+            const resp = await fetch("/dev/optics_path", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path })
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (Array.isArray(data.history)) {
+                    opticsHistory = data.history;
+                }
+            }
+        } catch (error) {
+            console.error("Failed to save optics path", error);
+        }
+    };
+
+    const selectPath = (path) => {
+        devOpticsPath.value = path;
+        closeList();
+        savePath(path);
+    };
+
+    devOpticsPath.addEventListener("focus", () => renderList(""));
+    devOpticsPath.addEventListener("input", () => renderList(devOpticsPath.value));
+
+    devOpticsPath.addEventListener("keydown", (event) => {
+        const open = !devOpticsSuggestions.classList.contains("is-hidden");
+        if (event.key === "ArrowDown") {
+            event.preventDefault();
+            if (!open) { renderList(devOpticsPath.value); return; }
+            activeIndex = Math.min(activeIndex + 1, visiblePaths.length - 1);
+            highlight();
+        } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            activeIndex = Math.max(activeIndex - 1, 0);
+            highlight();
+        } else if (event.key === "Enter") {
+            if (open && activeIndex >= 0) {
+                event.preventDefault();
+                selectPath(visiblePaths[activeIndex]);
+            }
+        } else if (event.key === "Escape") {
+            closeList();
+        }
+    });
+
+    devOpticsPath.addEventListener("blur", () => {
+        // Delay so a suggestion mousedown can resolve first
+        setTimeout(closeList, 120);
+        const path = devOpticsPath.value.trim();
+        savePath(path);
+    });
+
+    document.addEventListener("click", (event) => {
+        if (!devOpticsWrapper.contains(event.target)) {
+            closeList();
+        }
+    });
+}
+
 
 document.addEventListener("DOMContentLoaded", () => {
     setupTubeNameInputs();
@@ -1121,20 +1232,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (data && data.path) {
                   devOpticsPath.value = data.path;
                 }
+                setupOpticsCombo(Array.isArray(data && data.history) ? data.history : []);
               })
-              .catch(() => null);
-            devOpticsPath.addEventListener("blur", async () => {
-                const path = devOpticsPath.value.trim();
-                try {
-                    await fetch("/dev/optics_path", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ path })
-                    });
-                } catch (error) {
-                    console.error("Failed to save optics path", error);
-                }
-            });
+              .catch(() => setupOpticsCombo([]));
         }
       })
       .catch(() => {

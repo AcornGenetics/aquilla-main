@@ -200,6 +200,44 @@ a:active {
   outline: none;
 }
 
+.optics-combo {
+  position: relative;
+  display: inline-block;
+}
+
+.optics-suggestions {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 1000;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  width: 260px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+}
+
+.optics-suggestion {
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #111827;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.optics-suggestion:hover,
+.optics-suggestion.is-active {
+  background: #f8fafc;
+}
+
 .run-header__title {
   margin: 0;
   font-family: "ABC Favorit Mono", "Courier New", monospace;

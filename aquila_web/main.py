@@ -46,6 +46,8 @@ if str(BASE_DIR) not in sys.path:
 RESULTS_DIR = BASE_DIR / "logs" / "results"
 PLOTS_DIR = BASE_DIR / "logs" / "plots"
 HISTORY_PATH = BASE_DIR / "logs" / "history.json"
+OPTICS_PATHS_PATH = BASE_DIR / "logs" / "optics_paths.json"
+OPTICS_PATHS_LIMIT = 20
 DEFAULT_PROFILE_DIR = BASE_DIR / "profiles"
 LOCAL_PROFILE_DIR = MODULE_BASE_DIR / "profiles"
 BUNDLED_PROFILE_DIR = DEFAULT_PROFILE_DIR / "bundled"
@@ -733,16 +735,45 @@ async def delete_history(payload: dict):
     _save_history(remaining)
     return {"ok": True, "remaining": len(remaining)}
 
+def _load_optics_paths() -> list[str]:
+    if not OPTICS_PATHS_PATH.exists():
+        return []
+    try:
+        with OPTICS_PATHS_PATH.open() as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return [str(p) for p in data if isinstance(p, str) and p.strip()]
+    except Exception:
+        return []
+    return []
+
+def _save_optics_paths(paths: list[str]) -> None:
+    OPTICS_PATHS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with OPTICS_PATHS_PATH.open("w") as f:
+        json.dump(paths, f, indent=2)
+
+def _remember_optics_path(path: str) -> list[str]:
+    """Add path to the front of the history (most-recent-first), deduped and capped."""
+    history = _load_optics_paths()
+    history = [p for p in history if p != path]
+    history.insert(0, path)
+    history = history[:OPTICS_PATHS_LIMIT]
+    _save_optics_paths(history)
+    return history
+
 @app.get("/dev/optics_path")
 async def get_dev_optics_path():
-    return {"path": dev_optics_path}
+    return {"path": dev_optics_path, "history": _load_optics_paths()}
 
 @app.post("/dev/optics_path")
 async def set_dev_optics_path(payload: dict):
     global dev_optics_path
     path = payload.get("path") if isinstance(payload, dict) else None
     dev_optics_path = path.strip() if path else None
-    return {"path": dev_optics_path}
+    history = _load_optics_paths()
+    if dev_optics_path:
+        history = _remember_optics_path(dev_optics_path)
+    return {"path": dev_optics_path, "history": history}
 
 @app.get("/run/name")
 async def get_run_name():
