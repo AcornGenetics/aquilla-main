@@ -18,6 +18,9 @@ The Raspberry Pi hardware serial number (from `/proc/cpuinfo`), used as the stab
 **Protocol**
 A named PCR assay profile — a JSON file in `profiles/` that defines thermal steps, cycle count, and optical configuration. The `title` field in the JSON is the canonical protocol name. Protocols are the primary grouping dimension for analytics (e.g., "inconclusive rate by protocol").
 
+**Profile**
+The operator-facing name for a Protocol. The Run screen labels the protocol picker "Profile," and protocols are stored on-disk as `profiles/*.json`. "Profile" is the correct term at the UI and on-disk-artifact layer; "Protocol" is the canonical analytics/domain term for the same thing. There is no case where a Profile is not a Protocol — they are the same concept named for two audiences.
+
 **Run**
 A single execution of a Protocol on a Sentri, producing results for up to 4 Wells. A Run has a start time, end time, and status (completed, aborted). A Run is the unit of event emission — one `run_complete` event per Run.
 
