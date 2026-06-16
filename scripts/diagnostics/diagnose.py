@@ -168,8 +168,25 @@ def _take_snapshot(label, csv_path, backend_pid, app_pid, app_url):
     print("Snapshot '%s' recorded." % label)
 
 
-def _run_scan(logger, app, lid, window):
+def _tail_to_tmp(path, n):
+    """Return a temp file containing the last n lines of path (or path itself if absent)."""
+    import tempfile
+    if not path or not os.path.exists(path):
+        return path
+    result = subprocess.run(["tail", "-n", str(n), path], capture_output=True, text=True, timeout=30)
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False)
+    tmp.write(result.stdout)
+    tmp.close()
+    return tmp.name
+
+
+def _run_scan(logger, app, lid, window, tail=None):
     scl = _import_sibling("scan_cancel_logs")
+    if tail:
+        logger = _tail_to_tmp(logger, tail)
+        app = _tail_to_tmp(app, tail)
+        if lid:
+            lid = _tail_to_tmp(lid, tail)
     return scl.scan(logger, app, lid, window)
 
 
@@ -209,6 +226,7 @@ def main(argv=None):
     parser.add_argument("--window", type=int, default=30, help="log window (seconds) around each cancel")
     parser.add_argument("--collect", action="store_true", help="bundle logs+snapshots+verdict for offline handoff")
     parser.add_argument("--session", default="sentri-diagnose", help="tmux session name")
+    parser.add_argument("--tail", type=int, default=10000, help="only scan the last N lines of each log (default 10000)")
     args = parser.parse_args(argv)
 
     os.makedirs(args.out, exist_ok=True)
@@ -244,7 +262,7 @@ def main(argv=None):
 
     # 4. Batch analysis
     print("\n--- Batch analysis ---\n")
-    cancel_reports = _run_scan(args.logger, args.app, args.lid, args.window)
+    cancel_reports = _run_scan(args.logger, args.app, args.lid, args.window, tail=args.tail)
     if not cancel_reports:
         print("No self-cancels found in logs.\n")
     else:
