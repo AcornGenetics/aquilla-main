@@ -11,7 +11,7 @@ Deploy order: merge PRs #141 → #142 → #143 into main first, then follow this
 ```bash
 # AWS CLI — authenticated
 brew install awscli
-aws configure   # enter Access Key ID, Secret, region (e.g. us-east-1), output json
+     # enter Access Key ID, Secret, region (e.g. us-east-1), output json
 
 # SAM CLI
 brew install aws-sam-cli

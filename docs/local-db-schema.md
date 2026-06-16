@@ -32,8 +32,6 @@ Every table carries `device_id TEXT`, a timestamp column, and `synced INTEGER NO
 | `alerts` | Threshold violations and system warnings |
 | `firmware_log` | Version history for every software component |
 | `process_health` | Heartbeat and liveness for each background thread |
-| `devices` | One record per physical instrument — assembly window, device notes |
-| `parts` | Every component installed on a device — BOM, batch, condition, known risks |
 
 ---
 
@@ -57,17 +55,15 @@ CREATE TABLE IF NOT EXISTS runs (
     operator_id         TEXT,
     protocol_name       TEXT    NOT NULL,
     protocol_version    TEXT,
-    plate_barcode       TEXT,
     sample_count        INTEGER,
     status              TEXT    NOT NULL DEFAULT 'pending',
         -- pending | running | completed | aborted | error
     started_at          TEXT    NOT NULL,
     completed_at        TEXT,
     aborted_at          TEXT,
-    abort_reason        TEXT,
+    abort_reason (ask ryan/jake)        TEXT,
     total_cycles        INTEGER,
     cycles_completed    INTEGER DEFAULT 0,
-    notes               TEXT,
     synced              INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -763,113 +759,4 @@ SELECT sampled_at, cpu_pct, cpu_temp_c, ram_pct, throttled
 FROM device_health
 WHERE run_id = ?
 ORDER BY sampled_at;
-```
-
----
-
-## devices
-
-One record per physical instrument. Captures the assembly window and any device-level observations
-that apply to the unit as a whole rather than a specific part.
-
-```sql
-CREATE TABLE IF NOT EXISTS devices (
-    id                  TEXT    PRIMARY KEY,        -- serial number e.g. "SN03"
-    assembled_start     TEXT,                       -- ISO8601 date assembly began
-    assembled_end       TEXT,                       -- ISO8601 date assembly completed
-    assembly_technician TEXT,                       -- who assembled it
-    assembly_location   TEXT,                       -- lab or facility name
-    hw_revision         TEXT,                       -- hardware revision of this unit e.g. "rev_B"
-    notes               TEXT,                       -- device-level observations e.g. "screen flickers during recipe runs"
-    retired             INTEGER NOT NULL DEFAULT 0, -- 1 if unit is no longer in service
-    retired_at          TEXT,
-    retired_reason      TEXT,
-    synced              INTEGER NOT NULL DEFAULT 0,
-    created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    updated_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-```
-
----
-
-## parts
-
-Every component installed on a device. One row per part per installation event —
-if a part is replaced, the old row gets `removed_at` filled in and a new row is inserted.
-
-Series classification follows the AQU-XXXX numbering convention:
-- **2000s** — purchased components (LEDs, springs, o-rings)
-- **3000s** — custom machined and molded parts
-- **4000s** — electrical components and PCBs
-- **7000s** — purchased assemblies (motors, terminated sensors)
-
-```sql
-CREATE TABLE IF NOT EXISTS parts (
-    id                  TEXT    PRIMARY KEY,        -- UUID generated locally
-    device_id           TEXT    NOT NULL REFERENCES devices(id),
-    part_number         TEXT    NOT NULL,           -- e.g. "AQU-3003"
-    series              INTEGER NOT NULL,           -- 2000 | 3000 | 4000 | 7000
-    description         TEXT    NOT NULL,           -- full part description
-    material            TEXT,                       -- e.g. "Al 6061 (Black Anodized II)", "PTFE"
-    supplier_part_number TEXT,                      -- supplier catalog number e.g. "SP-05-B3", "TEC-1089-SV-PT100"
-    supplier_url        TEXT,                       -- link to supplier listing
-    quantity            INTEGER NOT NULL DEFAULT 1,
-    batch_number        TEXT,                       -- e.g. "Arete Provided", "Ours", "Ours at present"
-    date_received       TEXT,                       -- ISO8601
-    installed_at        TEXT,                       -- ISO8601 — when this instance was installed
-    removed_at          TEXT,                       -- ISO8601 — NULL if still installed
-    removal_reason      TEXT,                       -- "failed" | "replaced" | "upgraded" | "returned"
-    -- Condition and risk tracking
-    install_condition   TEXT,
-        -- "ok" | "slightly bent during assembly" | "had to cut screw ourselves"
-        -- free text — whatever the technician observed at install time
-    known_risk          INTEGER NOT NULL DEFAULT 0, -- 1 if note flags a potential future failure
-    known_risk_detail   TEXT,
-        -- e.g. "U7 may have been stressed and could fail in future"
-        -- e.g. "lid power connection is loose on the board and wobbling"
-        -- e.g. "motor sticks at home and must be physically pushed"
-    risk_resolved       INTEGER NOT NULL DEFAULT 0, -- 1 if the risk was later addressed
-    risk_resolved_at    TEXT,
-    risk_resolved_notes TEXT,
-    -- Who did what
-    installed_by        TEXT,
-    inspected_by        TEXT,
-    inspected_at        TEXT,
-    notes               TEXT,                       -- general free-text notes
-    synced              INTEGER NOT NULL DEFAULT 0,
-    created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    updated_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-CREATE INDEX IF NOT EXISTS idx_parts_device      ON parts(device_id);
-CREATE INDEX IF NOT EXISTS idx_parts_number      ON parts(part_number);
-CREATE INDEX IF NOT EXISTS idx_parts_known_risk  ON parts(device_id, known_risk) WHERE known_risk = 1;
-CREATE INDEX IF NOT EXISTS idx_parts_installed   ON parts(device_id, removed_at);
-```
-
-### Useful parts queries
-
-```sql
--- All currently installed parts on a device
-SELECT part_number, series, description, material, batch_number, installed_at, install_condition
-FROM parts
-WHERE device_id = 'SN03' AND removed_at IS NULL
-ORDER BY series, part_number;
-
--- All active known risks across the fleet
-SELECT device_id, part_number, description, known_risk_detail, installed_at
-FROM parts
-WHERE known_risk = 1 AND risk_resolved = 0 AND removed_at IS NULL
-ORDER BY device_id, part_number;
-
--- Part replacement history for a specific component
-SELECT device_id, installed_at, removed_at, removal_reason, install_condition, notes
-FROM parts
-WHERE part_number = 'AQU-4001'
-ORDER BY device_id, installed_at;
-
--- All parts received on a given date
-SELECT device_id, part_number, description, batch_number, quantity
-FROM parts
-WHERE date_received = '2026-03-05'
-ORDER BY series, part_number;
 ```
