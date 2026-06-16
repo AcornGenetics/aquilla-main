@@ -599,6 +599,79 @@ a:active {
   background: #f8fafc;
 }
 
+.profile-combo {
+  position: relative;
+  width: 100%;
+}
+
+.profile-combo__native {
+  display: none;
+}
+
+.profile-combo__button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.profile-combo__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-combo__chevron {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: #64748b;
+  transition: transform 0.15s ease;
+}
+
+.profile-combo.is-open .profile-combo__chevron {
+  transform: rotate(180deg);
+}
+
+.profile-combo__list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+}
+
+.profile-combo__option {
+  padding: 12px 16px;
+  font-size: 18px;
+  color: #111827;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-combo__option:hover,
+.profile-combo__option.is-active {
+  background: #f8fafc;
+}
+
+.profile-combo__option.is-selected {
+  background: #eef2f7;
+  font-weight: 600;
+}
+
 .run-meta-divider {
   width: 1px;
   height: 40px;

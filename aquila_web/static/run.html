@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Run</title>
-  <link rel="stylesheet" href="static/styles.css?v=218" />
+  <link rel="stylesheet" href="static/styles.css?v=219" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -36,7 +36,15 @@
           <div class="run-meta run-meta--info">
             <div class="run-meta-item">
               <span class="run-meta-label">Profile</span>
-              <select id="mySelect" class="run-profile-select"></select>
+              <div class="profile-combo" id="profile-combo">
+                <select id="mySelect" class="profile-combo__native"></select>
+                <button type="button" class="run-profile-select profile-combo__button"
+                        id="profile-combo-button" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="profile-combo__label" id="profile-combo-label">Select a profile</span>
+                  <span class="profile-combo__chevron" aria-hidden="true">▾</span>
+                </button>
+                <ul class="profile-combo__list is-hidden" id="profile-combo-list" role="listbox"></ul>
+              </div>
             </div>
             <div class="run-meta-item">
               <span class="run-meta-label">Run Name</span>
@@ -153,7 +161,7 @@
     </main>
   </div>
   <script src="static/nav.js?v=1"></script>
-  <script src="static/script.js?v=68"></script>
+  <script src="static/script.js?v=69"></script>
   <script src="static/keyboard.js?v=14"></script>
 </body>
 </html>

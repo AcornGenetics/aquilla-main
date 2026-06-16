@@ -1075,9 +1075,116 @@ async function loadProfiles(){
             }
         });
 
+        renderProfileCombo();
+        syncProfileComboLabel();
+
     } catch (err) {
         console.error("Error loading profiles:" , err);
     }
+}
+
+// Custom profile dropdown: a styled, app-controlled list (consistent across
+// browsers/machines) layered over the hidden native <select id="mySelect">,
+// which stays the source of truth for the rest of the run logic.
+function renderProfileCombo() {
+    const select = document.getElementById("mySelect");
+    const list = document.getElementById("profile-combo-list");
+    if (!select || !list) {
+        return;
+    }
+    list.innerHTML = "";
+    Array.from(select.options).forEach((opt) => {
+        if (opt.disabled || opt.value === "") {
+            return; // skip the "Select a profile" placeholder
+        }
+        const li = document.createElement("li");
+        li.className = "profile-combo__option";
+        li.setAttribute("role", "option");
+        li.textContent = opt.textContent;
+        li.dataset.value = opt.value;
+        if (opt.selected) {
+            li.classList.add("is-selected");
+        }
+        li.addEventListener("click", () => {
+            Array.from(select.options).forEach((o) => { o.selected = (o === opt); });
+            select.value = opt.value;
+            closeProfileCombo();
+            syncProfileComboLabel();
+            // Drive the existing native-select change handler (POST + labels)
+            select.dispatchEvent(new Event("change"));
+        });
+        list.appendChild(li);
+    });
+}
+
+function syncProfileComboLabel() {
+    const select = document.getElementById("mySelect");
+    const label = document.getElementById("profile-combo-label");
+    const list = document.getElementById("profile-combo-list");
+    if (!select || !label) {
+        return;
+    }
+    const selected = select.selectedOptions && select.selectedOptions[0];
+    const hasRealSelection = selected && selected.value !== "";
+    label.textContent = hasRealSelection ? selected.textContent : "Select a profile";
+    if (list) {
+        Array.from(list.children).forEach((li) => {
+            li.classList.toggle("is-selected", hasRealSelection && li.dataset.value === select.value);
+        });
+    }
+}
+
+function closeProfileCombo() {
+    const combo = document.getElementById("profile-combo");
+    const list = document.getElementById("profile-combo-list");
+    const button = document.getElementById("profile-combo-button");
+    if (!combo || !list || !button) {
+        return;
+    }
+    combo.classList.remove("is-open");
+    list.classList.add("is-hidden");
+    button.setAttribute("aria-expanded", "false");
+}
+
+function openProfileCombo() {
+    const combo = document.getElementById("profile-combo");
+    const list = document.getElementById("profile-combo-list");
+    const button = document.getElementById("profile-combo-button");
+    if (!combo || !list || !button) {
+        return;
+    }
+    combo.classList.add("is-open");
+    list.classList.remove("is-hidden");
+    button.setAttribute("aria-expanded", "true");
+}
+
+function setupProfileCombo() {
+    const combo = document.getElementById("profile-combo");
+    const button = document.getElementById("profile-combo-button");
+    const list = document.getElementById("profile-combo-list");
+    if (!combo || !button || !list) {
+        return;
+    }
+    button.addEventListener("click", () => {
+        if (list.classList.contains("is-hidden")) {
+            openProfileCombo();
+        } else {
+            closeProfileCombo();
+        }
+    });
+    button.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeProfileCombo();
+        } else if (event.key === "ArrowDown" && list.classList.contains("is-hidden")) {
+            event.preventDefault();
+            openProfileCombo();
+        }
+    });
+    document.addEventListener("click", (event) => {
+        if (!combo.contains(event.target)) {
+            closeProfileCombo();
+        }
+    });
 }
 
 // Custom optics-path combobox: a styled, app-controlled dropdown (consistent
@@ -1248,6 +1355,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (stopRunButton) {
         stopRunButton.addEventListener("click", notifyStopRun);
+    }
+    if (typeof setupProfileCombo === "function") {
+        setupProfileCombo();
     }
     if (typeof loadProfiles === "function") {
         loadProfiles();
