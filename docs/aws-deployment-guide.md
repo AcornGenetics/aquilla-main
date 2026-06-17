@@ -72,6 +72,15 @@ aws cloudformation describe-stacks \
 
 ### 2. Create the Fleet API key
 
+> ⚠️ **Not enforced as currently deployed.** The stack deploys an HTTP API
+> (`AWS::Serverless::HttpApi`), which does not support API keys or usage plans —
+> a key created here cannot be attached to the ingest endpoint and is ignored by
+> the Lambda. The steps below describe the *intended* REST-API auth model. Until
+> the gateway is migrated, the `/ingest` endpoint accepts unauthenticated
+> requests and the "No API key → 403" check below will return `200`. See the
+> 2026-06-16 addendum in `docs/adr/ADR-009-analytics-ingest-api-gateway-lambda.md`
+> for the gap and the migration steps to make this real.
+
 SAM deploys the API Gateway but does not auto-create an API key.
 
 1. AWS Console → **API Gateway → API Keys → Create API Key**
@@ -129,7 +138,11 @@ curl -X POST \
   https://<id>.execute-api.us-east-1.amazonaws.com/prod/ingest
 ```
 
-### No API key — should return `403`
+### No API key — should return `403` (intended; currently returns `200`)
+
+> Until the gateway is migrated to a REST API with a usage plan (or in-Lambda
+> key validation is added), this request returns `200`, not `403` — the
+> `x-api-key` header is not checked. See the ADR-009 addendum.
 
 ```bash
 curl -X POST \
