@@ -1,6 +1,6 @@
 # ADR-013: Ingest moves to the sentri-analytics platform; device auth switches to mTLS
 
-**Status:** Accepted — supersedes ADR-009
+**Status:** Accepted — supersedes ADR-009; **amended by ADR-015** (its "ingest served by the ASG application" sub-decision is superseded — ingest now runs as a serverless Lambda pipeline in `acorn-analytics`; the mTLS/cert-CN decisions below remain in force)
 **Date:** 2026-06-17
 **Author:** Nicole Cornell
 **Deciders:** Nicole Cornell
