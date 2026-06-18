@@ -82,6 +82,38 @@ From my (the operator's) and the fleet's perspective:
 ### Verification script
 - A device-side script loads the Device Certificate from `device.env`, **POSTs a sample Event over mTLS** to the Ingest Endpoint, then **confirms the resulting object exists in `RawEventsBucket`**. Negative cases (no cert / expired / wrong-CA) must fail the handshake and land nothing.
 
+## Cloud Prerequisites
+
+This slice documents a chain whose **cloud half must exist for the acceptance test to run**. Built against **this repo's existing SAM stack** (`infra/template.yaml`) — not the full Sentri Analytics Platform edge (see Out of Scope) — in this order:
+
+> **Ownership — here vs. the platform.** In the **production end-state**, these are **Sentri Analytics Platform (`Acorn/sentri-analytics`) deliverables**: the platform owns ingest, so the real mTLS gateway, truststore, and signing/renewal endpoint live there (see the migration PRD's Out of Scope). The **CA itself is standalone** — a KMS key + S3 truststore consumed by *both* repos, deliberately **not** owned inside either app's code (ADR-014 rejected "CA owned inside aquila-main or sentri-analytics application code" to keep trust single-owned).
+>
+> This slice builds a **proof-harness version here, transiently**, because its purpose is to prove ADR-014 works *before* the platform edge exists. To avoid rework, create the **KMS key + S3 truststore as standalone AWS resources** (so the same CA carries over to the platform); only the **bootstrap script and the proof signing endpoint live transiently in `aquila-main`** and are retired when the platform edge ships and the old SAM ingest stack is decommissioned (migration PRD cutover).
+
+### 1. CA / PKI — the root of trust
+- A **KMS asymmetric key** (usage `SIGN_VERIFY`, non-extractable) — this *is* the CA private key.
+- A **one-time CA bootstrap**: read the KMS public key, assemble the self-signed root by calling `kms:Sign`, and **upload the root (truststore) to S3**. Enable **bucket versioning** — API Gateway mTLS pins a truststore object *version*.
+- **IAM**: a role permitted to call `kms:Sign` on that key, granted only to the signing path (§2).
+
+### 2. Enrollment / signing endpoint — what `deployment2.sh` calls
+- A **hosted function** (Lambda + an HTTPS front: API Gateway or Lambda Function URL) that accepts a CSR + enrollment password, **verifies the password**, calls `kms:Sign`, and returns the signed Device Certificate.
+- The **enrollment secret** stored in Secrets Manager / SSM Parameter Store.
+- **Chicken-and-egg constraint:** this endpoint **cannot** be mTLS-protected — the device has no certificate yet — which is precisely why it is **password-gated**. It is the one cloud surface authenticated by the operator password rather than by a certificate.
+
+### 3. mTLS Ingest Endpoint — where the certificate is proven
+API Gateway mTLS is **more than a flag**: it requires a custom domain. On the existing `AWS::Serverless::HttpApi`:
+- a **custom domain name**,
+- an **ACM (or imported) server certificate** for that domain,
+- a **Route 53 / DNS** record,
+- `mutualTlsAuthentication` pointing at the **S3 truststore URI + version** from §1,
+- `disableExecuteApiEndpoint = true` so only the mTLS path is reachable.
+- **No revocation:** API Gateway mTLS performs no CRL/OCSP checking — which is *why* ADR-014 relies on short-lived certs + revocation-by-non-renewal, not on the gateway revoking.
+
+### 4. Data sink — already exists, reused
+- The existing **`S3ArchiverFunction` → `RawEventsBucket` (`sentri-raw-events-${AccountId}`)** path. **Nothing new** — landing an Event here is the proof.
+
+> **Minimum to make this slice verifiable:** §1, §2, and the custom-domain/ACM/truststore additions in §3, against this repo's SAM stack. Everything else (the full platform edge) is Out of Scope.
+
 ## Testing Decisions
 
 Good tests assert **external behavior at the highest available seam** — what the device puts on the wire, what the signing path returns for good vs. bad input, and what infra resources exist — not internal call order. Mock the network boundary (`requests.post`) and AWS boundaries (botocore `Stubber` / `tmp_path`) rather than reaching for real services in unit tests.
