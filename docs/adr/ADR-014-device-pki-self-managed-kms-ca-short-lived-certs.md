@@ -56,6 +56,83 @@ Relevant facts and constraints at decision time:
    environment needs ingest traffic, it uses simulation mode (ADR-007) or
    throwaway certs, not physical hardware.
 
+## Self-managed CA with key in AWS KMS — what it actually means
+
+A **Certificate Authority** is just two things: a private key, and a public
+certificate signed by that key. Anyone can "be" a CA — what makes a CA
+trustworthy is that other parties agree to trust its public cert. The
+hard/sensitive part is the **private key**: whoever holds it can mint certs that
+your whole fleet will trust. Protecting that key *is* the job of running a CA.
+
+ACM Private CA is AWS's **managed** version: AWS holds the key, runs the issuance
+API, handles the HSM — and charges ~$400/mo (or ~$50/mo short-lived mode) for
+that convenience.
+
+**"Self-managed CA, key in KMS"** means you run the CA yourself, but you don't
+hold the raw private key either — you delegate just the key custody to AWS KMS.
+Here's the split:
+
+### The pieces
+
+1. **The CA private key = a KMS asymmetric key.** You create an asymmetric key
+   pair in KMS (e.g. RSA or ECC, usage = `SIGN_VERIFY`). The private key is
+   **non-extractable** — it physically never leaves the KMS HSM. There is no API
+   to download it. You can only ask KMS to *sign bytes* on your behalf.
+2. **The CA public certificate = a self-signed root.** You generate a self-signed
+   root certificate whose public key is the KMS key's public half, and whose
+   signature was produced by calling KMS `Sign`. This cert is the CA — it's safe
+   to publish.
+3. **The truststore = that public cert in S3.** API Gateway HTTP API mTLS reads
+   this CA bundle from S3 and uses it to validate incoming device certs. (This is
+   the part `sentri-analytics-system-design.md` already specified.)
+
+### How issuing a device cert works
+
+```
+Pi generates keypair locally ──► builds CSR (CN = Device ID)
+                                      │
+                                      ▼
+              signing endpoint receives CSR
+                                      │
+                       hashes the to-be-signed cert
+                                      │
+                                      ▼
+                    KMS Sign API  (private key stays in HSM)
+                                      │
+                       returns signature bytes
+                                      │
+                                      ▼
+        assemble signed X.509 cert ──► hand back to Pi
+```
+
+You never `openssl` with a key file on disk. Wherever a normal CA would do
+`sign(tbsCertificate, caPrivateKey)`, you instead call
+`kms:Sign(tbsCertificate, KeyId)`. KMS returns the signature, and you staple it
+onto the certificate. The device's own private key, meanwhile, never leaves the
+Pi — only its CSR travels.
+
+### Why this was chosen
+
+| Concern | How this approach handles it |
+|---|---|
+| **Cost** | ~$1/mo (a KMS key is ~$1/mo + per-sign calls) vs ~$400/mo for ACM PCA |
+| **Key custody** | Non-extractable HSM-backed key — same security property as the managed offering |
+| **Truststore** | Identical outcome: one CA public cert in S3, consumed by API Gateway mTLS |
+| **Trust ownership** | Single CA owned in one place, so the S3 truststore can never drift out of sync with the issuer |
+
+So you get **HSM-grade key protection** (the expensive, security-critical part)
+from KMS at commodity price, while you own the cheap, easy parts (generating
+CSRs, assembling certs, publishing the truststore). The ~$399/mo you save is
+essentially the fee ACM charges to also run the issuance plumbing — plumbing
+that's trivial at a <100-device scale.
+
+### The catch
+
+You're now responsible for the issuance code and the renewal flow (the renewal
+daemon on each Pi + the signing endpoint). KMS only protects the *key* — it
+doesn't run the CA logic for you. That operational burden is the explicit
+tradeoff this ADR accepted in exchange for dropping the managed-CA cost.
+
 ## Consequences
 
 ### Positive
