@@ -62,10 +62,26 @@ def get_threshold(ydata, baseline_slice):
     return threshold, baseline_mean
 
 
-def sustained_rise_index(ydata, threshold, min_consecutive):
+def trough_index(ydata):
+    """Index where the initial downward dip bottoms out (curve minimum).
+
+    Everything before this is the optical baseline artifact (initial hump /
+    descent); the genuine amplification begins at or after the trough.
+    """
+    if len(ydata) == 0:
+        return 0
+    return int(np.argmin(ydata))
+
+
+def sustained_rise_index(ydata, threshold, min_consecutive, floor=0):
+    """First index of a sustained run of >= min_consecutive points above
+    threshold. ``floor`` skips the leading dip artifact: scanning starts at
+    ``floor`` so a hump before the trough cannot anchor the rise at index 0.
+    """
+    floor = max(0, floor)
     count = 0
-    for idx, val in enumerate(ydata):
-        if val >= threshold:
+    for idx in range(floor, len(ydata)):
+        if ydata[idx] >= threshold:
             count += 1
             if count >= min_consecutive:
                 return idx - min_consecutive + 1

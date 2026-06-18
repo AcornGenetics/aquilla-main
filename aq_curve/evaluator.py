@@ -7,6 +7,7 @@ from aq_curve.pcr_curve_helpers import (
     get_curve_data,
     get_threshold,
     sustained_rise_index,
+    trough_index,
 )
 
 
@@ -87,7 +88,10 @@ def check_log_phase_linearity(curve_data, curve):
     threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
     cq = compute_cq(xdata, y_corrected, threshold, min_consecutive)
-    start = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    # Anchor the rise scan at the dip trough so the leading optical artifact
+    # cannot mis-anchor the log phase at index 0.
+    floor = trough_index(y_corrected)
+    start = sustained_rise_index(y_corrected, threshold, min_consecutive, floor=floor)
     if start is None:
         return False
     end = _find_log_phase_end(y_corrected, start)
@@ -195,10 +199,17 @@ def check_sigmoidal_profile(curve_data, curve):
     amplitude_fraction = (max_val - baseline_mean) / max_val
     if amplitude_fraction < min_peak_fraction:
         return False
-    start = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    # Anchor the rise scan at the dip trough so the leading optical artifact
+    # cannot mis-anchor it at index 0, then measure the slope over the log
+    # phase only ([start:end]). Fitting through the trailing plateau dilutes
+    # the slope for late risers; fitting from the trough adds a long flat
+    # baseline for late risers. The log-phase window avoids both.
+    floor = trough_index(y_corrected)
+    start = sustained_rise_index(y_corrected, threshold, min_consecutive, floor=floor)
     if start is None:
         return False
-    slope = float(np.polyfit(xdata[start:], y_corrected[start:], 1)[0])
+    end = _find_log_phase_end(y_corrected, start)
+    slope = float(np.polyfit(xdata[start:end + 1], y_corrected[start:end + 1], 1)[0])
     signal_range = float(np.max(y_corrected)) - float(np.min(y_corrected))
     post_rise_min = config.get_float("PCR_POST_RISE_SLOPE_MIN")
     return slope >= post_rise_min * signal_range
@@ -411,7 +422,9 @@ def _compute_stable_slope_cv(curve_data, curve):
     xdata, y_corrected, _ = curve_data
     threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
-    start = sustained_rise_index(y_corrected, threshold, min_consecutive)
+    # Skip the leading dip artifact when locating the log phase.
+    floor = trough_index(y_corrected)
+    start = sustained_rise_index(y_corrected, threshold, min_consecutive, floor=floor)
     if start is None:
         return None
     end = _find_log_phase_end(y_corrected, start)
