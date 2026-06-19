@@ -37,6 +37,12 @@ One of 2 optical measurement channels: `fam` or `rox`. Channels are labels for o
 **Call**
 The analytical outcome for a single Well × Channel pair within a Run. One of: `Detected`, `Not Detected`, `Inconclusive`, `ROX Unavailable`. A Run produces up to 8 Calls (4 wells × 2 channels).
 
+**Well Verdict**
+The single aggregated outcome for a Well, derived from its two Channel Calls for display in the History detail view. One of: `Detected`, `Inconclusive`, `Not Detected`. Resolved by precedence **Detected > Inconclusive > Not Detected** — a Well is Detected if *any* Channel is Detected, else Inconclusive if any Channel is Inconclusive, else Not Detected. A `ROX Unavailable` Call is excluded from the verdict (the Well Verdict then comes from FAM alone). Distinct from a Call: a Call is per Channel; a Well Verdict is per Well. The Well Verdict drives the pill color and the Detected/Inconclusive KPI counts (a Well counts toward exactly one bucket — its verdict), while the pill *text* still names both Channels' individual Calls. Note: the Well Verdict does **not** drive [[QC Status]] — QC is evaluated on the underlying Channel Calls, so an Inconclusive Channel still flags QC even when the Well Verdict is Detected. (Earlier the precedence was Inconclusive > Detected; see ADR for the reversal.)
+
+**QC Status**
+A run-level Pass / Review badge on the History detail view, derived from the Channel Calls (not the Well Verdict). `Review` if *any* Channel on *any* Well has an `Inconclusive` Call (excluding `ROX Unavailable`); otherwise `Pass`. It is channel-sensitive by design: because the Well Verdict precedence is Detected-wins, a Detected Well can still contain an Inconclusive Channel, and QC must surface that rather than let a Detected verdict mask it. There is no `Fail` state. UI-only — not stored or synced.
+
 **Cq (Cycle Quantification)**
 The fractional PCR cycle at which a Well's fluorescence crosses the detection threshold. `null` when the Call is Not Detected or Inconclusive. Stored as a float rounded to 2 decimal places.
 
