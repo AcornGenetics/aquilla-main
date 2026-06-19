@@ -186,3 +186,37 @@ def test_help_keeps_existing_pages(client):
         assert target in html, f"Help lost its {target} page"
     assert "Run Detail" in html
     assert "Starting a Run" in html
+
+
+# ---------------------------------------------------------------------------
+# Slice 11 — Settings nav must not push the header taller (layout regression)
+# ---------------------------------------------------------------------------
+#
+# The wider nav (extra Settings link) squeezed the no-wrap flex header, wrapping
+# multi-word titles like "Saved Profiles" onto two lines, growing the header
+# height and shoving the table down. The base .run-header__title rule must pin
+# the title to a single line so the header height stays constant.
+
+import re
+
+
+def _base_title_rule(css):
+    """Return the body of the top-level `.run-header__title { ... }` rule.
+
+    Excludes the responsive `@media` override (which is nested and only
+    restates font-size).
+    """
+    match = re.search(r"\n\.run-header__title\s*\{([^}]*)\}", css)
+    assert match, "styles.css lost its base .run-header__title rule"
+    return match.group(1)
+
+
+@pytest.mark.contract
+def test_header_title_does_not_wrap():
+    """The title stays on one line so the wider nav can't grow header height."""
+    css = (STATIC / "styles.css").read_text()
+    rule = _base_title_rule(css)
+    assert "white-space: nowrap" in rule, (
+        "run-header__title must set white-space: nowrap so multi-word titles "
+        "(e.g. 'Saved Profiles') don't wrap when the nav widens"
+    )

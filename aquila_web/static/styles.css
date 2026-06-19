@@ -205,6 +205,7 @@ a:active {
   font-family: "ABC Favorit Mono", "Courier New", monospace;
   font-size: 34px;
   color: #1a1c1c;
+  white-space: nowrap;
 }
 
 .run-header__nav {
