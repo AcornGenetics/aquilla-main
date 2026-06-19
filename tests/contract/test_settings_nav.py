@@ -252,3 +252,161 @@ def test_update_badge_has_positioned_ancestor_on_settings_link():
         "add position: relative to .settings-link (or .run-nav-link) so the "
         "badge anchors to the Settings tab instead of the viewport corner"
     )
+
+
+# ===========================================================================
+# Suite — defensive coverage for the new Settings-nav + OTA-badge wiring.
+#
+# The two visual bugs we hit (header height growth, badge in the viewport
+# corner) shared a root cause: a cross-file contract (HTML class <-> nav.js
+# selector <-> CSS rule) that no test enforced. These slices lock those
+# contracts down so a future markup/JS/CSS rename can't silently break the
+# Settings tab or its update badge. NB: true pixel layout (overflow, wrapping
+# under a real viewport) can't be asserted from a TestClient — those remain
+# manual/visual checks; here we pin the structural invariants behind them.
+# ===========================================================================
+
+# Live, route-reachable nav pages and their backing static files.
+# (profiles.html, ready.html, login.html are NOT live nav pages: the first two
+# have no route, login carries no nav.)
+LIVE_NAV_ROUTES = NAV_ROUTES + ["/settings"]
+LIVE_NAV_PAGE_FILES = [
+    "run.html",
+    "history.html",
+    "history_detail.html",
+    "profiles/index.html",
+    "profiles/edit_form.html",
+    "complete.html",
+    "help.html",
+    "settings.html",
+]
+
+
+def _navjs_badge_class():
+    """The class nav.js assigns to the update-badge element it creates."""
+    navjs = (STATIC / "nav.js").read_text()
+    match = re.search(r"\.className\s*=\s*[\"']([^\"']+)[\"']", navjs)
+    assert match, "nav.js no longer sets a className on the update badge element"
+    return match.group(1)
+
+
+def _navjs_badge_target_class():
+    """The anchor class nav.js queries to host the update badge."""
+    navjs = (STATIC / "nav.js").read_text()
+    match = re.search(r'querySelectorAll\(\s*[\"\']a\.([A-Za-z0-9_-]+)[\"\']', navjs)
+    assert match, "nav.js no longer queries an anchor class for the update badge"
+    return match.group(1)
+
+
+# ---------------------------------------------------------------------------
+# Slice 13 — the badge class nav.js creates is actually styled & positioned
+# ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+def test_update_badge_class_is_styled_and_absolutely_positioned():
+    """nav.js's badge class must map to a CSS rule that positions it as a dot.
+
+    Guards against a rename drift where nav.js creates e.g. .update-badge but
+    CSS only styles .help-badge, leaving a bare unstyled '1' in the layout.
+    """
+    badge_class = _navjs_badge_class()
+    css = (STATIC / "styles.css").read_text()
+    body = _rule_body(css, "." + badge_class)
+    assert body is not None, (
+        f"nav.js creates <span class='{badge_class}'> but styles.css has no "
+        f".{badge_class} rule; the badge would render unstyled"
+    )
+    assert "position: absolute" in body, (
+        f".{badge_class} must be position:absolute to sit on the tab corner"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Slice 14 — badge insertion is idempotent (no stacking duplicate dots)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+def test_update_badge_insertion_is_idempotent():
+    """nav.js must check for an existing badge (same class) before appending."""
+    navjs = (STATIC / "nav.js").read_text()
+    badge_class = _navjs_badge_class()
+    assert f'querySelector(".{badge_class}")' in navjs, (
+        "nav.js appends the update badge without first checking for an existing "
+        f".{badge_class}; re-running checkUpdateBadge would stack duplicate dots"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Slice 15 — the nav.js selector matches the served Settings link element
+# ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+@pytest.mark.parametrize("route", LIVE_NAV_ROUTES)
+def test_navjs_badge_target_present_as_anchor(client, route):
+    """Every live nav page renders an <a> carrying the class nav.js queries.
+
+    If the HTML class and the nav.js selector drift apart, querySelectorAll
+    returns nothing and the badge silently never appears.
+    """
+    target = _navjs_badge_target_class()  # e.g. "settings-link"
+    html = client.get(route).text
+    assert re.search(rf'<a[^>]*class="[^"]*\b{re.escape(target)}\b', html), (
+        f"{route}: nav.js targets a.{target} for the badge, but no anchor on "
+        f"the page carries that class"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Slice 16 — every live nav page actually loads nav.js
+# ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+@pytest.mark.parametrize("route", LIVE_NAV_ROUTES)
+def test_nav_pages_load_navjs(client, route):
+    """The badge logic only runs if the page includes nav.js."""
+    html = client.get(route).text
+    assert "nav.js" in html, (
+        f"{route} renders the nav but never loads nav.js, so the update badge "
+        f"can never appear there"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Slice 17 — exactly one Settings link per page (one badge anchor)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+@pytest.mark.parametrize("route", LIVE_NAV_ROUTES)
+def test_single_settings_link_per_page(client, route):
+    """Duplicate settings-link anchors would each receive their own badge."""
+    target = _navjs_badge_target_class()
+    html = client.get(route).text
+    count = len(re.findall(rf'class="[^"]*\b{re.escape(target)}\b', html))
+    assert count == 1, (
+        f"{route} has {count} '{target}' anchors; expected exactly one so the "
+        f"badge has a single, unambiguous home"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Slice 18 — shared stylesheet cache-buster is uniform across live pages
+# ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+def test_stylesheet_cache_buster_is_uniform_across_live_pages():
+    """All live pages must pin the same styles.css?v=N.
+
+    They share one stylesheet, so a divergent ?v= means some pages render with
+    stale cached CSS — exactly how a CSS fix can ship yet not take effect.
+    """
+    versions = {}
+    for rel in LIVE_NAV_PAGE_FILES:
+        text = (STATIC / rel).read_text()
+        match = re.search(r"styles\.css\?v=(\d+)", text)
+        assert match, f"{rel} does not version-pin styles.css"
+        versions[rel] = match.group(1)
+    unique = sorted(set(versions.values()))
+    assert len(unique) == 1, (
+        f"live nav pages disagree on the styles.css cache-buster {unique}; some "
+        f"will load stale CSS. Per-page versions: {versions}"
+    )
