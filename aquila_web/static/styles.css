@@ -1710,7 +1710,10 @@ a:active {
   }
 
   .run-header__title {
-    font-size: 39px;
+    /* 32px (not 39px) so a wide title — "Saved Profiles", "Edit Run Profile" —
+       fits on one row beside the wider nav (Settings link added) at the 768px
+       kiosk width, instead of forcing the nav to wrap and growing the header. */
+    font-size: 32px;
   }
 
   .run-nav-link {
@@ -1745,13 +1748,16 @@ a:active {
 
   .run-optics-tab {
     width: auto;
-    max-width: 320px;
-    flex: 1 1 280px;
+    /* Don't grow to fill the row: at the 768px kiosk width the dev-only optics
+       field would otherwise expand and push the wider nav onto a second line,
+       growing the header. Sized to its content so title + optics + nav fit. */
+    max-width: 280px;
+    flex: 0 1 auto;
     justify-content: flex-start;
   }
 
   .run-optics-tab input {
-    width: 160px;
+    width: 120px;
     min-width: 0;
   }
 
