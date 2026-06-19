@@ -237,6 +237,13 @@ a:active {
   background-color: transparent;
 }
 
+/* Positioned ancestor so the absolutely-positioned .help-badge (OTA update
+   indicator, appended here by nav.js) anchors to the Settings tab rather
+   than the viewport. */
+.settings-link {
+  position: relative;
+}
+
 .help-link {
   position: relative;
   width: 32px;

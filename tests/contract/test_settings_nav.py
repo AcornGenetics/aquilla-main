@@ -220,3 +220,35 @@ def test_header_title_does_not_wrap():
         "run-header__title must set white-space: nowrap so multi-word titles "
         "(e.g. 'Saved Profiles') don't wrap when the nav widens"
     )
+
+
+# ---------------------------------------------------------------------------
+# Slice 12 — OTA update badge needs a positioned ancestor on the Settings link
+# ---------------------------------------------------------------------------
+#
+# .help-badge is position:absolute (top/right:-4px). nav.js appends it to
+# a.settings-link, so the badge needs a positioned ancestor there or it anchors
+# to the viewport and floats the red "1" into the screen corner. The Settings
+# link (.settings-link, a .run-nav-link) must establish a positioning context.
+
+def _rule_body(css, selector):
+    """Return the body of the top-level `selector { ... }` rule, or None."""
+    match = re.search(r"\n" + re.escape(selector) + r"\s*\{([^}]*)\}", css)
+    return match.group(1) if match else None
+
+
+@pytest.mark.contract
+def test_update_badge_has_positioned_ancestor_on_settings_link():
+    """The Settings link must be position:relative so the badge anchors to it."""
+    css = (STATIC / "styles.css").read_text()
+    # The badge is positioned relative to its nearest positioned ancestor; for
+    # the Settings tab that must be .settings-link itself or the shared
+    # .run-nav-link rule.
+    candidates = [_rule_body(css, ".settings-link"), _rule_body(css, ".run-nav-link")]
+    assert any(
+        body and "position: relative" in body for body in candidates
+    ), (
+        "the OTA badge appended to a.settings-link has no positioned ancestor; "
+        "add position: relative to .settings-link (or .run-nav-link) so the "
+        "badge anchors to the Settings tab instead of the viewport corner"
+    )
