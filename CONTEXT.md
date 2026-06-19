@@ -7,7 +7,10 @@ This glossary defines canonical terms for the analytics domain. Terms here take 
 ## Glossary
 
 **Sentri**
-A single physical Aquilla PCR instrument — a Raspberry Pi running the Aquilla software stack in Docker. "Device" and "Sentri" are synonymous; prefer "Sentri" in analytics contexts to avoid ambiguity with AWS/cloud "devices."
+The product brand for the PCR instrument: a single physical unit — a Raspberry Pi running the device software stack in Docker. "Device" and "Sentri" are synonymous; prefer "Sentri" in analytics contexts to avoid ambiguity with AWS/cloud "devices." The device application and its repository (`AcornGenetics/sentri`) carry the brand name; the cloud system is the separate [[Sentri Analytics Platform]] (`Acorn/sentri-analytics`). See [[Aquila]] for the retired codename.
+
+**Aquila** _(retired codename)_
+The internal pre-launch codename for what is now the Sentri device and app. Fully retired from source by the brand rename, including the `aq_` package prefix (`aq_lib`→`sentri_lib`, `aq_curve`→`sentri_curve`). Survives only in the `AQ_` environment-variable prefix (e.g. `AQ_SYNC_DEVICE_ID`), which is deliberately left unchanged for operational safety — those vars are a stateful contract with the live fleet and `AQ_SYNC_DEVICE_ID` is cert-bound identity. Spelled `aquilla` (double-l) only in the old repository name `aquilla-main`. Listed here to mark the term obsolete in prose; prefer "Sentri."
 
 **Fleet**
 The collection of all deployed Sentri units. Analytics queries span the fleet; device-level queries scope to a single Sentri. There is one prod fleet; there is no separate physical "dev fleet."
