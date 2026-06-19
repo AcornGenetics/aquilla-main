@@ -35,6 +35,11 @@ DEV_OPTICS_PATH = os.getenv("AQ_DEV_OPTICS_PATH")
 dev_optics_path = DEV_OPTICS_PATH
 DEV_DRAWER_OPEN_SECONDS = float(os.getenv("AQ_DEV_DRAWER_OPEN_SECONDS", "3"))
 DEV_DRAWER_CLOSE_SECONDS = float(os.getenv("AQ_DEV_DRAWER_CLOSE_SECONDS", "3"))
+# Dev-simulation overrides — force UI states that normally require real hardware
+# or external services, so they can be exercised locally. To add another, follow
+# this same pattern (AQ_DEV_<THING> -> module flag) and honour it at the seam
+# that produces the state. See get_update_status() for AQ_DEV_UPDATE_AVAILABLE.
+DEV_UPDATE_AVAILABLE = os.getenv("AQ_DEV_UPDATE_AVAILABLE", "0") == "1"
 run_in_progress = False
 MODULE_BASE_DIR = Path(__file__).resolve().parents[1]
 if str(MODULE_BASE_DIR) not in sys.path:
@@ -1606,10 +1611,19 @@ async def _do_check_update() -> None:
 
 @app.get("/update/status")
 async def get_update_status():
+    available = _update_available
+    status = _update_status
+    # Dev simulation (AQ_DEV_UPDATE_AVAILABLE): force an available update so the
+    # nav badge, the Updates sub-tab dot, and the apply-flow can be exercised
+    # locally without real registry credentials. Honours dismissal, and
+    # /update/reset clears the dismissal — so the full lifecycle stays testable.
+    if DEV_UPDATE_AVAILABLE and not _update_dismissed:
+        available = True
+        status = "available"
     return {
-        "available": _update_available,
+        "available": available,
         "dismissed": _update_dismissed,
-        "status": _update_status,
+        "status": status,
         "error": _update_error,
         "last_checked": _update_last_checked,
     }
