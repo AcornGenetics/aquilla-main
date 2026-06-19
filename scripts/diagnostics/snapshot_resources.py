@@ -188,7 +188,7 @@ def _button_p95(app_url, n=20):
 
 
 # Where the run history file may live, most-specific first. The real device
-# path is logs/history.json (aquila_web.main: BASE_DIR/"logs"/"history.json");
+# path is logs/history.json (sentri_web.main: BASE_DIR/"logs"/"history.json");
 # data/ and bare are fallbacks for Docker/other layouts.
 HISTORY_CANDIDATES = ("logs/history.json", "data/history.json", "history.json")
 

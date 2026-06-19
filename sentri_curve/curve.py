@@ -4,12 +4,12 @@ import os
 import json
 import logging
 from pathlib import Path
-from aq_curve.evaluator import evaluate_curve
-from aq_curve import pcr_curve_config as config
-from aq_curve.pcr_curve_helpers import compute_cq, get_curve_data, get_threshold
+from sentri_curve.evaluator import evaluate_curve
+from sentri_curve import pcr_curve_config as config
+from sentri_curve.pcr_curve_helpers import compute_cq, get_curve_data, get_threshold
 from config import get_src_basedir
 
-logger = logging.getLogger("aquila")
+logger = logging.getLogger("sentri")
 
 
 class Curve:
@@ -83,7 +83,7 @@ class Curve:
         position = well + dpos
 
         # Intentionally uses 4 readings per cycle (indices 6–9 of each group of 10).
-        # The reference notebook uses 5; Aquila hardware outputs 4 valid LED-on readings.
+        # The reference notebook uses 5; Sentri hardware outputs 4 valid LED-on readings.
         sub_data = [d for n, d in enumerate(dye_subdata) if ((n % 10) > 5)]
         if not sub_data:
             raise ValueError(f"No optics data found for dye '{dye}' in {logfilename!r} — wrong file type?")

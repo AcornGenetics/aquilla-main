@@ -5,13 +5,13 @@
 **Last updated:** 2026-06-02
 **GitHub issue:** #92
 **Affected screens:** N/A
-**Source file(s):** `aquila_web/static/help.html`
+**Source file(s):** `sentri_web/static/help.html`
 
 ---
 
 ## 1. Overview
 
-Renamed `Not Detected` to be `Undetected` under Results section of `aquila_web/static/help.html`. Additionally, added a section detailing extra steps if an `Unconclusive` status is given as a result.
+Renamed `Not Detected` to be `Undetected` under Results section of `sentri_web/static/help.html`. Additionally, added a section detailing extra steps if an `Unconclusive` status is given as a result.
 
 ---
 

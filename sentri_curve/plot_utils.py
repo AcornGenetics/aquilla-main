@@ -5,8 +5,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from aq_curve.curve import Curve
-from aq_curve.pcr_curve_helpers import get_curve_data
+from sentri_curve.curve import Curve
+from sentri_curve.pcr_curve_helpers import get_curve_data
 
 
 def _max_cycle_from_log(optics_path: str) -> float | None:

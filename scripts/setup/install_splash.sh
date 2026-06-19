@@ -20,7 +20,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 # ── Download splash page ──────────────────────────────────────────────────────
 echo "  → Downloading splash.html..."
-curl -fsSL "${RAW_REPO_URL}/aquila_web/static/splash.html" -o /opt/aquila/splash.html
+curl -fsSL "${RAW_REPO_URL}/sentri_web/static/splash.html" -o /opt/aquila/splash.html
 echo "  ✓ splash.html installed to /opt/aquila/splash.html"
 
 # ── Update Openbox autostart if needed ───────────────────────────────────────

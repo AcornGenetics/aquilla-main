@@ -1,5 +1,5 @@
-import aq_lib.regulate
-from aq_lib.regulate import lid_heater_worker 
+import sentri_lib.regulate
+from sentri_lib.regulate import lid_heater_worker 
 import time
 
 def main():
@@ -14,7 +14,7 @@ def main():
     import logging.config
 
     sys.path.append ( ".." )
-    from aq_lib.utils import LOGGING_CONFIG
+    from sentri_lib.utils import LOGGING_CONFIG
     logging.config.dictConfig( LOGGING_CONFIG )
 
     stop_event = Event()

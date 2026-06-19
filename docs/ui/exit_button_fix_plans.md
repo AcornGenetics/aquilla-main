@@ -8,7 +8,7 @@
 
 ## Diagnosis
 
-The exit button has a **two-step flow** in `aquila_web/static/script.js:674-698`:
+The exit button has a **two-step flow** in `sentri_web/static/script.js:674-698`:
 
 1. `POST /button/exit` → FastAPI backend (sets `exit_button = True`) — **works fine**
 2. `POST /kiosk-control/exit-kiosk` → nginx proxy → host kiosk-control service (actually kills Chromium) — **broken**
@@ -65,7 +65,7 @@ The backend already has `httpx`, `_kiosk_post()`, and `KIOSK_CONTROL_URL` — it
 
 ### Files to change
 
-**`aquila_web/main.py`** — add kiosk-control forwarding inside `button_exit()` (`main.py:794`):
+**`sentri_web/main.py`** — add kiosk-control forwarding inside `button_exit()` (`main.py:794`):
 
 ```python
 @app.post("/button/exit")
@@ -90,7 +90,7 @@ backend:
     - "host.docker.internal:host-gateway"
 ```
 
-**`aquila_web/static/script.js`** — simplify `notifyExit()` to remove the second fetch, since the backend now handles it. The single `POST /button/exit` does everything:
+**`sentri_web/static/script.js`** — simplify `notifyExit()` to remove the second fetch, since the backend now handles it. The single `POST /button/exit` does everything:
 
 ```js
 async function notifyExit() {
@@ -127,7 +127,7 @@ backend:
     - /tmp/aquila-ipc:/tmp/aquila-ipc   # add alongside existing volumes
 ```
 
-**`aquila_web/main.py`** — write sentinel file in `button_exit()`:
+**`sentri_web/main.py`** — write sentinel file in `button_exit()`:
 
 ```python
 import pathlib
@@ -148,7 +148,7 @@ async def button_exit():
     return {"ok": True}
 ```
 
-**`aquila_web/static/script.js`** — simplify `notifyExit()` (same as Plan 2, remove second fetch).
+**`sentri_web/static/script.js`** — simplify `notifyExit()` (same as Plan 2, remove second fetch).
 
 **Host-side watcher** — add to `deployment2.sh` or a new systemd unit. Simple polling loop:
 

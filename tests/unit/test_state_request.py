@@ -1,6 +1,6 @@
 import time
-import aq_lib.state_requests as sr
-from aq_lib.utils import LogFileName 
+import sentri_lib.state_requests as sr
+from sentri_lib.utils import LogFileName 
 
 #sr.send_state_request(state = "1")
 

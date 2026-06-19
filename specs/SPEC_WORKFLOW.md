@@ -86,7 +86,7 @@ When starting any task, Claude should:
 - Claude must reference **exact file paths and line numbers**, not paraphrases.
 - If a spec section is ambiguous, Claude should ask rather than assume.
 - Claude should never invent API fields, hardware register addresses, or analysis parameters.
-- For hardware behavior, Claude must cite `aq_lib/` source files directly.
+- For hardware behavior, Claude must cite `sentri_lib/` source files directly.
 
 ### Updating Specs After Code Changes
 

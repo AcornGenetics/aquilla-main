@@ -1,9 +1,9 @@
 import os
 import re
 import pytest
-from aq_curve.curve import Curve
-from aq_curve import pcr_curve_config as config
-from aq_curve.pcr_curve_helpers import get_curve_data, resolve_log_path
+from sentri_curve.curve import Curve
+from sentri_curve import pcr_curve_config as config
+from sentri_curve.pcr_curve_helpers import get_curve_data, resolve_log_path
 
 
 CURVE_RESULTS = {}

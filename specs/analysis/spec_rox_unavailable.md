@@ -27,7 +27,7 @@ Add a top-level boolean to the profile file:
 
 ## Backend changes
 
-### `aquila_web/main.py`
+### `sentri_web/main.py`
 
 **`_load_profile_labels`** — already returns the `labels` dict. Rename or extend it to also surface the flag:
 
@@ -58,7 +58,7 @@ return {
 }
 ```
 
-### `aq_curve/analysis_service.py`
+### `sentri_curve/analysis_service.py`
 
 Accept and forward the flag:
 
@@ -69,7 +69,7 @@ def process_run(self, optics_path, results_filename, plot_path, labels=None, rox
     generate_optics_plot(optics_path, plot_path, labels=labels)
 ```
 
-### `aq_curve/curve.py` — `results_to_json`
+### `sentri_curve/curve.py` — `results_to_json`
 
 Accept `rox_unavailable=False`. When true, replace the rox block with a constant — no `evaluate_curve` call, no `resolve_cq` call:
 
@@ -100,7 +100,7 @@ def results_to_json(self, raw_logfile, results_logfile, rox_unavailable=False):
 
 ## Frontend changes
 
-### `aquila_web/static/script.js`
+### `sentri_web/static/script.js`
 
 Add a module-level flag alongside `dyeLabels`:
 
@@ -149,7 +149,7 @@ setHalfStatus(roxHalf, roxStatus, roxUnavailable);
 
 The `tubeDetected` / `tubeInconclusive` summary loop (`["1", "2"].forEach`) must skip row `"2"` when `roxUnavailable` is true, so a ROX-unavailable profile doesn't count `"ROX Unavailable"` as an undetected result toward the dot's overall status class.
 
-### `aquila_web/static/styles.css`
+### `sentri_web/static/styles.css`
 
 Add after the existing `.results-dot__half.is-inconclusive` rule:
 
@@ -174,11 +174,11 @@ Add after the existing `.results-dot__half.is-inconclusive` rule:
 | File | Change |
 |---|---|
 | Profile JSON(s) | Add `"rox_unavailable": true` |
-| `aquila_web/main.py` | Helper for flag; pass to `process_run`; include in `/profiles/details` |
-| `aq_curve/analysis_service.py` | Accept + forward `rox_unavailable` param |
-| `aq_curve/curve.py` | `results_to_json` skips rox eval; writes `"ROX Unavailable"` |
-| `aquila_web/static/script.js` | Module flag; `applyDyeLabels`; `setHalfStatus`; dot loop; reset |
-| `aquila_web/static/styles.css` | `.is-unavailable` rule |
+| `sentri_web/main.py` | Helper for flag; pass to `process_run`; include in `/profiles/details` |
+| `sentri_curve/analysis_service.py` | Accept + forward `rox_unavailable` param |
+| `sentri_curve/curve.py` | `results_to_json` skips rox eval; writes `"ROX Unavailable"` |
+| `sentri_web/static/script.js` | Module flag; `applyDyeLabels`; `setHalfStatus`; dot loop; reset |
+| `sentri_web/static/styles.css` | `.is-unavailable` rule |
 
 ---
 

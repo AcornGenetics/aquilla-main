@@ -90,7 +90,7 @@ If this feature adds or modifies API endpoints:
 Does this feature interact with physical hardware?
 
 - Which subsystems: thermal | motor | LED | ADC | lid sensor | other
-- Reference `aq_lib/` module and relevant functions
+- Reference `sentri_lib/` module and relevant functions
 - Any timing constraints or hardware preconditions
 
 ---

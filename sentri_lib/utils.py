@@ -64,7 +64,7 @@ LOGGING_CONFIG = {
         },
     },
     'loggers': {
-        'aquila': {
+        'sentri': {
             'handlers': ['file'],
             'level': 'DEBUG',
             'propagate': True,

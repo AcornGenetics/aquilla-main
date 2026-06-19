@@ -1,5 +1,5 @@
 """
-Unit tests for resolve_device_profiles() in aquila_web/main.py.
+Unit tests for resolve_device_profiles() in sentri_web/main.py.
 """
 import json
 import os
@@ -26,7 +26,7 @@ if "serial" not in sys.modules:
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "aquila_web"))
+sys.path.insert(0, str(REPO_ROOT / "sentri_web"))
 
 os.environ.setdefault("AQ_SRC_BASEDIR", str(REPO_ROOT))
 
@@ -54,14 +54,14 @@ def patch_base_dir(monkeypatch, tmp_path):
             "duke": ["ABBA_ramp1.75_EA30.json", "O157__ESBL_full.json", "STEC_and_EPEC_Hygiena1.75_no37Cstep.json", "verification_profile.json"],
         },
     )
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     return tmp_path
 
 
 def _call(monkeypatch, hostname):
     monkeypatch.setenv("DEVICE_HOSTNAME", hostname)
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
     import importlib
     importlib.reload(web_main)
     monkeypatch.setattr(web_main, "BASE_DIR", monkeypatch._patches[-2].temp if hasattr(monkeypatch, "_patches") else web_main.BASE_DIR)
@@ -70,7 +70,7 @@ def _call(monkeypatch, hostname):
 
 def test_unknown_hostname_returns_none(monkeypatch, tmp_path):
     monkeypatch.setenv("DEVICE_HOSTNAME", "sn99")
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     result = web_main.resolve_device_profiles()
     assert result is None
@@ -78,7 +78,7 @@ def test_unknown_hostname_returns_none(monkeypatch, tmp_path):
 
 def test_group_null_returns_none(monkeypatch, tmp_path):
     monkeypatch.setenv("DEVICE_HOSTNAME", "sn01")
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     result = web_main.resolve_device_profiles()
     assert result is None
@@ -86,7 +86,7 @@ def test_group_null_returns_none(monkeypatch, tmp_path):
 
 def test_known_hostname_returns_correct_set(monkeypatch, tmp_path):
     monkeypatch.setenv("DEVICE_HOSTNAME", "sn03")
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     result = web_main.resolve_device_profiles()
     assert result == {"ABBA_ramp1.75_EA30.json", "Hygiena_ramp1.75_EA30.json", "verification_profile.json"}
@@ -97,7 +97,7 @@ def test_extra_profiles_included(monkeypatch, tmp_path):
         "sn03": {"profile_group": "classic", "extra_profiles": ["ryan_thermal_tests.json"]}
     }))
     monkeypatch.setenv("DEVICE_HOSTNAME", "sn03")
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     result = web_main.resolve_device_profiles()
     assert "ryan_thermal_tests.json" in result
@@ -107,7 +107,7 @@ def test_extra_profiles_included(monkeypatch, tmp_path):
 def test_missing_device_profiles_file_returns_none(monkeypatch, tmp_path):
     (tmp_path / "config_files" / "device_profiles.json").unlink()
     monkeypatch.setenv("DEVICE_HOSTNAME", "sn03")
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     result = web_main.resolve_device_profiles()
     assert result is None
@@ -116,7 +116,7 @@ def test_missing_device_profiles_file_returns_none(monkeypatch, tmp_path):
 def test_missing_profile_groups_file_returns_none(monkeypatch, tmp_path):
     (tmp_path / "config_files" / "profile_groups.json").unlink()
     monkeypatch.setenv("DEVICE_HOSTNAME", "sn03")
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     result = web_main.resolve_device_profiles()
     assert result is None
@@ -124,7 +124,7 @@ def test_missing_profile_groups_file_returns_none(monkeypatch, tmp_path):
 
 def test_duke_bundle(monkeypatch, tmp_path):
     monkeypatch.setenv("DEVICE_HOSTNAME", "sn02")
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     result = web_main.resolve_device_profiles()
     assert result == {
@@ -147,7 +147,7 @@ def test_migration_moves_bundled_files_to_bundled_subdir(monkeypatch, tmp_path):
     _write_profile(pdir / "ABBA_ramp1.75_EA30.json")
     _write_profile(pdir / "verification_profile.json")
 
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
     web_main._migrate_profiles()
@@ -162,7 +162,7 @@ def test_migration_moves_unknown_files_to_local_subdir(monkeypatch, tmp_path):
     pdir.mkdir()
     _write_profile(pdir / "my_custom_profile.json")
 
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
     web_main._migrate_profiles()
@@ -177,7 +177,7 @@ def test_migration_is_noop_when_subdirs_exist(monkeypatch, tmp_path):
     (pdir / "local").mkdir(parents=True)
     _write_profile(pdir / "leftover.json")
 
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
     web_main._migrate_profiles()
@@ -199,7 +199,7 @@ def test_migration_skips_flat_if_bundled_already_has_file(monkeypatch, tmp_path)
     # local/ does not exist yet — triggers migration
     (pdir / "local").mkdir()
 
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
     # Both subdirs exist → no-op; flat file untouched
@@ -217,7 +217,7 @@ def test_migration_aborts_gracefully_if_profile_groups_missing(monkeypatch, tmp_
     # Remove profile_groups.json so migration can't determine bundled filenames
     (tmp_path / "config_files" / "profile_groups.json").unlink()
 
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: pdir)
     web_main._migrate_profiles()  # should not raise
@@ -229,7 +229,7 @@ def test_migration_aborts_gracefully_if_profile_groups_missing(monkeypatch, tmp_
 # ── Filter works with real bundled/ subdir (production layout) ───────────────
 
 def test_all_bundled_filenames_returns_union_of_all_groups(monkeypatch, tmp_path):
-    import aquila_web.main as web_main
+    import sentri_web.main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
     result = web_main._all_bundled_filenames()
     assert "ABBA_ramp1.75_EA30.json" in result

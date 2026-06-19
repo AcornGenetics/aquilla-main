@@ -1,11 +1,11 @@
 """
-Unit tests for aq_lib/thermal_parser.py
+Unit tests for sentri_lib/thermal_parser.py
 
 thermal_parser() is a pure generator — no hardware, no GPIO, no RPi.
 """
 import pytest
 
-from aq_lib.thermal_parser import thermal_parser
+from sentri_lib.thermal_parser import thermal_parser
 
 
 # ---------------------------------------------------------------------------

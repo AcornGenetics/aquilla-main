@@ -4,7 +4,7 @@
 **Author:** [Name]
 **Last updated:** YYYY-MM-DD
 **GitHub issue:** #[number]
-**Source file(s):** `aquila_web/[filename].py`
+**Source file(s):** `sentri_web/[filename].py`
 
 ---
 

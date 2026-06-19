@@ -64,7 +64,7 @@ python -c "from config import get_src_basedir; print(get_src_basedir())"
 ### 5. Run the app in simulation mode
 
 ```bash
-AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=3 uvicorn aquila_web.main:app --host 127.0.0.1 --port 8090
+AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=3 uvicorn sentri_web.main:app --host 127.0.0.1 --port 8090
 ```
 Open `http://localhost:8090` in a browser. You should see the UI.
 ---
@@ -75,10 +75,10 @@ The codebase has five main bounded contexts. Learn the one relevant to your work
 
 | Directory | What it does |
 |-----------|-------------|
-| `aq_lib/` | Hardware device control — thermal, motor, LED, ADC, lid sensor |
-| `aq_curve/` | PCR curve analysis — sigmoid fitting, Cq calculation, R² |
-| `aquila_web/` | FastAPI backend + WebSocket + local/cloud DB |
-| `aquila_web/static/` | Kiosk frontend — plain HTML/JS, no build step |
+| `sentri_lib/` | Hardware device control — thermal, motor, LED, ADC, lid sensor |
+| `sentri_curve/` | PCR curve analysis — sigmoid fitting, Cq calculation, R² |
+| `sentri_web/` | FastAPI backend + WebSocket + local/cloud DB |
+| `sentri_web/static/` | Kiosk frontend — plain HTML/JS, no build step |
 | `tests/` + `unit_tests/` | Test suite |
 
 Key files to read on day 1:

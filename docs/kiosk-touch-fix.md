@@ -78,7 +78,7 @@ chromium-browser --kiosk \
 
 ## Fix 2 — Add touch CSS to styles.css
 
-**File:** `aquila_web/static/styles.css`
+**File:** `sentri_web/static/styles.css`
 
 Add to the top of the file:
 

@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 def db_client(tmp_path, monkeypatch):
     """TestClient with an isolated SQLite DB and a fake sync endpoint."""
     monkeypatch.setenv("AQ_LOCAL_DB_PATH", str(tmp_path / "test_sync.db"))
-    from aquila_web import local_db, main as web_main
+    from sentri_web import local_db, main as web_main
     local_db.init_local_db()
     with TestClient(web_main.app) as c:
         yield c, local_db
@@ -47,7 +47,7 @@ class TestApiKeyHeader:
             captured["headers"] = kw.get("headers", {})
             return _OK()
 
-        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        monkeypatch.setattr("sentri_web.sync.requests.post", _capture)
         client.post("/sync/flush")
         assert captured["headers"].get("x-api-key") == "test-fleet-key-abc"
 
@@ -67,7 +67,7 @@ class TestApiKeyHeader:
             captured["headers"] = kw.get("headers", {})
             return _OK()
 
-        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        monkeypatch.setattr("sentri_web.sync.requests.post", _capture)
         client.post("/sync/flush")
         assert "x-api-key" not in captured.get("headers", {})
 
@@ -84,7 +84,7 @@ class TestSyncFlushEndpoint:
             status_code = 200
             def raise_for_status(self): pass
 
-        monkeypatch.setattr("aquila_web.sync.requests.post", lambda *a, **kw: _OK())
+        monkeypatch.setattr("sentri_web.sync.requests.post", lambda *a, **kw: _OK())
         response = client.post("/sync/flush")
         assert response.status_code == 200
         assert response.json()["synced"] == 1
@@ -103,7 +103,7 @@ class TestSyncFlushEndpoint:
         _seed_event(local_db, tmp_path)
         monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
         monkeypatch.setattr(
-            "aquila_web.sync.requests.post",
+            "sentri_web.sync.requests.post",
             lambda *a, **kw: (_ for _ in ()).throw(_requests.exceptions.ConnectionError("offline")),
         )
         response = client.post("/sync/flush")

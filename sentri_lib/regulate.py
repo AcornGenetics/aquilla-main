@@ -5,8 +5,8 @@ import threading
 import time
 import logging
 import logging.config
-from aq_lib.utils import LID_HEATER_LOGGING_CONFIG
-from aq_lib import lid_worker_metrics as lwm
+from sentri_lib.utils import LID_HEATER_LOGGING_CONFIG
+from sentri_lib import lid_worker_metrics as lwm
 
 from .lid_temperature import ADS1115
 
@@ -114,7 +114,7 @@ def main():
     import logging.config
 
     sys.path.append ( ".." )
-    from aq_lib.utils import LOGGING_CONFIG
+    from sentri_lib.utils import LOGGING_CONFIG
     LOGGING_CONFIG[ 'handlers' ]['file']['filename'] = "../" + LOGGING_CONFIG[ 'handlers' ]['file']['filename']
     logging.config.dictConfig( LOGGING_CONFIG )
 

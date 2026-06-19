@@ -1,6 +1,6 @@
 import time
 import sys
-from aq_lib.led_class import LED
+from sentri_lib.led_class import LED
 
 if len ( sys.argv ) >= 2:
     if sys.argv[1].lower() == "fam":

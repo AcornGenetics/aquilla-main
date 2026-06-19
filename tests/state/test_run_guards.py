@@ -23,7 +23,7 @@ class TestRunGuards:
         The /run/name endpoint intentionally rejects whitespace-only values, so
         we monkeypatch the module global directly to exercise the guard code.
         """
-        from aquila_web import main as web_main
+        from sentri_web import main as web_main
         monkeypatch.setattr(web_main, "run_name", "")
         client.post("/profile/select", json={"profile": "test_profile.json"})
         response = client.post("/button/run")

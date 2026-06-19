@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
-from aq_lib.device_id import inject_hw_serial_env
-from aquila_web.local_db import enqueue_event, init_local_db
+from sentri_lib.device_id import inject_hw_serial_env
+from sentri_web.local_db import enqueue_event, init_local_db
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 import re
-from aq_curve.analysis_service import AnalysisService
+from sentri_curve.analysis_service import AnalysisService
 
 logger = logging.getLogger( __name__ )
 logger.setLevel("WARNING")
@@ -26,7 +26,7 @@ state_change_event = asyncio.Event()
 start_time = None
 elapsed_time = 0
 timer_running = None
-#results_path = Path("/home/pi/aquilla-main/aquila_web/results.json")
+#results_path = Path("/home/pi/aquilla-main/sentri_web/results.json")
 results_path = None
 results_cleared = False
 DEV_SIMULATE = os.getenv("AQ_DEV_SIMULATE", "0") == "1"
@@ -1713,7 +1713,7 @@ async def _background_sync_poller() -> None:
     while True:
         await asyncio.sleep(_SYNC_INTERVAL_SECONDS)
         try:
-            from aquila_web.sync import sync_pending_events
+            from sentri_web.sync import sync_pending_events
             sync_pending_events()
         except Exception as exc:
             logger.warning("Background sync error: %s", exc)
@@ -1721,7 +1721,7 @@ async def _background_sync_poller() -> None:
 
 @app.post("/sync/flush")
 async def sync_flush():
-    from aquila_web.sync import sync_pending_events
+    from sentri_web.sync import sync_pending_events
     synced = sync_pending_events()
     return {"synced": synced}
 

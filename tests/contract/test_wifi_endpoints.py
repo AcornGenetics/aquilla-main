@@ -28,8 +28,8 @@ def test_wifi_page_returns_200(client):
 def test_wifi_page_preserves_original_ssid_in_dom_dataset():
     """Connect/forget must not reconstruct SSIDs from labels or sanitized IDs."""
     html = "\n".join([
-        Path("aquila_web/static/wifi.html").read_text(),
-        Path("aquila_web/static/help.html").read_text(),
+        Path("sentri_web/static/wifi.html").read_text(),
+        Path("sentri_web/static/help.html").read_text(),
     ])
 
     assert "form.dataset.ssid" in html
@@ -45,7 +45,7 @@ def test_wifi_page_preserves_original_ssid_in_dom_dataset():
 def test_wifi_status_connected(client):
     """GET /wifi/status returns connected=True when kiosk-control reports a connection."""
     payload = {"connected": True, "ssid": "HomeNetwork", "signal": 80}
-    with patch("aquila_web.main._kiosk_get", new=AsyncMock(return_value=payload)):
+    with patch("sentri_web.main._kiosk_get", new=AsyncMock(return_value=payload)):
         response = client.get("/wifi/status")
     assert response.status_code == 200
     data = response.json()
@@ -58,7 +58,7 @@ def test_wifi_status_connected(client):
 def test_wifi_status_not_connected(client):
     """GET /wifi/status returns connected=False when not on any network."""
     payload = {"connected": False, "ssid": None, "signal": None}
-    with patch("aquila_web.main._kiosk_get", new=AsyncMock(return_value=payload)):
+    with patch("sentri_web.main._kiosk_get", new=AsyncMock(return_value=payload)):
         response = client.get("/wifi/status")
     assert response.status_code == 200
     data = response.json()
@@ -68,7 +68,7 @@ def test_wifi_status_not_connected(client):
 @pytest.mark.contract
 def test_wifi_status_kiosk_unreachable_returns_safe_fallback(client):
     """GET /wifi/status returns a safe fallback dict when kiosk-control is down."""
-    with patch("aquila_web.main._kiosk_get", side_effect=Exception("connection refused")):
+    with patch("sentri_web.main._kiosk_get", side_effect=Exception("connection refused")):
         response = client.get("/wifi/status")
     assert response.status_code == 200
     data = response.json()
@@ -87,7 +87,7 @@ def test_wifi_scan_returns_network_list(client):
         {"ssid": "NetworkA", "signal": 90, "secured": True, "in_use": True},
         {"ssid": "NetworkB", "signal": 60, "secured": False, "in_use": False},
     ]
-    with patch("aquila_web.main._kiosk_get", new=AsyncMock(return_value={"networks": networks})):
+    with patch("sentri_web.main._kiosk_get", new=AsyncMock(return_value={"networks": networks})):
         response = client.get("/wifi/scan")
     assert response.status_code == 200
     data = response.json()
@@ -102,7 +102,7 @@ def test_wifi_scan_includes_saved_field(client):
         {"ssid": "StaleNet", "signal": 60, "secured": True, "in_use": False, "saved": True},
         {"ssid": "NewNet", "signal": 50, "secured": True, "in_use": False, "saved": False},
     ]
-    with patch("aquila_web.main._kiosk_get", new=AsyncMock(return_value={"networks": networks})):
+    with patch("sentri_web.main._kiosk_get", new=AsyncMock(return_value={"networks": networks})):
         response = client.get("/wifi/scan")
     assert response.status_code == 200
     data = response.json()
@@ -115,7 +115,7 @@ def test_wifi_scan_includes_saved_field(client):
 @pytest.mark.contract
 def test_wifi_scan_kiosk_unreachable_returns_empty_list(client):
     """GET /wifi/scan returns empty networks list when kiosk-control is down."""
-    with patch("aquila_web.main._kiosk_get", side_effect=Exception("timeout")):
+    with patch("sentri_web.main._kiosk_get", side_effect=Exception("timeout")):
         response = client.get("/wifi/scan")
     assert response.status_code == 200
     data = response.json()
@@ -130,7 +130,7 @@ def test_wifi_scan_kiosk_unreachable_returns_empty_list(client):
 @pytest.mark.contract
 def test_wifi_connect_success(client):
     """POST /wifi/connect with ssid+password returns ok=True on success."""
-    with patch("aquila_web.main._kiosk_post", new=AsyncMock(return_value={"ok": True, "error": None})):
+    with patch("sentri_web.main._kiosk_post", new=AsyncMock(return_value={"ok": True, "error": None})):
         response = client.post("/wifi/connect", json={"ssid": "HomeNetwork", "password": "secret"})
     assert response.status_code == 200
     assert response.json()["ok"] is True
@@ -139,7 +139,7 @@ def test_wifi_connect_success(client):
 @pytest.mark.contract
 def test_wifi_connect_wrong_password(client):
     """POST /wifi/connect returns ok=False when nmcli reports failure."""
-    with patch("aquila_web.main._kiosk_post", new=AsyncMock(return_value={"ok": False, "error": "Secrets were required, but not provided"})):
+    with patch("sentri_web.main._kiosk_post", new=AsyncMock(return_value={"ok": False, "error": "Secrets were required, but not provided"})):
         response = client.post("/wifi/connect", json={"ssid": "HomeNetwork", "password": "wrongpass"})
     assert response.status_code == 200
     data = response.json()
@@ -150,7 +150,7 @@ def test_wifi_connect_wrong_password(client):
 @pytest.mark.contract
 def test_wifi_connect_open_network_no_password(client):
     """POST /wifi/connect with empty password works for open networks."""
-    with patch("aquila_web.main._kiosk_post", new=AsyncMock(return_value={"ok": True, "error": None})):
+    with patch("sentri_web.main._kiosk_post", new=AsyncMock(return_value={"ok": True, "error": None})):
         response = client.post("/wifi/connect", json={"ssid": "OpenNet", "password": ""})
     assert response.status_code == 200
     assert response.json()["ok"] is True
@@ -159,7 +159,7 @@ def test_wifi_connect_open_network_no_password(client):
 @pytest.mark.contract
 def test_wifi_connect_kiosk_unreachable(client):
     """POST /wifi/connect returns ok=False when kiosk-control is unreachable."""
-    with patch("aquila_web.main._kiosk_post", side_effect=Exception("connection refused")):
+    with patch("sentri_web.main._kiosk_post", side_effect=Exception("connection refused")):
         response = client.post("/wifi/connect", json={"ssid": "HomeNetwork", "password": "secret"})
     assert response.status_code == 200
     data = response.json()
@@ -174,7 +174,7 @@ def test_wifi_connect_kiosk_unreachable(client):
 @pytest.mark.contract
 def test_wifi_forget_success(client):
     """POST /wifi/forget with a known ssid returns ok=True."""
-    with patch("aquila_web.main._kiosk_post", new=AsyncMock(return_value={"ok": True, "error": None})):
+    with patch("sentri_web.main._kiosk_post", new=AsyncMock(return_value={"ok": True, "error": None})):
         response = client.post("/wifi/forget", json={"ssid": "HomeNetwork"})
     assert response.status_code == 200
     assert response.json()["ok"] is True
@@ -183,7 +183,7 @@ def test_wifi_forget_success(client):
 @pytest.mark.contract
 def test_wifi_forget_unknown_ssid(client):
     """POST /wifi/forget with an unknown ssid returns ok=False."""
-    with patch("aquila_web.main._kiosk_post", new=AsyncMock(return_value={"ok": False, "error": "No connection profile found"})):
+    with patch("sentri_web.main._kiosk_post", new=AsyncMock(return_value={"ok": False, "error": "No connection profile found"})):
         response = client.post("/wifi/forget", json={"ssid": "NonExistent"})
     assert response.status_code == 200
     data = response.json()
@@ -193,7 +193,7 @@ def test_wifi_forget_unknown_ssid(client):
 @pytest.mark.contract
 def test_wifi_forget_kiosk_unreachable(client):
     """POST /wifi/forget returns ok=False when kiosk-control is unreachable."""
-    with patch("aquila_web.main._kiosk_post", side_effect=Exception("connection refused")):
+    with patch("sentri_web.main._kiosk_post", side_effect=Exception("connection refused")):
         response = client.post("/wifi/forget", json={"ssid": "HomeNetwork"})
     assert response.status_code == 200
     data = response.json()

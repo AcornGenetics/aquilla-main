@@ -5,7 +5,7 @@
 **Last updated:** 2026-06-02
 **GitHub issue:** #93
 **Affected screens:** `ready`, `running`, `complete`
-**Source file(s):** `aquila_web/static/run.html`, `aquila_web/static/script.js`, `aquila_web/static/styles.css`
+**Source file(s):** `sentri_web/static/run.html`, `sentri_web/static/script.js`, `sentri_web/static/styles.css`
 
 ---
 
@@ -35,7 +35,7 @@ Replaces the static **"Start Run"** heading in the top-left corner of the Run St
 [complete] --new run / ready-->    [ready]     (header corner clears to empty)
 ```
 
-Driven by `updateStartHeader(screen)` in `aquila_web/static/script.js`, called from `updateDashboardSections`.
+Driven by `updateStartHeader(screen)` in `sentri_web/static/script.js`, called from `updateDashboardSections`.
 
 ---
 

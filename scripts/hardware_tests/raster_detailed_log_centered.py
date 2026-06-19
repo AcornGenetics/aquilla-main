@@ -1,13 +1,13 @@
 import time 
-from aq_lib.adc_class import OpticalRead
+from sentri_lib.adc_class import OpticalRead
 from statistics import stdev
 import time
 import sys
-from aq_lib.config_module import Config
+from sentri_lib.config_module import Config
 import sys
-from aq_lib.led_class import LED
-from aq_lib.motor_class import Drawer
-from aq_lib.motor_class import Axis
+from sentri_lib.led_class import LED
+from sentri_lib.motor_class import Drawer
+from sentri_lib.motor_class import Axis
 from datetime import datetime
 
 

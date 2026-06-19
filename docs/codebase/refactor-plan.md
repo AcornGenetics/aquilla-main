@@ -21,15 +21,15 @@ aquilla-main/
 ├── .gitignore
 ├── .dockerignore
 │
-├── aq_lib/                 # hardware control library
+├── sentri_lib/                 # hardware control library
 │   ├── fan_class.py        # ← from root
 │   ├── led_class.py        # ← from root
 │   ├── adc_class.py        # ← from root
 │   └── (existing files unchanged)
 │
-├── aq_curve/               # PCR analysis (unchanged)
+├── sentri_curve/               # PCR analysis (unchanged)
 │
-├── aquila_web/             # FastAPI app + UI (unchanged)
+├── sentri_web/             # FastAPI app + UI (unchanged)
 │
 ├── profiles/
 │   └── bundled/            # production profiles only — delete old test JSONs
@@ -158,46 +158,46 @@ Three directories in root have no disposition yet:
 
 | Directory | Recommendation |
 |-----------|---------------|
-| `server_web/` | Confirm whether this duplicates or extends `aquila_web/`. Move into `aquila_web/` if it's part of that bounded context, or add to target structure as a top-level dir if independent. |
+| `server_web/` | Confirm whether this duplicates or extends `sentri_web/`. Move into `sentri_web/` if it's part of that bounded context, or add to target structure as a top-level dir if independent. |
 | `data/` | Likely runtime output — add to `.gitignore` if not already, and note it in the target structure as excluded from moves. |
 | `logs/` | Same as `data/` — runtime artifact, should be gitignored and left in place. |
 
 ---
 
-### Phase 3 — Move class files into `aq_lib/` (15 import changes across 13 files)
-Move `fan_class.py`, `adc_class.py`, `led_class.py` into `aq_lib/`.
+### Phase 3 — Move class files into `sentri_lib/` (15 import changes across 13 files)
+Move `fan_class.py`, `adc_class.py`, `led_class.py` into `sentri_lib/`.
 
 **Import changes required:**
 
 | File | Old import | New import |
 |------|-----------|-----------|
-| `state_run_assay.py:31` | `from fan_class import Fan` | `from aq_lib.fan_class import Fan` |
-| `state_run_assay.py:32` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
-| `tests/unit/hardware/test_fan.py:53` | `if "fan_class" in sys.modules:` | `if "aq_lib.fan_class" in sys.modules:` |
-| `tests/unit/hardware/test_fan.py:55` | `importlib.import_module("fan_class")` | `importlib.import_module("aq_lib.fan_class")` |
-| `led_off.py:3` | `from led_class import LED` | `from aq_lib.led_class import LED` |
-| `led_on.py:3` | `from led_class import LED` | `from aq_lib.led_class import LED` |
-| `optics_read.py:36` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
-| `optics_read.py:37` | `from led_class import LED` | `from aq_lib.led_class import LED` |
-| `diagnostic_sweep.py:30` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
-| `diagnostic_sweep.py:31` | `from led_class import LED` | `from aq_lib.led_class import LED` |
-| `test_adc4_logged.py:2` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
-| `test_adc4_logged.py:7` | `from led_class import LED` | `from aq_lib.led_class import LED` |
-| `lod_verification_all.py:2` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
-| `lod_verification_all.py:3` | `from led_class import LED` | `from aq_lib.led_class import LED` |
-| `Raster.py:2` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
-| `Raster.py:8` | `from led_class import LED` | `from aq_lib.led_class import LED` |
-| `raster_detailed_log_centered.py:2` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
-| `raster_detailed_log_centered.py:8` | `from led_class import LED` | `from aq_lib.led_class import LED` |
-| `test_lm35.py:3` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
-| `led_current_verification.py:2` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
-| `led_current_verification.py:3` | `from led_class import LED` | `from aq_lib.led_class import LED` |
-| `melt_curve.py:18` | `from fan_class import Fan` | `from aq_lib.fan_class import Fan` |
-| `melt_curve.py:19` | `from adc_class import OpticalRead` | `from aq_lib.adc_class import OpticalRead` |
+| `state_run_assay.py:31` | `from fan_class import Fan` | `from sentri_lib.fan_class import Fan` |
+| `state_run_assay.py:32` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
+| `tests/unit/hardware/test_fan.py:53` | `if "fan_class" in sys.modules:` | `if "sentri_lib.fan_class" in sys.modules:` |
+| `tests/unit/hardware/test_fan.py:55` | `importlib.import_module("fan_class")` | `importlib.import_module("sentri_lib.fan_class")` |
+| `led_off.py:3` | `from led_class import LED` | `from sentri_lib.led_class import LED` |
+| `led_on.py:3` | `from led_class import LED` | `from sentri_lib.led_class import LED` |
+| `optics_read.py:36` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
+| `optics_read.py:37` | `from led_class import LED` | `from sentri_lib.led_class import LED` |
+| `diagnostic_sweep.py:30` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
+| `diagnostic_sweep.py:31` | `from led_class import LED` | `from sentri_lib.led_class import LED` |
+| `test_adc4_logged.py:2` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
+| `test_adc4_logged.py:7` | `from led_class import LED` | `from sentri_lib.led_class import LED` |
+| `lod_verification_all.py:2` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
+| `lod_verification_all.py:3` | `from led_class import LED` | `from sentri_lib.led_class import LED` |
+| `Raster.py:2` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
+| `Raster.py:8` | `from led_class import LED` | `from sentri_lib.led_class import LED` |
+| `raster_detailed_log_centered.py:2` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
+| `raster_detailed_log_centered.py:8` | `from led_class import LED` | `from sentri_lib.led_class import LED` |
+| `test_lm35.py:3` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
+| `led_current_verification.py:2` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
+| `led_current_verification.py:3` | `from led_class import LED` | `from sentri_lib.led_class import LED` |
+| `melt_curve.py:18` | `from fan_class import Fan` | `from sentri_lib.fan_class import Fan` |
+| `melt_curve.py:19` | `from adc_class import OpticalRead` | `from sentri_lib.adc_class import OpticalRead` |
 
 Note: line numbers above reflect pre-move positions. After files are relocated to `scripts/hardware/` and `scripts/tools/`, the import paths change but the fix is the same.
 
-**PYTHONPATH requirement:** Scripts moved into `scripts/` subdirectories must be run from the repo root for `aq_lib` to resolve, e.g. `python scripts/hardware/optics_read.py`. Running from inside the subdirectory will fail. Add `export PYTHONPATH="$REPO_ROOT"` to any wrapper or document this at the top of each script.
+**PYTHONPATH requirement:** Scripts moved into `scripts/` subdirectories must be run from the repo root for `sentri_lib` to resolve, e.g. `python scripts/hardware/optics_read.py`. Running from inside the subdirectory will fail. Add `export PYTHONPATH="$REPO_ROOT"` to any wrapper or document this at the top of each script.
 
 ### Phase 4 — Clean profiles/
 Delete old test/dev profile JSONs from `profiles/` root. Only `profiles/bundled/` should contain files.
@@ -225,7 +225,7 @@ Delete old test/dev profile JSONs from `profiles/` root. Only `profiles/bundled/
 pytest tests -v
 
 # After Phase 3 — confirm production imports resolve
-python -c "from aq_lib.fan_class import Fan; print('ok')"
-python -c "from aq_lib.adc_class import OpticalRead; print('ok')"
+python -c "from sentri_lib.fan_class import Fan; print('ok')"
+python -c "from sentri_lib.adc_class import OpticalRead; print('ok')"
 pytest tests -v
 ```

@@ -4,7 +4,7 @@
 **Author:** [Name]
 **Last updated:** YYYY-MM-DD
 **GitHub issue:** #[number]
-**Source file(s):** `aq_curve/[filename].py`
+**Source file(s):** `sentri_curve/[filename].py`
 
 ---
 
@@ -39,7 +39,7 @@ $$
 \text{Equation in LaTeX if needed}
 $$
 
-**Implementation:** `aq_curve/[file].py`, function `[function_name]`, line ~[N]
+**Implementation:** `sentri_curve/[file].py`, function `[function_name]`, line ~[N]
 
 **Edge cases:**
 - What if input is empty?
@@ -75,7 +75,7 @@ $$
 | `CQ_THRESHOLD` | 35.0 | Yes (`config.json`) | Positive/negative cutoff |
 | [param] | | | |
 
-Source: `aq_curve/pcr_curve_config.py` (or wherever params live)
+Source: `sentri_curve/pcr_curve_config.py` (or wherever params live)
 
 ---
 

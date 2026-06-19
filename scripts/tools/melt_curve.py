@@ -6,18 +6,18 @@ from queue import Empty
 import RPi.GPIO as GPIO
 import sys
 
-from aq_lib.meerstetter import MeerStetter
-from aq_lib.meerstetter import set_time
-from aq_lib.thermal_engine import thermal_engine
-from aq_lib.thermal_parser import thermal_parser
-from aq_lib.config_module import Config
-from aq_lib.utils import load_json
-from aq_lib.utils import LogFileName
-from aq_lib.utils import LOGGING_CONFIG
+from sentri_lib.meerstetter import MeerStetter
+from sentri_lib.meerstetter import set_time
+from sentri_lib.thermal_engine import thermal_engine
+from sentri_lib.thermal_parser import thermal_parser
+from sentri_lib.config_module import Config
+from sentri_lib.utils import load_json
+from sentri_lib.utils import LogFileName
+from sentri_lib.utils import LOGGING_CONFIG
 
-from aq_lib.fan_class import Fan
-from aq_lib.adc_class import OpticalRead
-from aq_lib.motor_class import Axis, Drawer
+from sentri_lib.fan_class import Fan
+from sentri_lib.adc_class import OpticalRead
+from sentri_lib.motor_class import Axis, Drawer
 
 logging.config.dictConfig( LOGGING_CONFIG )
 logger = logging.getLogger( "aquila_logger" )

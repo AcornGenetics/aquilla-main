@@ -27,7 +27,7 @@ All app updates are delivered by pulling new container images via Watchtower —
 ### One Image, Two Containers
 
 `aquila-backend` and `aquila-app` both use the same Docker image (built from `Dockerfile.api`).
-They share all Python code (`aq_lib/`, `aq_curve/`, `config.py`, `profiles/`).
+They share all Python code (`sentri_lib/`, `sentri_curve/`, `config.py`, `profiles/`).
 The difference is the `command:` override in docker-compose:
 
 - `aquila-backend` → `uvicorn main:app --host 0.0.0.0 --port 8090`
@@ -225,7 +225,7 @@ apt-get install -y chromium openbox xserver-xorg x11-xserver-utils xinput unclut
 | `kanshi` | Not needed | Replaced by xrandr in Openbox autostart |
 | `nodejs`, `npm`, `serve` | Not needed | serve.service removed |
 | `aquila_app.service` | Not needed | Replaced by Docker Compose |
-| `aquila_web.service` | Not needed | Replaced by Docker Compose |
+| `sentri_web.service` | Not needed | Replaced by Docker Compose |
 
 #### Verification (runs automatically at end of phase)
 > Full test definitions: [deployment2_tests.md — Phase 1](deployment2_tests.md#phase-1--os-prerequisites-and-host-packages)
@@ -359,7 +359,7 @@ Downloads `kiosk_control.py` from GitHub and registers it as a systemd service:
 Service unit:
 ```ini
 [Unit]
-Description=Aquila Kiosk Control
+Description=Sentri Kiosk Control
 After=network.target
 
 [Service]
@@ -531,7 +531,7 @@ docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml up -d
 Creates `/etc/systemd/system/aquila-stack.service`:
 ```ini
 [Unit]
-Description=Aquila Docker Compose Stack
+Description=Sentri Docker Compose Stack
 After=docker.service network-online.target
 Requires=docker.service
 
@@ -573,8 +573,8 @@ Once the backend is healthy, apply the initial Meerstetter tuning parameters (ru
 
 ```bash
 docker exec -e CONFIG_DIR=/opt/aquila/config aquila-app python3 - <<'PY'
-from aq_lib.config_module import Config
-from aq_lib.meerstetter import MeerStetter
+from sentri_lib.config_module import Config
+from sentri_lib.meerstetter import MeerStetter
 
 config = Config()
 device_type = int(config.pcr["device_type"])
@@ -739,6 +739,6 @@ ssh pi@<device> bash /opt/fleet/update.sh
 
 - No git repo (`aquilla-main` directory does not exist)
 - No Python venv (Python lives inside the container image)
-- No `serve.service`, `aquila_app.service`, or `aquila_web.service`
+- No `serve.service`, `aquila_app.service`, or `sentri_web.service`
 - No telemetry stack (node-exporter, vmagent, vector)
 - Replaced by: `aquila-stack.service` → `docker compose up -d`

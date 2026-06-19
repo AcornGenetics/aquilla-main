@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 from unittest.mock import patch
-from aq_curve.evaluator import check_no_mountain_shape, check_late_cq_tier
-from aq_curve.curve import Curve
+from sentri_curve.evaluator import check_no_mountain_shape, check_late_cq_tier
+from sentri_curve.curve import Curve
 
 
 def _make_curve():
@@ -37,7 +37,7 @@ def test_mountain_rejected_late_cq_drop_ratio_above_0_25():
     # Force Cq to be reported as >= 35 by patching compute_cq
     cd = _curve_data(y)
     curve = _make_curve()
-    with patch("aq_curve.evaluator.compute_cq", return_value=36.0):
+    with patch("sentri_curve.evaluator.compute_cq", return_value=36.0):
         result = check_no_mountain_shape(cd, curve)
     assert result is False
 
@@ -51,7 +51,7 @@ def test_mountain_rejected_early_cq_drop_ratio_above_0_35():
     y = baseline + rise + fall
     cd = _curve_data(y)
     curve = _make_curve()
-    with patch("aq_curve.evaluator.compute_cq", return_value=20.0):
+    with patch("sentri_curve.evaluator.compute_cq", return_value=20.0):
         result = check_no_mountain_shape(cd, curve)
     # drop_ratio ~0.38 > 0.35 → rejected at early Cq too
     assert result is False

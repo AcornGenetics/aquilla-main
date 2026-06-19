@@ -4,7 +4,7 @@ from typing import Any
 
 import requests
 
-from aquila_web.local_db import get_pending_events, mark_event_synced
+from sentri_web.local_db import get_pending_events, mark_event_synced
 
 logger = logging.getLogger(__name__)
 

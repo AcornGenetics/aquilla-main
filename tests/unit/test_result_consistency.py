@@ -79,7 +79,7 @@ RESULTS_INCONCLUSIVE = {
 # ---------------------------------------------------------------------------
 
 try:
-    from aquila_web.main import app, _summarize_results_from_file, _summarize_results
+    from sentri_web.main import app, _summarize_results_from_file, _summarize_results
     BACKEND_AVAILABLE = True
 except Exception:
     BACKEND_AVAILABLE = False

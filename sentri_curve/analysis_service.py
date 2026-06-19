@@ -7,8 +7,8 @@ boundary clean.
 """
 from pathlib import Path
 
-from aq_curve.curve import Curve
-from aq_curve.plot_utils import generate_optics_plot
+from sentri_curve.curve import Curve
+from sentri_curve.plot_utils import generate_optics_plot
 
 
 class AnalysisService:

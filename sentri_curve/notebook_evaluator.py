@@ -4,7 +4,7 @@ from statistics import mean
 
 import numpy as np
 
-logger = logging.getLogger("aquila")
+logger = logging.getLogger("sentri")
 
 try:
     from scipy.signal import savgol_filter

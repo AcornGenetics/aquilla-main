@@ -1,9 +1,9 @@
-# Aquila Web UI (FastAPI)
+# Sentri Web UI (FastAPI)
 
 Quick start commands for the FastAPI UI server.
 
 ## Local development
-From `aquila-main/aquila_web`:
+From `aquila-main/sentri_web`:
 
 ```
 uvicorn main:app --reload --host 127.0.0.1
@@ -19,5 +19,5 @@ AQ_SRC_BASEDIR=/home/pi/aquilla-main /home/pi/aquilla-main/bin/uvicorn main:app 
 If you install the service file, start it with:
 
 ```
-sudo systemctl start aquila_web.service
+sudo systemctl start sentri_web.service
 ```

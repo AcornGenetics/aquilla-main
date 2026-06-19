@@ -6,7 +6,7 @@ discovered and returned by the GET /profiles API.
 
 Root cause context
 ------------------
-resolve_profile_dir() in aquila_web/main.py returns BASE_DIR/profiles.
+resolve_profile_dir() in sentri_web/main.py returns BASE_DIR/profiles.
 list_profiles() globs profile_dir.glob("*.json") — non-recursive, so files
 inside the bundled/ sub-directory are NOT currently returned.
 
@@ -81,7 +81,7 @@ def bundled_test_profile(client):
     Depends on `client` so the app is imported first; then we read profile_dir
     directly from the running module to put the file in the right place.
     """
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
     bundled_dir = web_main.profile_dir / "bundled"
     bundled_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,9 +99,9 @@ def client():
     # Ensure config.py resolves to the repo root so profiles/ is found.
     os.environ.setdefault("AQ_SRC_BASEDIR", str(REPO_ROOT))
     sys.path.insert(0, str(REPO_ROOT))
-    sys.path.insert(0, str(REPO_ROOT / "aquila_web"))
+    sys.path.insert(0, str(REPO_ROOT / "sentri_web"))
 
-    from aquila_web.main import app  # noqa: PLC0415
+    from sentri_web.main import app  # noqa: PLC0415
     with TestClient(app) as c:
         yield c
 

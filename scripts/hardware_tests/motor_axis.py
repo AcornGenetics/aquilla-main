@@ -36,8 +36,8 @@ from datetime import datetime
 # Try to import hardware libraries - graceful fallback for testing
 try:
     import RPi.GPIO as GPIO
-    from aq_lib.motor_class import Axis
-    from aq_lib.config_module import Config
+    from sentri_lib.motor_class import Axis
+    from sentri_lib.config_module import Config
     HARDWARE_AVAILABLE = True
     
     # Load actual config

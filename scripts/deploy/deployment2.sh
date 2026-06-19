@@ -254,7 +254,7 @@ rm -f "${PI_HOME}/.config/labwc/autostart"
 # Install boot splash page
 curl -fsSL \
     -H "Authorization: token ${GHCR_TOKEN}" \
-    "${RAW_REPO_URL}/aquila_web/static/splash.html" \
+    "${RAW_REPO_URL}/sentri_web/static/splash.html" \
     -o /opt/aquila/splash.html
 
 mkdir -p "${PI_HOME}/.config/openbox"
@@ -729,8 +729,8 @@ if ! docker exec \
     -e CONFIG_DIR=/opt/aquila/config \
     aquila-app \
     python3 - <<'PY'
-from aq_lib.config_module import Config
-from aq_lib.meerstetter import MeerStetter
+from sentri_lib.config_module import Config
+from sentri_lib.meerstetter import MeerStetter
 
 config = Config()
 device_type = int(config.pcr["device_type"])
@@ -956,7 +956,7 @@ fi
 # Download acornlogo SVG from repo if not already on device
 if [[ ! -f "${ACORN_LOGO_SVG}" ]]; then
     curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
-        "${RAW_REPO_URL}/aquila_web/static/acornlogo.svg" \
+        "${RAW_REPO_URL}/sentri_web/static/acornlogo.svg" \
         -o "${ACORN_LOGO_SVG}" 2>/dev/null || true
 fi
 

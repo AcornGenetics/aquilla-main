@@ -1,4 +1,4 @@
-# Aquila Test Suite — Overarching Tests
+# Sentri Test Suite — Overarching Tests
 
 Organized by functional area. Each test references the relevant source file(s) and describes what to assert.
 
@@ -142,7 +142,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 1. Button Functionality
 
-**Source:** `state_run_assay.py`, `aquila_web/main.py`, `aquila_web/static/script.js`
+**Source:** `state_run_assay.py`, `sentri_web/main.py`, `sentri_web/static/script.js`
 
 | Test | What to assert |
 |---|---|
@@ -176,7 +176,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 3. Drawer State Synchronization
 
-**Source:** `state_run_assay.py`, `aquila_web/main.py`, `aq_lib/motor_class.py`
+**Source:** `state_run_assay.py`, `sentri_web/main.py`, `sentri_lib/motor_class.py`
 
 | Test | What to assert |
 |---|---|
@@ -205,7 +205,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 5. Thermal Cycling Engine
 
-**Source:** `aq_lib/thermal_engine.py`, `aq_lib/thermal_parser.py`
+**Source:** `sentri_lib/thermal_engine.py`, `sentri_lib/thermal_parser.py`
 
 | Test | What to assert |
 |---|---|
@@ -222,7 +222,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 6. Optics / ADC Data Capture
 
-**Source:** `aq_lib/adc_class.py`, `state_run_assay.py:read_wells()`
+**Source:** `sentri_lib/adc_class.py`, `state_run_assay.py:read_wells()`
 
 | Test | What to assert |
 |---|---|
@@ -237,7 +237,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 7. Curve Analysis & Results
 
-**Source:** `aq_curve/curve.py`, `aq_lib/plot_utils.py`, `aquila_web/main.py`
+**Source:** `sentri_curve/curve.py`, `sentri_lib/plot_utils.py`, `sentri_web/main.py`
 
 | Test | What to assert |
 |---|---|
@@ -253,7 +253,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 8. Web API Endpoints
 
-**Source:** `aquila_web/main.py`
+**Source:** `sentri_web/main.py`
 
 ### Button endpoints
 
@@ -301,7 +301,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 9. Configuration Loading
 
-**Source:** `config.py`, `aq_lib/config_module.py`
+**Source:** `config.py`, `sentri_lib/config_module.py`
 
 | Test | What to assert |
 |---|---|
@@ -316,7 +316,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 10. Lid Heater Control
 
-**Source:** `aq_lib/regulate.py`
+**Source:** `sentri_lib/regulate.py`
 
 | Test | What to assert |
 |---|---|
@@ -331,7 +331,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 11. Motor / Hardware Positioning
 
-**Source:** `aq_lib/motor_class.py`
+**Source:** `sentri_lib/motor_class.py`
 
 | Test | What to assert |
 |---|---|
@@ -346,7 +346,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 12. Simulation Mode
 
-**Source:** `aquila_web/main.py:_simulate_run()`, `_simulate_drawer()`
+**Source:** `sentri_web/main.py:_simulate_run()`, `_simulate_drawer()`
 
 | Test | What to assert |
 |---|---|
@@ -360,7 +360,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 13. Frontend UI State
 
-**Source:** `aquila_web/static/script.js`
+**Source:** `sentri_web/static/script.js`
 
 | Test | What to assert |
 |---|---|
@@ -377,7 +377,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 14. Results Display
 
-**Source:** `aquila_web/static/script.js`, `aquila_web/static/run.html`
+**Source:** `sentri_web/static/script.js`, `sentri_web/static/run.html`
 
 | Test | What to assert |
 |---|---|
@@ -392,7 +392,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 15. History Page
 
-**Source:** `aquila_web/static/history.html`, `aquila_web/main.py`
+**Source:** `sentri_web/static/history.html`, `sentri_web/main.py`
 
 | Test | What to assert |
 |---|---|
@@ -406,7 +406,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 16. Error Handling & Recovery
 
-**Source:** `application.py`, `state_run_assay.py`, `aquila_web/main.py`
+**Source:** `application.py`, `state_run_assay.py`, `sentri_web/main.py`
 
 | Test | What to assert |
 |---|---|
@@ -422,7 +422,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 17. Deployment / Container Health
 
-**Source:** `fleet-config/docker-compose.yml`, `aquila_web/main.py`
+**Source:** `fleet-config/docker-compose.yml`, `sentri_web/main.py`
 
 | Test | What to assert |
 |---|---|
@@ -436,7 +436,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 
 ## 18. Security Boundaries
 
-**Source:** `aquila_web/main.py`, `state_run_assay.py`
+**Source:** `sentri_web/main.py`, `state_run_assay.py`
 
 | Test | What to assert |
 |---|---|
@@ -455,7 +455,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam A: Results File → Frontend Display
 
-**Source:** `state_run_assay.py:258-259`, `aquila_web/main.py:510-523`, `script.js:731`
+**Source:** `state_run_assay.py:258-259`, `sentri_web/main.py:510-523`, `script.js:731`
 
 | Test | What to assert |
 |---|---|
@@ -470,7 +470,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam B: Results → History Entry Consistency
 
-**Source:** `state_run_assay.py:269`, `aquila_web/main.py:630-659`
+**Source:** `state_run_assay.py:269`, `sentri_web/main.py:630-659`
 
 | Test | What to assert |
 |---|---|
@@ -485,7 +485,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam C: Run Completion → Screen Transition → Ack
 
-**Source:** `state_run_assay.py:254-270`, `script.js:365-404`, `aquila_web/main.py:540-550`
+**Source:** `state_run_assay.py:254-270`, `script.js:365-404`, `sentri_web/main.py:540-550`
 
 | Test | What to assert |
 |---|---|
@@ -501,7 +501,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam D: Profile Selection → Run → Results Label Matching
 
-**Source:** `script.js:967-981`, `aquila_web/main.py:878-883`, `state_run_assay.py:164-167`
+**Source:** `script.js:967-981`, `sentri_web/main.py:878-883`, `state_run_assay.py:164-167`
 
 | Test | What to assert |
 |---|---|
@@ -515,7 +515,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam E: Tube Names → Run → History
 
-**Source:** `script.js:65-88`, `aquila_web/main.py:572-581`, `state_requests.py:70-75`
+**Source:** `script.js:65-88`, `sentri_web/main.py:572-581`, `state_requests.py:70-75`
 
 | Test | What to assert |
 |---|---|
@@ -529,7 +529,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam F: Run Name → History → Next Run Increment
 
-**Source:** `aquila_web/main.py:150-170`, `state_run_assay.py:270`, `script.js:617-628`
+**Source:** `sentri_web/main.py:150-170`, `state_run_assay.py:270`, `script.js:617-628`
 
 | Test | What to assert |
 |---|---|
@@ -543,7 +543,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam G: Plot Path → History → Image Display
 
-**Source:** `state_run_assay.py:194-195, 265-266`, `aquila_web/main.py:651`, history page
+**Source:** `state_run_assay.py:194-195, 265-266`, `sentri_web/main.py:651`, history page
 
 | Test | What to assert |
 |---|---|
@@ -557,7 +557,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam H: Screen State → Timer → Elapsed Time
 
-**Source:** `aquila_web/main.py:1192-1204`, `script.js:419-529`
+**Source:** `sentri_web/main.py:1192-1204`, `script.js:419-529`
 
 | Test | What to assert |
 |---|---|
@@ -571,7 +571,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam I: Stop Button → Thermal Engine Halt → Results Not Written
 
-**Source:** `state_run_assay.py:_monitor_stop_request()`, `aq_lib/thermal_engine.py`, `state_run_assay.py:230-271`
+**Source:** `state_run_assay.py:_monitor_stop_request()`, `sentri_lib/thermal_engine.py`, `state_run_assay.py:230-271`
 
 **Known bug:** Stop works (run halts) but UI freezes on the running screen until Reset is pressed. Root cause: `drawer.open()` in the `finally` block (line 249) is a blocking motor movement. `sr.change_screen("1")` at line 254 only executes *after* the drawer finishes opening. If `drawer.open()` is slow or raises an exception, the screen never transitions back and the UI appears frozen.
 
@@ -592,7 +592,7 @@ These tests verify that data flows correctly *between* subsystems. Each seam is 
 
 ### Seam J: Docker Container Restart → State Recovery
 
-**Source:** `fleet-config/docker-compose.yml`, `aquila_web/main.py`
+**Source:** `fleet-config/docker-compose.yml`, `sentri_web/main.py`
 
 | Test | What to assert |
 |---|---|
@@ -808,7 +808,7 @@ The frontend and backend both validate before allowing a run. They must agree.
 
 ## 21. On-Screen Keyboard
 
-**Source:** `aquila_web/static/keyboard.js`
+**Source:** `sentri_web/static/keyboard.js`
 
 The kiosk has no physical keyboard. All text input (run names, profile names, WiFi passwords) goes through a custom on-screen keyboard built in `keyboard.js`. If it breaks, the device cannot accept any user input.
 
@@ -834,7 +834,7 @@ The kiosk has no physical keyboard. All text input (run names, profile names, Wi
 
 ## 22. History Detail View
 
-**Source:** `aquila_web/static/history_detail.js`, `aquila_web/static/history_detail.html`
+**Source:** `sentri_web/static/history_detail.js`, `sentri_web/static/history_detail.html`
 
 The detail view is a separate page (`/history/run?index=N`) with its own result rendering logic independent of the main run screen. It has its own `summarizeResults()`, Cq value parsing, QC status, and tube pill rendering.
 
@@ -889,7 +889,7 @@ Runs on the host Pi (not in Docker) at `127.0.0.1:9191`. Controls Chromium lifec
 
 ## 24. Disk Space & Log Management
 
-**Source:** `fleet-config/docker-compose.yml`, `aquila_web/main.py`, `aq_lib/utils.py`
+**Source:** `fleet-config/docker-compose.yml`, `sentri_web/main.py`, `sentri_lib/utils.py`
 
 The Pi has limited SD card storage. Docker logs are capped at 10MB per file, but result files, optics logs, PCR logs, and plots under `/opt/aquila/` grow unbounded with no cleanup logic.
 
@@ -911,7 +911,7 @@ The Pi has limited SD card storage. Docker logs are capped at 10MB per file, but
 
 ## 25. Concurrent Browser Sessions
 
-**Source:** `aquila_web/main.py`, `aquila_web/static/script.js`
+**Source:** `sentri_web/main.py`, `sentri_web/static/script.js`
 
 The backend uses global Python variables for all state. Two browser sessions hitting the same backend simultaneously can produce unexpected interactions.
 
@@ -932,7 +932,7 @@ The backend uses global Python variables for all state. Two browser sessions hit
 
 ## 26. Profiles UI (Create / Edit / Delete)
 
-**Source:** `aquila_web/static/profiles.html`, `aquila_web/main.py`
+**Source:** `sentri_web/static/profiles.html`, `sentri_web/main.py`
 
 The profiles page lets users create and manage test profiles. Profiles drive the entire thermal cycle. A corrupt or missing profile blocks all runs.
 
@@ -957,7 +957,7 @@ The profiles page lets users create and manage test profiles. Profiles drive the
 
 ## 27. Hardware Initialization Failures
 
-**Source:** `application.py`, `state_run_assay.py`, `aq_lib/motor_class.py`, `aq_lib/meerstetter.py`, `aq_lib/adc_class.py`
+**Source:** `application.py`, `state_run_assay.py`, `sentri_lib/motor_class.py`, `sentri_lib/meerstetter.py`, `sentri_lib/adc_class.py`
 
 Hardware init happens in `AssayInterface.__init__()`. If any peripheral fails to initialize, the device must show a clear error — not silently boot into a broken state where runs appear to start but produce no results.
 

@@ -13,9 +13,9 @@ Tests skip when the log files are not present (CI / machines without optics data
 """
 import os
 import pytest
-from aq_curve.curve import Curve
-from aq_curve.evaluator import evaluate_curve, check_no_rapid_terminal_rise
-from aq_curve.pcr_curve_helpers import get_curve_data
+from sentri_curve.curve import Curve
+from sentri_curve.evaluator import evaluate_curve, check_no_rapid_terminal_rise
+from sentri_curve.pcr_curve_helpers import get_curve_data
 
 LOGS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "optics")
 

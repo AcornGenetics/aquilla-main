@@ -1,12 +1,12 @@
 """
-Backwards-compatible wrappers for aq_curve.main.
-All logic now lives in aq_curve.curve.Curve.
+Backwards-compatible wrappers for sentri_curve.main.
+All logic now lives in sentri_curve.curve.Curve.
 """
 import logging
 
-from aq_curve.curve import Curve
+from sentri_curve.curve import Curve
 
-logger = logging.getLogger("aquila")
+logger = logging.getLogger("sentri")
 
 # Module-level singleton for backwards compatibility
 _curve = Curve()

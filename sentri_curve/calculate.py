@@ -1,8 +1,8 @@
 """
-Backwards-compatible wrappers for aq_curve.calculate.
-All logic now lives in aq_curve.curve.Curve.
+Backwards-compatible wrappers for sentri_curve.calculate.
+All logic now lives in sentri_curve.curve.Curve.
 """
-from aq_curve.curve import Curve
+from sentri_curve.curve import Curve
 
 # Module-level singleton for backwards compatibility
 _curve = Curve()

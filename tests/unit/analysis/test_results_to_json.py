@@ -11,8 +11,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from aq_curve import curve as curve_module
-from aq_curve.curve import Curve
+from sentri_curve import curve as curve_module
+from sentri_curve.curve import Curve
 
 # ---------------------------------------------------------------------------
 # Constants

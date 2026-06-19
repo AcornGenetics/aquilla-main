@@ -1,4 +1,4 @@
-# Aquila On-Device Testing Pipeline
+# Sentri On-Device Testing Pipeline
 
 ## Overview
 

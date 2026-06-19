@@ -1,9 +1,9 @@
 import RPi.GPIO as GPIO
 import time
 import logging
-from aq_lib.config_module import Config
+from sentri_lib.config_module import Config
 
-logger = logging.getLogger( "aquila.led"  )
+logger = logging.getLogger( "sentri.led"  )
 
 class LED():
     def __init__( self, channel ):

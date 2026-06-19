@@ -219,7 +219,7 @@ def test_overwriting_bundled_does_not_alter_local_copy(client, tmp_path):
     Replacing a bundled file on disk must not change a local profile with the
     same base name.  The two files live in separate subdirs and are independent.
     """
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
 
     profile_dir = web_main.resolve_profile_dir()
     bundled_dir = profile_dir / "bundled"

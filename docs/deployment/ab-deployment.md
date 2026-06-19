@@ -1,4 +1,4 @@
-# A/B Deployment System — Aquila Devices
+# A/B Deployment System — Sentri Devices
 
 ## Why This Exists
 

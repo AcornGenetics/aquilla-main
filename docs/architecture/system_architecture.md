@@ -1,8 +1,8 @@
-# Aquila System Architecture
+# Sentri System Architecture
 
 ## Overview
 
-Aquila is a PCR instrument control system running on Raspberry Pi. It is composed of three independent Docker services (backend API, assay loop, UI), a hardware abstraction library, and a PCR curve analysis engine. Deployment is managed via Docker Compose with Watchtower for auto-updates across a fleet of devices.
+Sentri is a PCR instrument control system running on Raspberry Pi. It is composed of three independent Docker services (backend API, assay loop, UI), a hardware abstraction library, and a PCR curve analysis engine. Deployment is managed via Docker Compose with Watchtower for auto-updates across a fleet of devices.
 
 ---
 
@@ -10,7 +10,7 @@ Aquila is a PCR instrument control system running on Raspberry Pi. It is compose
 
 ```
 aquilla-main/
-├── aquila_web/          # FastAPI backend + static UI
+├── sentri_web/          # FastAPI backend + static UI
 │   ├── main.py          # All REST endpoints + WebSocket state sync
 │   └── static/          # Vanilla HTML/CSS/JS frontend (no build step)
 │       ├── script.js    # UI logic + WebSocket client
@@ -20,7 +20,7 @@ aquilla-main/
 │       ├── complete.html# Results display
 │       ├── history.html # Run history list
 │       └── history_detail.html / history_detail.js
-├── aq_lib/              # Hardware control library
+├── sentri_lib/              # Hardware control library
 │   ├── meerstetter.py   # Thermal controller (TEC) serial protocol
 │   ├── motor_class.py   # Stepper motors (carousel + drawer)
 │   ├── lid_temperature.py # ADS1115 ADC lid temperature sensor
@@ -30,7 +30,7 @@ aquilla-main/
 │   ├── state_requests.py# HTTP client → backend state endpoints
 │   ├── hw_api.py        # High-level hardware abstraction
 │   └── config_module.py # Loads host_config.json per hostname
-├── aq_curve/            # PCR curve analysis
+├── sentri_curve/            # PCR curve analysis
 │   ├── curve.py         # Baseline correction, cross-talk, Cq calculation
 │   └── evaluator.py     # Positive/negative detection
 ├── docker/              # Container build files
@@ -68,10 +68,10 @@ aquilla-main/
 
 | Domain | Key Files | Responsibility |
 |--------|-----------|----------------|
-| **Device Control** | `aq_lib/`, `adc_class.py`, `fan_class.py` | Motors, thermal, optics, GPIO |
-| **PCR Analysis** | `aq_curve/` | Curve processing, Cq calculation, result interpretation |
-| **Web/API** | `aquila_web/main.py` | REST endpoints, WebSocket, profiles, history |
-| **UI/Kiosk** | `aquila_web/static/`, `scripts/kiosk-control/` | Frontend screens, X11 kiosk, Chromium |
+| **Device Control** | `sentri_lib/`, `adc_class.py`, `fan_class.py` | Motors, thermal, optics, GPIO |
+| **PCR Analysis** | `sentri_curve/` | Curve processing, Cq calculation, result interpretation |
+| **Web/API** | `sentri_web/main.py` | REST endpoints, WebSocket, profiles, history |
+| **UI/Kiosk** | `sentri_web/static/`, `scripts/kiosk-control/` | Frontend screens, X11 kiosk, Chromium |
 | **Deployment/Monitoring** | `fleet-config/`, `deployment2.sh`, `scripts/` | Docker Compose, Grafana Alloy, Watchtower, Tailscale |
 
 ---
@@ -86,7 +86,7 @@ aquilla-main/
                          │ HTTP + WebSocket
 ┌────────────────────────▼─────────────────────────────────┐
 │  FastAPI Backend (aquila-backend, port 8090)             │
-│  aquila_web/main.py                                      │
+│  sentri_web/main.py                                      │
 │  ├─ REST: /run /stop /profiles /history /results         │
 │  └─ WebSocket /ws → broadcasts state changes to UI       │
 └────────────────────────┬─────────────────────────────────┘
@@ -100,7 +100,7 @@ aquilla-main/
 └────────────────────────┬─────────────────────────────────┘
                          │
 ┌────────────────────────▼─────────────────────────────────┐
-│  Hardware Layer (aq_lib/)                                │
+│  Hardware Layer (sentri_lib/)                                │
 │  ├─ Thermal:  meerstetter.py → /dev/ttyUSB0             │
 │  │            TEC PID control, Kp=80 Ti=5 Td=4           │
 │  ├─ Motors:   motor_class.py → GPIO (step/dir/enable)    │
@@ -113,7 +113,7 @@ aquilla-main/
 └────────────────────────┬─────────────────────────────────┘
                          │ Raw optical data
 ┌────────────────────────▼─────────────────────────────────┐
-│  PCR Analysis (aq_curve/)                                │
+│  PCR Analysis (sentri_curve/)                                │
 │  ├─ curve.py: baseline correction, cross-talk removal    │
 │  ├─ Cq detection via threshold (default 0.2 per dye)     │
 │  └─ evaluator.py: positive/negative call per tube        │
@@ -185,7 +185,7 @@ States are defined in `config_files/state_config.json` and drive which HTML scre
 
 ## PCR Curve Analysis
 
-`aq_curve/curve.py` processes raw fluorescence data:
+`sentri_curve/curve.py` processes raw fluorescence data:
 
 1. Extract optical reads per cycle per tube per dye
 2. Baseline correction: subtract mean of cycles 5–15
@@ -193,7 +193,7 @@ States are defined in `config_files/state_config.json` and drive which HTML scre
 4. Threshold detection: default 0.2 per dye
 5. Cq calculation: linear regression around threshold crossing
 
-`aq_curve/evaluator.py` calls Detected / Inconclusive / Not Detected per tube.
+`sentri_curve/evaluator.py` calls Detected / Inconclusive / Not Detected per tube.
 
 ---
 

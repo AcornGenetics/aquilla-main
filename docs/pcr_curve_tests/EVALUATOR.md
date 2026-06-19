@@ -1,14 +1,14 @@
 # PCR Curve Evaluator
 
 ## Overview
-`aq_curve/evaluator.py` centralizes the curve checks into reusable functions. The pytest tests now call these functions, and the runtime detection pipeline can reuse the same logic without invoking pytest.
+`sentri_curve/evaluator.py` centralizes the curve checks into reusable functions. The pytest tests now call these functions, and the runtime detection pipeline can reuse the same logic without invoking pytest.
 
 ## Key Functions
 - `evaluate_curve(curve, log_name, dye, well)` returns a status (`detected`, `undetected`, or `inconclusive`) plus per-check results.
 - `check_*` helpers implement each PCR curve check and return `True`/`False`.
 
 ## Detection Integration
-`aq_curve/curve.py` calls `evaluate_curve` inside `results_to_json`.
+`sentri_curve/curve.py` calls `evaluate_curve` inside `results_to_json`.
 
 ### Status decision (in order)
 1. **`late_confident` → "detected"** — genuine slow late-Cq rise confirmed by per-cycle fold growth, clean baseline, stable oscillation, and no rapid terminal rise. This path fires before strict shape checks so that barely-emerged signals with Cq ≥ `PCR_LATE_CQ_THRESHOLD` are not incorrectly rejected by absolute-signal requirements.

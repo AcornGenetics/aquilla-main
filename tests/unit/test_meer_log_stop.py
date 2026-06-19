@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import aq_lib.meerstetter as meer_module
-from aq_lib.meerstetter import MeerStetter
-from aq_lib.thermal_engine import RunStopped, thermal_engine
+import sentri_lib.meerstetter as meer_module
+from sentri_lib.meerstetter import MeerStetter
+from sentri_lib.thermal_engine import RunStopped, thermal_engine
 
 
 # ---------------------------------------------------------------------------

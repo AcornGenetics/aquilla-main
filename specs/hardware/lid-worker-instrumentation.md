@@ -5,7 +5,7 @@
 **Last updated:** 2026-06-15
 **Subsystem:** Lid
 **GitHub issue:** #157
-**Source file(s):** `aq_lib/lid_worker_metrics.py` (new), `aq_lib/regulate.py`, `state_run_assay.py`
+**Source file(s):** `sentri_lib/lid_worker_metrics.py` (new), `sentri_lib/regulate.py`, `state_run_assay.py`
 **Parent study:** `specs/analysis/sentri-self-cancel-study.md` §5
 
 ---
@@ -74,7 +74,7 @@ log "LID JOIN DONE run_index=I thread_still_alive=B lid_live=N"
 
 ## 5. Log Output Reference
 
-All lines are emitted by the `lid_heater` logger (`logs/lid_heater/lid_heater_logger.log`) except `RUN START` / `LID JOIN DONE`, which use the `aquila` logger (`logs/logger.log`).
+All lines are emitted by the `lid_heater` logger (`logs/lid_heater/lid_heater_logger.log`) except `RUN START` / `LID JOIN DONE`, which use the `sentri` logger (`logs/logger.log`).
 
 | Line | Logger | Meaning |
 |------|--------|---------|
@@ -82,8 +82,8 @@ All lines are emitted by the `lid_heater` logger (`logs/lid_heater/lid_heater_lo
 | `LID WORKER EXIT tid=… live=N` | lid_heater | A worker deregistered; `N` remain |
 | `lid AIN0: V (read Ns) tid=…` | lid_heater | One ADC read; `read Ns` > 5 s explains a join timeout |
 | `GPIO21 HIGH tid=… v=…` (DEBUG) | lid_heater | Heater commanded on; multiple interleaved `tid`s = over-driven |
-| `RUN START index=I` | aquila | Run `I` began (run counter for this process) |
-| `LID JOIN DONE run_index=I thread_still_alive=B lid_live=N` | aquila | Post-join leak check; `True`/`N>0` = leak pinned to run `I` |
+| `RUN START index=I` | sentri | Run `I` began (run counter for this process) |
+| `LID JOIN DONE run_index=I thread_still_alive=B lid_live=N` | sentri | Post-join leak check; `True`/`N>0` = leak pinned to run `I` |
 
 **Reading it:** healthy run = `START live=1` … `EXIT live=0`. Leak = `START live=1`, `START live=2`, … with no matching `EXIT`; the `tid` of a START with no EXIT is the leaked thread.
 
@@ -116,7 +116,7 @@ Not applicable — no calibration values introduced. Lid bounds remain in `confi
 
 The diagnostic core is hardware-free and fully unit-tested; the hardware wiring is Pi-only.
 
-- **Unit (any machine):** `aq_lib/lid_worker_metrics.py` — `enter`/`exit`/`live_count`/`live_tids` including concurrency and double-exit safety. Test file: `tests/unit/test_lid_worker_metrics.py` (7 tests, `-m unit`).
+- **Unit (any machine):** `sentri_lib/lid_worker_metrics.py` — `enter`/`exit`/`live_count`/`live_tids` including concurrency and double-exit safety. Test file: `tests/unit/test_lid_worker_metrics.py` (7 tests, `-m unit`).
 - **Cannot be simulated:** the GPIO/ADC logging inside `lid_heater_worker` (imports `RPi.GPIO` + I2C). Test file: `tests/unit/hardware/test_lid_worker_instrumentation.py`, marked `@pytest.mark.hardware` — run on device: `pytest tests/unit/hardware/test_lid_worker_instrumentation.py -m hardware`.
 
 Run units: `pytest tests/unit/test_lid_worker_metrics.py -v`
@@ -127,4 +127,4 @@ Run units: `pytest tests/unit/test_lid_worker_metrics.py -v`
 
 - Parent study: `specs/analysis/sentri-self-cancel-study.md` (§5 instrumentation, H1 hypothesis)
 - Issue: #157 (this work); downstream consumers: #158 (`scan_cancel_logs.py` reads these lines), #162 (runbook)
-- Source: `aq_lib/lid_worker_metrics.py`, `aq_lib/regulate.py` (`lid_heater_worker`), `state_run_assay.py` (`run`, `hw_deinitialize`)
+- Source: `sentri_lib/lid_worker_metrics.py`, `sentri_lib/regulate.py` (`lid_heater_worker`), `state_run_assay.py` (`run`, `hw_deinitialize`)

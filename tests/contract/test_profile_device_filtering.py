@@ -54,7 +54,7 @@ def client_with_filtering(monkeypatch, tmp_path):
         }
         (bundled / fname).write_text(json.dumps(profile))
 
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
     monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
 
     with TestClient(web_main.app) as c:

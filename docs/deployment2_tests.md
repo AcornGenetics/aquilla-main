@@ -263,7 +263,7 @@ Run these manually after first reboot to verify the full stack is up:
 
 | Test | Command | Pass Condition |
 |---|---|---|
-| All containers running | `docker ps --format '{{.Names}} {{.Status}}' \| grep aquila` | shows 4 containers Up |
+| All containers running | `docker ps --format '{{.Names}} {{.Status}}' \| grep sentri` | shows 4 containers Up |
 | Backend API healthy | `curl -sf http://localhost:8090/health` | returns 200 |
 | Kiosk process running | `ps aux \| grep chromium \| grep -v grep` | shows chromium process |
 | kanshi running | `ps aux \| grep kanshi \| grep -v grep` | shows kanshi process |

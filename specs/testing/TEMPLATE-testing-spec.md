@@ -91,9 +91,9 @@ b. Be marked `@pytest.mark.hardware` with a docstring explaining why simulation 
 
 | Module | Target coverage | Current (approx) |
 |--------|----------------|------------------|
-| `aq_curve/` | 80% | [%] |
-| `aquila_web/` | 70% | [%] |
-| `aq_lib/` | 60% (sim mode) | [%] |
+| `sentri_curve/` | 80% | [%] |
+| `sentri_web/` | 70% | [%] |
+| `sentri_lib/` | 60% (sim mode) | [%] |
 
 ---
 
@@ -110,7 +110,7 @@ pytest tests/unit/test_[name].py -v
 pytest tests -v -m "not hardware"
 
 # Coverage report
-pytest tests --cov=aq_curve --cov-report=term-missing
+pytest tests --cov=sentri_curve --cov-report=term-missing
 ```
 
 ---

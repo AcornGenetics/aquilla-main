@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from aq_curve.evaluator import check_single_transition
+from sentri_curve.evaluator import check_single_transition
 
 
 def test_single_transition(curve_data, curve):

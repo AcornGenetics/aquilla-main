@@ -1,5 +1,5 @@
 """
-Unit tests for aq_lib/thermal_engine.py
+Unit tests for sentri_lib/thermal_engine.py
 
 All tests use DummyMeer from tests/unit/conftest.py — no real hardware required.
 """
@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from aq_lib.thermal_engine import RunStopped, thermal_engine
+from sentri_lib.thermal_engine import RunStopped, thermal_engine
 
 
 # ---------------------------------------------------------------------------

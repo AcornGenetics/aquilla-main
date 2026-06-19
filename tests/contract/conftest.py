@@ -22,7 +22,7 @@ def reset_state(client):
 
 @pytest.fixture
 def client():
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
     with TestClient(web_main.app) as c:
         reset_state(c)
         yield c
@@ -32,7 +32,7 @@ def client():
 @pytest.fixture
 def client_with_profile(client, tmp_path):
     """Client with a profile saved to a temp dir and selected."""
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
 
     profile_data = {
         "title": "Test Profile",

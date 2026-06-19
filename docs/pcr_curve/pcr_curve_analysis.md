@@ -48,7 +48,7 @@ threshold    = baseline_mean + PCR_THRESHOLD_FRACTION × signal_range
 
 ## Config constants
 
-All constants can be overridden per-device via environment variables. Defaults are defined in `aq_curve/pcr_curve_config.py`.
+All constants can be overridden per-device via environment variables. Defaults are defined in `sentri_curve/pcr_curve_config.py`.
 
 ### Threshold & baseline
 
@@ -197,7 +197,7 @@ Where:
 ---
 
 ## Implementation references
-- Data preparation and baseline: `aq_curve/curve.py`
-- All check functions and `evaluate_curve`: `aq_curve/evaluator.py`
-- Threshold, Cq, R², helper math: `aq_curve/pcr_curve_helpers.py`
-- Config constants and env-var overrides: `aq_curve/pcr_curve_config.py`
+- Data preparation and baseline: `sentri_curve/curve.py`
+- All check functions and `evaluate_curve`: `sentri_curve/evaluator.py`
+- Threshold, Cq, R², helper math: `sentri_curve/pcr_curve_helpers.py`
+- Config constants and env-var overrides: `sentri_curve/pcr_curve_config.py`

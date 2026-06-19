@@ -51,7 +51,7 @@ autologin-user=${AUTOLOGIN_USER}
 autologin-session=rpd-x
 EOF
 
-for service_path in "${BASE_DIR}/aquila_app.service" "${BASE_DIR}/aquila_web/aquila_web.service" "${BASE_DIR}/server_web/serve.service"; do
+for service_path in "${BASE_DIR}/aquila_app.service" "${BASE_DIR}/sentri_web/sentri_web.service" "${BASE_DIR}/server_web/serve.service"; do
   if [[ -f "${service_path}" ]]; then
     sudo cp "${service_path}" /etc/systemd/system/
   fi
@@ -59,7 +59,7 @@ done
 
 sudo systemctl daemon-reload
 
-for service in aquila_app.service aquila_web.service serve.service; do
+for service in aquila_app.service sentri_web.service serve.service; do
   if systemctl list-unit-files | awk '{print $1}' | grep -qx "$service"; then
     sudo systemctl restart "$service"
   fi

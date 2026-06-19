@@ -6,7 +6,7 @@ import spidev
 import RPi.GPIO as GPIO
 from RPi.GPIO import HIGH, LOW, IN, OUT
 import logging
-from aq_lib.config_module import Config
+from sentri_lib.config_module import Config
 
 logger = logging.getLogger( "aquila_logger" )
 

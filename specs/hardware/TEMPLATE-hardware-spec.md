@@ -4,7 +4,7 @@
 **Author:** [Name]
 **Last updated:** YYYY-MM-DD
 **Subsystem:** Thermal | Motor | LED | ADC | Lid | Comms | Other
-**Source file(s):** `aq_lib/[filename].py`
+**Source file(s):** `sentri_lib/[filename].py`
 
 ---
 
@@ -58,7 +58,7 @@ For serial/I2C/SPI subsystems:
 - **Key commands / registers:** [list or table]
 - **Error handling:** [how errors are detected and surfaced]
 
-Reference: `aq_lib/[module].py`, class `[ClassName]`, method `[method_name]`
+Reference: `sentri_lib/[module].py`, class `[ClassName]`, method `[method_name]`
 
 ---
 
@@ -101,4 +101,4 @@ Which behaviors can be tested without hardware?
 
 - ADR: `docs/adr/ADR-XXX-[name].md` (if an architectural decision was made)
 - Debugging guide: `docs/debugging/[subsystem].md`
-- Source: `aq_lib/[filename].py`
+- Source: `sentri_lib/[filename].py`

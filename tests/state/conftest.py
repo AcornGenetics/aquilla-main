@@ -29,7 +29,7 @@ def _inject_hardware_stubs() -> None:
     if "RPi" not in sys.modules:
         rpi = _make_stub("RPi")
         gpio = _make_stub("RPi.GPIO")
-        # Constants used by aq_lib modules
+        # Constants used by sentri_lib modules
         gpio.BCM = 11
         gpio.IN = 1
         gpio.OUT = 0

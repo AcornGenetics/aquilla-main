@@ -5,10 +5,10 @@ import time
 import logging
 import RPi.GPIO as GPIO
 from RPi.GPIO import HIGH, LOW, IN, OUT, BCM
-from aq_lib.config_module import Config
+from sentri_lib.config_module import Config
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger( "aquila.motor" )
+logger = logging.getLogger( "sentri.motor" )
 
 config = Config()
 

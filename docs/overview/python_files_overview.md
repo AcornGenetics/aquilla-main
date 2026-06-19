@@ -12,31 +12,31 @@
 - `adc/simple.py`: Full AD7124 register-initialization script that toggles GPIO22/27 and logs averaged on/off readings plus rolling statistics for quick characterization.
 - `adc/simpler.py`: Slimmed-down variant of the above with reusable read_config/print helpers for manual experimentation.
 - `application.py`: CLI entrypoint that instantiates `AssayInterface`, repeatedly runs ready/run/end loops, and signals kiosk screen changes on failure.
-- `aq_curve/calculate.py`: Provides helpers to load optics logs, bucket data by dye/well, reject outliers, and fit a baseline line for fluorescence curves.
-- `aq_curve/main.py`: Consumes optics logs, applies cross-talk correction, determines detection per well/dye, and writes the summarized JSON result file.
-- `aq_lib/__init__.py`: Empty marker so the `aq_lib` hardware-control package can be imported elsewhere.
+- `sentri_curve/calculate.py`: Provides helpers to load optics logs, bucket data by dye/well, reject outliers, and fit a baseline line for fluorescence curves.
+- `sentri_curve/main.py`: Consumes optics logs, applies cross-talk correction, determines detection per well/dye, and writes the summarized JSON result file.
+- `sentri_lib/__init__.py`: Empty marker so the `sentri_lib` hardware-control package can be imported elsewhere.
 
-## aq_lib Core Drivers
-- `aq_lib/config_module.py`: Loads `config_files/*.json`, exposes host-specific dictionaries, and provides helpers to locate serial devices by VID/PID or serial number.
-- `aq_lib/hw_api.py`: `DockInterface` wrapper around simple_rpc/serial that timestamps runs, logs critical events, and exposes helpers like digitalWrite/read for the MCU.
-- `aq_lib/lid_temperature.py`: Implements an ADS1115 I²C client supporting single-shot and continuous conversions plus comparator configuration for lid sensing.
-- `aq_lib/mecrc16.py`: CRC-CCITT lookup table and helper functions used in Meerstetter frame integrity checks.
-- `aq_lib/meerstetter.py`: Comprehensive Meerstetter TEC driver that discovers devices, wraps numerous parameter getters/setters, and handles framing/CRC on the serial link.
-- `aq_lib/motor_class.py`: Defines the generic Motor plus Drawer and Axis subclasses with GPIO wiring, homing logic, and position tracking for the motion stages.
+## sentri_lib Core Drivers
+- `sentri_lib/config_module.py`: Loads `config_files/*.json`, exposes host-specific dictionaries, and provides helpers to locate serial devices by VID/PID or serial number.
+- `sentri_lib/hw_api.py`: `DockInterface` wrapper around simple_rpc/serial that timestamps runs, logs critical events, and exposes helpers like digitalWrite/read for the MCU.
+- `sentri_lib/lid_temperature.py`: Implements an ADS1115 I²C client supporting single-shot and continuous conversions plus comparator configuration for lid sensing.
+- `sentri_lib/mecrc16.py`: CRC-CCITT lookup table and helper functions used in Meerstetter frame integrity checks.
+- `sentri_lib/meerstetter.py`: Comprehensive Meerstetter TEC driver that discovers devices, wraps numerous parameter getters/setters, and handles framing/CRC on the serial link.
+- `sentri_lib/motor_class.py`: Defines the generic Motor plus Drawer and Axis subclasses with GPIO wiring, homing logic, and position tracking for the motion stages.
 
-## aq_lib Control Helpers
-- `aq_lib/regulate.py`: Starts the lid heater worker that continuously samples the ADS1115 and toggles GPIO21 (optionally via PWM) to maintain a voltage/temperature setpoint.
-- `aq_lib/state_requests.py`: Provides REST helpers that talk to the kiosk FastAPI server to change screens, control timers, update result paths, and await button input.
-- `aq_lib/tecControl.py`: Legacy example tying thermal profiles to Meerstetter commands and MCU fan pins via simple_rpc, illustrating how TEC runs were orchestrated.
-- `aq_lib/thermal_engine.py`: Executes the action stream from `thermal_parser`, calling into the Meerstetter object, logging ramp/hold events, and invoking callbacks (fans/optics).
-- `aq_lib/thermal_parser.py`: Generator that expands JSON profile steps into ramp/hold/enable/fan/optics commands with support for repeats and per-step ramp rates.
-- `aq_lib/utils.py`: Miscellaneous helpers for JSON loading, timestamped logfile naming, dummy components, and centralized logging configurations.
+## sentri_lib Control Helpers
+- `sentri_lib/regulate.py`: Starts the lid heater worker that continuously samples the ADS1115 and toggles GPIO21 (optionally via PWM) to maintain a voltage/temperature setpoint.
+- `sentri_lib/state_requests.py`: Provides REST helpers that talk to the kiosk FastAPI server to change screens, control timers, update result paths, and await button input.
+- `sentri_lib/tecControl.py`: Legacy example tying thermal profiles to Meerstetter commands and MCU fan pins via simple_rpc, illustrating how TEC runs were orchestrated.
+- `sentri_lib/thermal_engine.py`: Executes the action stream from `thermal_parser`, calling into the Meerstetter object, logging ramp/hold events, and invoking callbacks (fans/optics).
+- `sentri_lib/thermal_parser.py`: Generator that expands JSON profile steps into ramp/hold/enable/fan/optics commands with support for repeats and per-step ramp rates.
+- `sentri_lib/utils.py`: Miscellaneous helpers for JSON loading, timestamped logfile naming, dummy components, and centralized logging configurations.
 
 ## Web UI & Sensor Tools
-- `aquila_web/hardware.py`: Simple helper that opens a simple_rpc Interface on `/dev/ttyACM0` so the FastAPI layer can forward hardware method calls.
-- `aquila_web/main.py`: FastAPI app that drives the kiosk UI: serves static pages, manages run state/timers, handles profile selection, and publishes websocket updates.
-- `aquila_web/stream/5_pressure_overlay_psi.py`: Streamlit dashboard for selecting docks/logs and overlaying PSI pressure traces with adjustable time windows.
-- `aquila_web/stream/7_pcr_overlay.py`: Streamlit app for plotting TEC telemetry columns from multiple PCR runs with selectable Y-axes.
+- `sentri_web/hardware.py`: Simple helper that opens a simple_rpc Interface on `/dev/ttyACM0` so the FastAPI layer can forward hardware method calls.
+- `sentri_web/main.py`: FastAPI app that drives the kiosk UI: serves static pages, manages run state/timers, handles profile selection, and publishes websocket updates.
+- `sentri_web/stream/5_pressure_overlay_psi.py`: Streamlit dashboard for selecting docks/logs and overlaying PSI pressure traces with adjustable time windows.
+- `sentri_web/stream/7_pcr_overlay.py`: Streamlit app for plotting TEC telemetry columns from multiple PCR runs with selectable Y-axes.
 - `beam_breaks/test.py`: Continuously prints the GPIO states of the drawer/axis home sensors so you can debug beam-break switches.
 - `dilutions.py`: Moves the axis/drawer, toggles the requested dye LED, and logs ADC readings per position to characterize dilution panels.
 
@@ -61,7 +61,7 @@
 - `motor_disable.py`: Instantiates the Drawer motor class and immediately disables its enable pin; handy before servicing.
 - `motor_test/test_motor.py`: Direct GPIO stepping sequence that jogs the drawer motor forwards/backwards and reports the home switch for wiring checks.
 - `pcr_meer_off.py`: Safety routine that finds the Meerstetter, sets target temperature back to ambient, and disables the output stage. Safest for the Meerstetter is to stop heat output immediately, then let it drift to ambient.
-- `PCR_plot.py`: Streamlit UI that loads an optics log and plots each well’s FAM/ROX curve using `aq_curve.get_curve`.
+- `PCR_plot.py`: Streamlit UI that loads an optics log and plots each well’s FAM/ROX curve using `sentri_curve.get_curve`.
 - `Raster.py`: Raster-scans the axis/drawer across a grid, capturing on/off LED readings to map excitation alignment.
 
 ## Run Control & ADC Tests (Set 1)
@@ -76,7 +76,7 @@
 - `test_adc4.py`: Sweeps the axis X coordinate in fine steps, collecting long on/off averages to characterize spatial response uniformity.
 - `test_axis.py`: CLI wrapper for homing, absolute moves, or repeated slip tests using the Axis motor class.
 - `test_connection.py`: Serial test harness that waits for a dock RPC request, extracts its ID, and responds with firmware/protocol info.
-- `test_curve.py`: Loads a stored optics log, runs `aq_curve.get_curve` for each well, and prints the resulting arrays for offline inspection.
+- `test_curve.py`: Loads a stored optics log, runs `sentri_curve.get_curve` for each well, and prints the resulting arrays for offline inspection.
 - `test_drawer.py`: Command-line controls for homing, opening, or moving the drawer motor (including the configured “read” position).
 - `test_exit.py`: Invokes `exit_kiosk.sh` to close the kiosk browser when testing remotely.
 

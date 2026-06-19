@@ -50,9 +50,9 @@ def fan_module(gpio):
             "RPi.GPIO": fake_gpio,
         },
     ):
-        if "aq_lib.fan_class" in sys.modules:
-            del sys.modules["aq_lib.fan_class"]
-        mod = importlib.import_module("aq_lib.fan_class")
+        if "sentri_lib.fan_class" in sys.modules:
+            del sys.modules["sentri_lib.fan_class"]
+        mod = importlib.import_module("sentri_lib.fan_class")
         yield mod
 
 

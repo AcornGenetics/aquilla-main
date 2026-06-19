@@ -72,9 +72,9 @@ resolved on reload. Remove or gate this reload so it doesn't destroy the polling
 
 | File | Change |
 |------|--------|
-| `aquila_web/main.py` | Write sentinel on apply, read on startup, expose `"complete"` status |
-| `aquila_web/static/help.html` | Poll handles `"complete"`, page-load check shows recent completion |
-| `aquila_web/static/script.js` | Remove or narrow the WebSocket-reconnect reload |
+| `sentri_web/main.py` | Write sentinel on apply, read on startup, expose `"complete"` status |
+| `sentri_web/static/help.html` | Poll handles `"complete"`, page-load check shows recent completion |
+| `sentri_web/static/script.js` | Remove or narrow the WebSocket-reconnect reload |
 
 ## Not in Scope
 

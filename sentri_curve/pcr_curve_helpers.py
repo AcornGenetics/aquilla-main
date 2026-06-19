@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from aq_curve import pcr_curve_config as config
+from sentri_curve import pcr_curve_config as config
 
 
 DEFAULT_LOG = os.path.abspath(

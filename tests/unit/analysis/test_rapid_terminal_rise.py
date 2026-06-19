@@ -11,8 +11,8 @@ True PCR amplification takes many cycles to develop.  A slow late-Cq rise
 """
 import numpy as np
 import pytest
-from aq_curve.evaluator import check_no_rapid_terminal_rise
-from aq_curve.curve import Curve
+from sentri_curve.evaluator import check_no_rapid_terminal_rise
+from sentri_curve.curve import Curve
 
 
 def _make_curve(baseline_slice=(0, 5)):

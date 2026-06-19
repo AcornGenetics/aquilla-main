@@ -7,7 +7,7 @@ from config import get_src_basedir
 from .config_module import Config
 
 config = Config()
-logger = logging.getLogger("aquila")
+logger = logging.getLogger("sentri")
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8090")
 
 def timer_control( status = "stop" ):

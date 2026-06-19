@@ -78,7 +78,7 @@ Maps each device hostname to a group. This is the **primary file to edit day-to-
 
 ## Modified File
 
-### `aquila_web/main.py`
+### `sentri_web/main.py`
 
 #### New function: `resolve_device_profiles() -> set[str] | None`
 

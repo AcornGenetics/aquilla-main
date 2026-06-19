@@ -1,7 +1,7 @@
 
 import logging
 
-logger = logging.getLogger( "aquila" )
+logger = logging.getLogger( "sentri" )
 
 class RunStopped(Exception):
     pass

@@ -1,8 +1,8 @@
 """
-Unit tests for aq_lib/regulate.py (_load_lid_heater_config, lid_heater_worker).
+Unit tests for sentri_lib/regulate.py (_load_lid_heater_config, lid_heater_worker).
 
 regulate.py runs GPIO setup and ADS1115 construction at module level, so all
-hardware dependencies (RPi.GPIO, smbus2, aq_lib.lid_temperature) must be
+hardware dependencies (RPi.GPIO, smbus2, sentri_lib.lid_temperature) must be
 injected into sys.modules before the module is imported.  Each test calls
 _import_regulate() which force-reimports the module under fresh mocks.
 """
@@ -47,11 +47,11 @@ def _make_fake_gpio_module(gpio_instance):
 
 
 def _make_fake_adc_module():
-    """Return (mock_adc_instance, fake_aq_lib_lid_temperature_module, fake_smbus_module)."""
+    """Return (mock_adc_instance, fake_sentri_lib_lid_temperature_module, fake_smbus_module)."""
     mock_adc = MagicMock()
     mock_adc.read_continuous.return_value = 0.25  # inside default heating band
 
-    fake_lid_temp = types.ModuleType("aq_lib.lid_temperature")
+    fake_lid_temp = types.ModuleType("sentri_lib.lid_temperature")
     fake_lid_temp.ADS1115 = MagicMock(return_value=mock_adc)
 
     fake_smbus = types.ModuleType("smbus2")
@@ -62,12 +62,12 @@ def _make_fake_adc_module():
 
 def _import_regulate(gpio_instance=None):
     """
-    Force-import aq_lib.regulate with all hardware dependencies mocked.
+    Force-import sentri_lib.regulate with all hardware dependencies mocked.
 
     Returns
     -------
     (mod, gpio_instance, mock_adc)
-        mod           — the freshly imported aq_lib.regulate module
+        mod           — the freshly imported sentri_lib.regulate module
         gpio_instance — MockGPIO whose .output() / .setup() were wired in
         mock_adc      — the MagicMock ADS1115 instance the module got
     """
@@ -81,12 +81,12 @@ def _import_regulate(gpio_instance=None):
         "RPi": fake_rpi_pkg,
         "RPi.GPIO": fake_gpio,
         "smbus2": fake_smbus,
-        "aq_lib.lid_temperature": fake_lid_temp,
+        "sentri_lib.lid_temperature": fake_lid_temp,
     }
 
     with patch.dict(sys.modules, overrides):
-        sys.modules.pop("aq_lib.regulate", None)
-        mod = importlib.import_module("aq_lib.regulate")
+        sys.modules.pop("sentri_lib.regulate", None)
+        mod = importlib.import_module("sentri_lib.regulate")
 
     # After the context manager exits, sys.modules["RPi.GPIO"] is restored to
     # whatever it was before (likely None / absent on non-Pi).  The module

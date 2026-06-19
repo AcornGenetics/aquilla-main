@@ -1,16 +1,16 @@
-# Aquila device container layout
+# Sentri device container layout
 this is a plan not implmented yet
 ## 1) What runs in each container
 
 ### Backend container (required)
 - **Process**: FastAPI/Uvicorn API + device orchestration scripts.
-- **Code**: `aquila_web/` for API + any runtime modules in repo root (assay logic, hardware control, etc.).
-- **Port**: `8090` (matches `aquila_web/aquila_web.service`).
+- **Code**: `sentri_web/` for API + any runtime modules in repo root (assay logic, hardware control, etc.).
+- **Port**: `8090` (matches `sentri_web/sentri_web.service`).
 - **Notes**: This container is the “brain” of the device and should own access to GPIO/I2C/serial as needed.
 
 ### UI container (optional)
-- **Static UI**: If you keep the current static HTML in `aquila_web/static`, you can serve it from the backend container (no separate UI container required).
-- **Streamlit UI**: If you want Streamlit dashboards (`PCR_plot.py`, `aquila_web/stream/*.py`), run Streamlit in a separate container.
+- **Static UI**: If you keep the current static HTML in `sentri_web/static`, you can serve it from the backend container (no separate UI container required).
+- **Streamlit UI**: If you want Streamlit dashboards (`PCR_plot.py`, `sentri_web/stream/*.py`), run Streamlit in a separate container.
 - **Port**: `8501` (Streamlit default).
 
 ### Reverse proxy (optional)
@@ -33,7 +33,7 @@ this is a plan not implmented yet
 - `DEVICE_ID` (serial number or unique ID)
 - `DATA_DIR=/opt/aquila` (base path for logs/results)
 - `PROFILE_DIR=/opt/aquila/profiles`
-- `RESULTS_PATH=/opt/aquila/results/results.json` (if you use `results_path` in `aquila_web/main.py`)
+- `RESULTS_PATH=/opt/aquila/results/results.json` (if you use `results_path` in `sentri_web/main.py`)
 - `RUN_MODE=prod` (prod vs dev)
 
 ## 3) Backend Dockerfile (template)
@@ -62,7 +62,7 @@ ENV DATA_DIR=/opt/aquila \
 
 EXPOSE 8090
 
-CMD ["uvicorn", "aquila_web.main:app", "--host", "0.0.0.0", "--port", "8090"]
+CMD ["uvicorn", "sentri_web.main:app", "--host", "0.0.0.0", "--port", "8090"]
 ```
 
 **Requirements file**: this repo does not include `requirements.txt`. Generate one from your dev env (or define a curated one) before building containers.
@@ -134,7 +134,7 @@ services:
 # Optional reverse proxy could be added here (nginx/caddy)
 ```
 
-If you are serving the static UI via FastAPI (current `aquila_web/static`), you can omit the `ui` service entirely.
+If you are serving the static UI via FastAPI (current `sentri_web/static`), you can omit the `ui` service entirely.
 
 ## 6) Build, run, and test locally
 

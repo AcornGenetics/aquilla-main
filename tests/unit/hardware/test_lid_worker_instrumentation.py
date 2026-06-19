@@ -1,6 +1,6 @@
 """Hardware integration test for issue #157 lid-worker instrumentation.
 
-Requires a real Pi: importing aq_lib.regulate pulls in RPi.GPIO and the I2C ADC.
+Requires a real Pi: importing sentri_lib.regulate pulls in RPi.GPIO and the I2C ADC.
 Skipped in CI. Verifies that a lid-heater worker registers on entry and, after a
 clean stop, the live count returns to zero (no leak on the happy path).
 
@@ -10,12 +10,12 @@ from threading import Event, Thread
 
 import pytest
 
-from aq_lib import lid_worker_metrics as lwm
+from sentri_lib import lid_worker_metrics as lwm
 
 
 @pytest.mark.hardware
 def test_clean_run_leaves_no_live_workers():
-    from aq_lib.regulate import lid_heater_worker
+    from sentri_lib.regulate import lid_heater_worker
 
     lwm.reset()
     stop_event = Event()

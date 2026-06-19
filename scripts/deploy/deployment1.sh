@@ -169,10 +169,10 @@ if [[ -f "${BASE_DIR}/aquila_app.service" ]]; then
   sudo systemctl enable --now aquila_app.service
 fi
 
-if [[ -f "${BASE_DIR}/aquila_web/aquila_web.service" ]]; then
-  sudo cp "${BASE_DIR}/aquila_web/aquila_web.service" /etc/systemd/system/
+if [[ -f "${BASE_DIR}/sentri_web/sentri_web.service" ]]; then
+  sudo cp "${BASE_DIR}/sentri_web/sentri_web.service" /etc/systemd/system/
   sudo systemctl daemon-reload
-  sudo systemctl enable --now aquila_web.service
+  sudo systemctl enable --now sentri_web.service
 fi
 
 if command -v docker >/dev/null 2>&1 && [[ "${WATCHTOWER_ENABLE}" == "1" ]]; then

@@ -1,6 +1,6 @@
 import numpy as np
-from aq_curve import pcr_curve_config as config
-from aq_curve.pcr_curve_helpers import (
+from sentri_curve import pcr_curve_config as config
+from sentri_curve.pcr_curve_helpers import (
     compute_cq,
     compute_r2,
     count_threshold_crossings,

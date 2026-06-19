@@ -1,5 +1,5 @@
 """
-E2E tests for the on-screen keyboard on the Aquila PCR kiosk UI.
+E2E tests for the on-screen keyboard on the Sentri PCR kiosk UI.
 Requires a running backend at base_url (default http://localhost:8090).
 Run with: pytest -m e2e tests/e2e/test_keyboard.py
 """

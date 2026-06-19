@@ -58,7 +58,7 @@ A.7 Install x-server and browser
    sudo apt install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit openbox xterm unclutter
    sudo apt install -y python3 python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
    cp ~/aquila/server_web/kiosk.py ~/
-   --NOTE: THE AUTOSTART FILE FOR ACORN GUI PROVIDED BY AQUILA IS IN autostart_4b --
+   --NOTE: THE AUTOSTART FILE FOR ACORN GUI PROVIDED BY SENTRI IS IN autostart_4b --
    --MAY NEED TO ADJUST TO WORK WITH GUI MADE BY ARETE--
    sudo cp ~/aquila/server_web/autostart /etc/xdg/openbox/
    sudo cp ~/aquila/server_web/environment /etc/xdg/openbox/
@@ -68,7 +68,7 @@ A.7 Install x-server and browser
 
    to check errors tail -n 100 ~/.xsession-errors 
   
-   --NOTE: THE FOLLOWING IS FOR GUI PROVIDED BY AQUILA -- 
+   --NOTE: THE FOLLOWING IS FOR GUI PROVIDED BY SENTRI -- 
    sudo apt install -y nodejs npm
    sudo npm install -g serve
    

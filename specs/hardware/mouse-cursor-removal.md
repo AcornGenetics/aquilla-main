@@ -5,7 +5,7 @@
 **Last updated:** 2026-06-11
 **Subsystem:** Comms (Kiosk display / Chromium UI)
 **Source file(s):** `scripts/deploy/update_kiosk_x11.sh`, `scripts/deploy/deployment2.sh`
-**Related (unchanged):** `aquila_web/static/styles.css`
+**Related (unchanged):** `sentri_web/static/styles.css`
 
 ---
 
@@ -53,7 +53,7 @@ touchscreen delivers each tap as a pointer event, the cursor:
 - was redrawn on every tap, then waited out the timer again — causing the visible
   flash and the lingering pointer over open dropdowns.
 
-The CSS rule `aquila_web/static/styles.css:4` (`* { cursor: none !important; }`) only
+The CSS rule `sentri_web/static/styles.css:4` (`* { cursor: none !important; }`) only
 hides the cursor **inside the rendered page**, so it cannot cover the boot moment or
 the X-server-level pointer. It is retained as defence-in-depth but is not sufficient
 on its own.
@@ -92,7 +92,7 @@ xsetroot -cursor_name none
 | `scripts/deploy/update_kiosk_x11.sh` | `unclutter -idle 0.5 &` in autostart | `xserver-command=X -nocursor` in LightDM autologin.conf; `xsetroot -cursor_name none` in autostart |
 | `scripts/deploy/deployment2.sh` | `unclutter -idle 0 -root -noevents &` in autostart | `xserver-command=X -nocursor` in both LightDM config files; `xsetroot -cursor_name none` in autostart |
 
-> **Not changed:** `aquila_web/static/styles.css` already contains `* { cursor: none !important; }`
+> **Not changed:** `sentri_web/static/styles.css` already contains `* { cursor: none !important; }`
 > (line 4), which hides the cursor *inside the rendered page*. It is left as-is and serves as
 > in-page defence-in-depth, but it cannot cover the boot moment or the X-server-level pointer —
 > which is why the X-server `-nocursor` change is required. **No CSS change is needed.**
@@ -152,4 +152,4 @@ Which behaviors can be tested without hardware?
 
 - Boot splash spec: `specs/hardware/spec_boot_splash.md`
 - Drawer auto-open removal (sibling removal spec): `specs/hardware/drawer-auto-open-removal.md`
-- Source: `scripts/deploy/update_kiosk_x11.sh`, `scripts/deploy/deployment2.sh`, `aquila_web/static/styles.css`
+- Source: `scripts/deploy/update_kiosk_x11.sh`, `scripts/deploy/deployment2.sh`, `sentri_web/static/styles.css`

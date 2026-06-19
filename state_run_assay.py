@@ -13,27 +13,27 @@ import re
 import os
 from pathlib import Path
 
-from aq_lib.meerstetter import MeerStetter
-from aq_lib.meerstetter import set_time, get_time
-from aq_lib.thermal_engine import RunStopped, thermal_engine
-from aq_lib.thermal_parser import thermal_parser
-from aq_lib.config_module import Config
-from aq_lib.utils import load_json
-from aq_lib.utils import LogFileName
-from aq_lib.utils import LOGGING_CONFIG
-from aq_curve.plot_utils import generate_optics_plot
-from aq_lib.regulate import lid_heater_worker
-from aq_lib import lid_worker_metrics as lwm
+from sentri_lib.meerstetter import MeerStetter
+from sentri_lib.meerstetter import set_time, get_time
+from sentri_lib.thermal_engine import RunStopped, thermal_engine
+from sentri_lib.thermal_parser import thermal_parser
+from sentri_lib.config_module import Config
+from sentri_lib.utils import load_json
+from sentri_lib.utils import LogFileName
+from sentri_lib.utils import LOGGING_CONFIG
+from sentri_curve.plot_utils import generate_optics_plot
+from sentri_lib.regulate import lid_heater_worker
+from sentri_lib import lid_worker_metrics as lwm
 from config import get_src_basedir
-import aq_lib.state_requests as sr
-from aq_lib.motor_class import Axis, Drawer
+import sentri_lib.state_requests as sr
+from sentri_lib.motor_class import Axis, Drawer
 
-from aq_curve.main import results_to_json
-from aq_lib.fan_class import Fan
-from aq_lib.adc_class import OpticalRead
+from sentri_curve.main import results_to_json
+from sentri_lib.fan_class import Fan
+from sentri_lib.adc_class import OpticalRead
 
 logging.config.dictConfig( LOGGING_CONFIG )
-logger = logging.getLogger( "aquila" )
+logger = logging.getLogger( "sentri" )
 config = Config()
 
 class AssayInterface():

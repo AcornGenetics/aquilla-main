@@ -1,7 +1,7 @@
 # Motor Subsystem Specs
 
 ## Overview
-The motor subsystem is implemented in `aq_lib/motor_class.py` and uses
+The motor subsystem is implemented in `sentri_lib/motor_class.py` and uses
 RPi GPIO to drive two stepper axes:
 
 - `Drawer`: moves the cartridge drawer in/out.
@@ -74,18 +74,18 @@ Values come from `config_files/host_config.json` and are keyed by hostname.
 
 1. `Motor.position` is a class variable, so all motor instances share the
    same position state, which corrupts tracking when `Axis` and `Drawer` are
-   used together. Faulty line: `aq_lib/motor_class.py:18`.
+   used together. Faulty line: `sentri_lib/motor_class.py:18`.
 2. `move_w_home_flag()` updates `position` incorrectly when the home switch
    is not hit and `steps` is negative. The code subtracts a negative value,
    which increases the position instead of decreasing it. Faulty lines:
-   `aq_lib/motor_class.py:81` and `aq_lib/motor_class.py:84`.
-3. `aq_lib/hw_api.py` contains a bare `def` statement, which is a syntax error
+   `sentri_lib/motor_class.py:81` and `sentri_lib/motor_class.py:84`.
+3. `sentri_lib/hw_api.py` contains a bare `def` statement, which is a syntax error
    and prevents the module from importing; motor API calls defined there are
    also left as `pass`, so the backend integration is incomplete. Faulty line:
-   `aq_lib/hw_api.py:101`.
+   `sentri_lib/hw_api.py:101`.
 4. `move_abs_w_home_flag()` uses the home switch stop logic even when moving
    away from home; if the switch is stuck active, the move may stop instantly.
-   Faulty lines: `aq_lib/motor_class.py:89` through `aq_lib/motor_class.py:91`.
+   Faulty lines: `sentri_lib/motor_class.py:89` through `sentri_lib/motor_class.py:91`.
 5. `Drawer.open()` and `Drawer.read()` compute `ret` but never return it, so
    callers cannot reliably check move results. Faulty lines:
-   `aq_lib/motor_class.py:146` through `aq_lib/motor_class.py:152`.
+   `sentri_lib/motor_class.py:146` through `sentri_lib/motor_class.py:152`.
