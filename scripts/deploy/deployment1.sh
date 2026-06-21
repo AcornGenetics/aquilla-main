@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_DIR="${AQ_SRC_BASEDIR:-/home/pi/aquilla-main}"
+BASE_DIR="${AQ_SRC_BASEDIR:-/home/pi/sentri}"
 VENV_DIR="${BASE_DIR}/venv"
 BIN_LINK="${BASE_DIR}/bin"
 AUTOLOGIN_USER="${AUTOLOGIN_USER:-${USER}}"
@@ -163,10 +163,10 @@ if sudo systemctl is-enabled serve.service &>/dev/null; then
   sudo systemctl disable --now serve.service || true
 fi
 
-if [[ -f "${BASE_DIR}/aquila_app.service" ]]; then
-  sudo cp "${BASE_DIR}/aquila_app.service" /etc/systemd/system/
+if [[ -f "${BASE_DIR}/sentri_app.service" ]]; then
+  sudo cp "${BASE_DIR}/sentri_app.service" /etc/systemd/system/
   sudo systemctl daemon-reload
-  sudo systemctl enable --now aquila_app.service
+  sudo systemctl enable --now sentri_app.service
 fi
 
 if [[ -f "${BASE_DIR}/sentri_web/sentri_web.service" ]]; then

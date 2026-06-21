@@ -1,8 +1,8 @@
-# aquilla-main changes required to support sentri-analytics hosting modernization
+# sentri changes required to support sentri-analytics hosting modernization
 
-Purpose: sentri-analytics is moving from a single hand-built EC2 box (`setup.sh`) to a baked-AMI Auto Scaling Group (see `sentri-analytics/docs/adr/0004-hosting-modernization-scope.md`). sentri-analytics is a **read-only** dashboard on the Aurora cluster this repo owns. This file lists the changes **aquilla-main** must make so the new compute can reach Aurora, plus the coordination items around credentials and decommissioning.
+Purpose: sentri-analytics is moving from a single hand-built EC2 box (`setup.sh`) to a baked-AMI Auto Scaling Group (see `sentri-analytics/docs/adr/0004-hosting-modernization-scope.md`). sentri-analytics is a **read-only** dashboard on the Aurora cluster this repo owns. This file lists the changes **sentri** must make so the new compute can reach Aurora, plus the coordination items around credentials and decommissioning.
 
-aquilla-main owns: the Aurora VPC, the Aurora cluster, its `DBSecurityGroup`, the Aurora-side route tables, and the DB credentials. sentri-analytics cannot grant itself access to any of these — that is why these changes live here.
+sentri owns: the Aurora VPC, the Aurora cluster, its `DBSecurityGroup`, the Aurora-side route tables, and the DB credentials. sentri-analytics cannot grant itself access to any of these — that is why these changes live here.
 
 ## TL;DR — what must change here
 
@@ -94,7 +94,7 @@ This makes credential rotation independent of the pipeline and enforces the read
 - [ ] Bump `AuroraCluster.BackupRetentionPeriod` (currently 7 days, `template.yaml`) before gated migrations, so PITR covers a "would we notice a bad migration" window.
 - [ ] Add the read-only role + grants to the `schema_runner` migration set so it is reproducible.
 
-## What aquilla-main does NOT need to do
+## What sentri does NOT need to do
 
 - No changes to API Gateway, the three ingest Lambdas, SQS, S3, or the device payload.
 - No mTLS / PKI / truststore work (that is a separate ingest-tier decision; see `sentri-analytics/docs/AnalyticsInfrastrucure/ingest-architecture-tradeoff.md`).

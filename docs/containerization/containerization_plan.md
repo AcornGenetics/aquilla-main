@@ -149,17 +149,17 @@ docker compose up
 ## 7) Publish images (example using GHCR)
 
 ```bash
-docker buildx build --platform linux/arm64 -f Dockerfile.api -t ghcr.io/ORG/aquila-backend:v1.0.0 --push .
-docker buildx build --platform linux/arm64 -f Dockerfile.ui -t ghcr.io/ORG/aquila-ui:v1.0.0 --push .
+docker buildx build --platform linux/arm64 -f Dockerfile.api -t ghcr.io/ORG/sentri-backend:v1.0.0 --push .
+docker buildx build --platform linux/arm64 -f Dockerfile.ui -t ghcr.io/ORG/sentri-ui:v1.0.0 --push .
 ```
 
 Update your Compose to reference the pushed images:
 
 ```yaml
 backend:
-  image: ghcr.io/ORG/aquila-backend:v1.0.0
+  image: ghcr.io/ORG/sentri-backend:v1.0.0
 ui:
-  image: ghcr.io/ORG/aquila-ui:v1.0.0
+  image: ghcr.io/ORG/sentri-ui:v1.0.0
 ```
 
 ## 8) Update workflow

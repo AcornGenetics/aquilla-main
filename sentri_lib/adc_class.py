@@ -8,7 +8,7 @@ from RPi.GPIO import HIGH, LOW, IN, OUT
 import logging
 from sentri_lib.config_module import Config
 
-logger = logging.getLogger( "aquila_logger" )
+logger = logging.getLogger( "sentri_logger" )
 
 REG_ADC_CONTROL = 0x01
 REG_DATA        = 0x02

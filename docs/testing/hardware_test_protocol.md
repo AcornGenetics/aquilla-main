@@ -21,7 +21,7 @@ All commands save output to `/opt/aquila/logs/` on the host. Replace `<sn>` with
 
 **Command:**
 ```bash
-docker exec -e PYTHONPATH=/opt/aquila aquila-app python3 scripts/hardware_tests/motor_drawer.py <command> [options] > /opt/aquila/logs/drawer_<command>_<sn>_<YYYYMMDD>.txt 2>&1
+docker exec -e PYTHONPATH=/opt/aquila sentri-app python3 scripts/hardware_tests/motor_drawer.py <command> [options] > /opt/aquila/logs/drawer_<command>_<sn>_<YYYYMMDD>.txt 2>&1
 ```
 
 **Notes:**
@@ -55,7 +55,7 @@ docker exec -e PYTHONPATH=/opt/aquila aquila-app python3 scripts/hardware_tests/
 
 **Command:**
 ```bash
-docker exec -e PYTHONPATH=/opt/aquila aquila-app python3 scripts/hardware_tests/motor_axis.py <command> [options] > /opt/aquila/logs/axis_<command>_<sn>_<YYYYMMDD>.txt 2>&1
+docker exec -e PYTHONPATH=/opt/aquila sentri-app python3 scripts/hardware_tests/motor_axis.py <command> [options] > /opt/aquila/logs/axis_<command>_<sn>_<YYYYMMDD>.txt 2>&1
 ```
 
 ---
@@ -77,7 +77,7 @@ time_s   x_position   dye   [raw_adc_bytes...]   voltage_mV   led_state   avg_on
 
 **Command:**
 ```bash
-docker exec -e PYTHONPATH=/opt/aquila aquila-app python3 scripts/hardware_tests/test_adc4_logged.py <dye> > /opt/aquila/logs/adc_<dye>_<sn>_<YYYYMMDD>.txt 2>&1
+docker exec -e PYTHONPATH=/opt/aquila sentri-app python3 scripts/hardware_tests/test_adc4_logged.py <dye> > /opt/aquila/logs/adc_<dye>_<sn>_<YYYYMMDD>.txt 2>&1
 ```
 
 **Notes:**
@@ -101,13 +101,13 @@ docker exec -e PYTHONPATH=/opt/aquila aquila-app python3 scripts/hardware_tests/
 
 **Command:**
 ```bash
-docker stop aquila-app && docker run --rm -it --privileged -v /dev:/dev -v /opt/aquila/config:/opt/aquila/config -v /opt/aquila/logs:/opt/aquila/logs -w /opt/aquila -e CONFIG_DIR=/opt/aquila/config -e DEVICE_HOSTNAME=<sn> $(docker inspect aquila-app --format '{{.Config.Image}}') python3 run_lid_heater.py > /opt/aquila/logs/lid_heater_<sn>_<YYYYMMDD>.txt 2>&1 && docker start aquila-app
+docker stop sentri-app && docker run --rm -it --privileged -v /dev:/dev -v /opt/aquila/config:/opt/aquila/config -v /opt/aquila/logs:/opt/aquila/logs -w /opt/aquila -e CONFIG_DIR=/opt/aquila/config -e DEVICE_HOSTNAME=<sn> $(docker inspect sentri-app --format '{{.Config.Image}}') python3 run_lid_heater.py > /opt/aquila/logs/lid_heater_<sn>_<YYYYMMDD>.txt 2>&1 && docker start sentri-app
 ```
 
 **Notes:**
 - Runs for up to 3600 seconds (1 hour) unless interrupted.
 - Heater is gracefully shut off on Ctrl+C or at end of run.
-- After the run (or Ctrl+C), `docker start aquila-app` restarts the main app.
+- After the run (or Ctrl+C), `docker start sentri-app` restarts the main app.
 
 ---
 
@@ -126,7 +126,7 @@ time_s   dye   position_index   [raw_adc_bytes...]   voltage_mV   led_state
 
 **Command:**
 ```bash
-docker exec -e PYTHONPATH=/opt/aquila aquila-app python3 scripts/hardware_tests/lod_verification_all.py <dye> > /opt/aquila/logs/lod_<dye>_<sn>_<YYYYMMDD>.txt 2>&1
+docker exec -e PYTHONPATH=/opt/aquila sentri-app python3 scripts/hardware_tests/lod_verification_all.py <dye> > /opt/aquila/logs/lod_<dye>_<sn>_<YYYYMMDD>.txt 2>&1
 ```
 
 **Notes:**
@@ -150,7 +150,7 @@ time_s   dye   [raw_adc_bytes...]   voltage_mV   led_state
 
 **Command:**
 ```bash
-docker exec -e PYTHONPATH=/opt/aquila aquila-app python3 scripts/hardware_tests/led_current_verification.py <dye> > /opt/aquila/logs/led_current_<dye>_<sn>_<YYYYMMDD>.txt 2>&1
+docker exec -e PYTHONPATH=/opt/aquila sentri-app python3 scripts/hardware_tests/led_current_verification.py <dye> > /opt/aquila/logs/led_current_<dye>_<sn>_<YYYYMMDD>.txt 2>&1
 ```
 
 ---
@@ -173,13 +173,13 @@ x_position   y_position   signal_diff(on-off)
 
 **Command:**
 ```bash
-IMAGE=$(docker inspect aquila-app --format '{{.Config.Image}}') && docker stop aquila-app && docker run --rm -it --privileged -v /dev:/dev -v /opt/aquila/config:/opt/aquila/config -v /opt/aquila/logs:/opt/aquila/logs -w /opt/aquila -e CONFIG_DIR=/opt/aquila/config -e DEVICE_HOSTNAME=<sn> -e PYTHONPATH=/opt/aquila "$IMAGE" python3 scripts/hardware_tests/raster_detailed_log_centered.py <dye> > /opt/aquila/logs/raster_<dye>_<sn>_<YYYYMMDD>.txt 2>&1 && docker start aquila-app
+IMAGE=$(docker inspect sentri-app --format '{{.Config.Image}}') && docker stop sentri-app && docker run --rm -it --privileged -v /dev:/dev -v /opt/aquila/config:/opt/aquila/config -v /opt/aquila/logs:/opt/aquila/logs -w /opt/aquila -e CONFIG_DIR=/opt/aquila/config -e DEVICE_HOSTNAME=<sn> -e PYTHONPATH=/opt/aquila "$IMAGE" python3 scripts/hardware_tests/raster_detailed_log_centered.py <dye> > /opt/aquila/logs/raster_<dye>_<sn>_<YYYYMMDD>.txt 2>&1 && docker start sentri-app
 ```
 
 **Notes:**
 - Drawer Y scans from 0 (home) to `read_steps + 500` in steps of 40.
 - Axis X scans within ~100 steps on either side of the well positions in steps of 40.
-- After the scan completes, `docker start aquila-app` restarts the main app.
+- After the scan completes, `docker start sentri-app` restarts the main app.
 - Approximate scan time: 20–40 minutes.
 
 ---

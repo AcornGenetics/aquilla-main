@@ -50,8 +50,8 @@ find /opt/aquila/config -name "*.json" -exec chmod 600 {} \;
 deluser pi sudo 2>/dev/null || true
 cat > /etc/sudoers.d/pi-restricted <<'EOF'
 pi ALL=(ALL) NOPASSWD: /usr/bin/docker compose *
-pi ALL=(ALL) NOPASSWD: /bin/systemctl restart aquila-stack
-pi ALL=(ALL) NOPASSWD: /bin/systemctl status aquila-stack
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart sentri-stack
+pi ALL=(ALL) NOPASSWD: /bin/systemctl status sentri-stack
 pi ALL=(ALL) NOPASSWD: /bin/systemctl restart kiosk-control
 pi ALL=(ALL) NOPASSWD: /bin/systemctl status kiosk-control
 EOF

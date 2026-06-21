@@ -124,14 +124,14 @@ Bypass Docker networking entirely. The backend writes a sentinel file to a share
 ```yaml
 backend:
   volumes:
-    - /tmp/aquila-ipc:/tmp/aquila-ipc   # add alongside existing volumes
+    - /tmp/sentri-ipc:/tmp/sentri-ipc   # add alongside existing volumes
 ```
 
 **`sentri_web/main.py`** — write sentinel file in `button_exit()`:
 
 ```python
 import pathlib
-IPC_DIR = pathlib.Path(os.getenv("IPC_DIR", "/tmp/aquila-ipc"))
+IPC_DIR = pathlib.Path(os.getenv("IPC_DIR", "/tmp/sentri-ipc"))
 
 @app.post("/button/exit")
 async def button_exit():
@@ -154,11 +154,11 @@ async def button_exit():
 
 ```bash
 #!/bin/bash
-# /usr/local/bin/aquila-exit-watcher.sh
+# /usr/local/bin/sentri-exit-watcher.sh
 # Watches for exit signal written by the Docker backend container
 while true; do
-    if [ -f /tmp/aquila-ipc/exit_requested ]; then
-        rm -f /tmp/aquila-ipc/exit_requested
+    if [ -f /tmp/sentri-ipc/exit_requested ]; then
+        rm -f /tmp/sentri-ipc/exit_requested
         pkill -TERM -f chromium || true
     fi
     sleep 1

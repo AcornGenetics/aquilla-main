@@ -284,7 +284,7 @@ async def wifi_page():
 - [ ] Add WiFi link/section to `sentri_web/static/help.html`
 - [ ] Add FastAPI `/wifi` route to `main.py`
 - [ ] Restart the stack: `docker compose -f /opt/fleet/docker-compose.yml up -d`
-- [ ] Confirm `nmcli` runs inside the container (Option A): `docker exec aquila-backend nmcli general status`
+- [ ] Confirm `nmcli` runs inside the container (Option A): `docker exec sentri-backend nmcli general status`
 - [ ] Test scan, connect, and forget flows on device
 
 ---

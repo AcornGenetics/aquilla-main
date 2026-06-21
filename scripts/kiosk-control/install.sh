@@ -3,7 +3,7 @@
 # Run once on the Pi as a user with sudo access.
 set -euo pipefail
 
-BASE_DIR="${AQ_SRC_BASEDIR:-/home/pi/aquilla-main}"
+BASE_DIR="${AQ_SRC_BASEDIR:-/home/pi/sentri}"
 SCRIPT_SRC="${BASE_DIR}/scripts/kiosk-control/kiosk_control.py"
 SCRIPT_DEST="/usr/local/bin/kiosk_control.py"
 SERVICE_SRC="${BASE_DIR}/scripts/kiosk-control/kiosk-control.service"

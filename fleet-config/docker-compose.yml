@@ -1,8 +1,8 @@
 services:
   backend:
-    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG}
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/sentri}-api:${IMAGE_TAG}
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
-    container_name: aquila-backend
+    container_name: sentri-backend
     ports:
       - "8090:8090"
     environment:
@@ -11,14 +11,14 @@ services:
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
       KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
-      WATCHTOWER_URL: "http://aquila-watchtower:8080"
+      WATCHTOWER_URL: "http://sentri-watchtower:8080"
       RUNNING_IMAGE_DIGEST: "${RUNNING_IMAGE_DIGEST:-}"
       RUNNING_IMAGE_DIGEST_UI: "${RUNNING_IMAGE_DIGEST_UI:-}"
     volumes:
-      - /opt/aquila/results:/opt/aquila/results
-      - /opt/aquila/logs:/opt/aquila/logs
-      - /opt/aquila/profiles:/opt/aquila/profiles
-      - /opt/aquila/config:/opt/aquila/config
+      - ${STATE_DIR:-/opt/aquila}/results:/opt/aquila/results
+      - ${STATE_DIR:-/opt/aquila}/logs:/opt/aquila/logs
+      - ${STATE_DIR:-/opt/aquila}/profiles:/opt/aquila/profiles
+      - ${STATE_DIR:-/opt/aquila}/config:/opt/aquila/config
       - /opt/fleet/.env:/opt/fleet/.env
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
@@ -43,9 +43,9 @@ services:
           memory: 1024M
 
   app:
-    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG}
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/sentri}-api:${IMAGE_TAG}
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
-    container_name: aquila-app
+    container_name: sentri-app
     hostname: ${DEVICE_HOSTNAME}
     command: ["python3", "application.py"]
     environment:
@@ -53,13 +53,13 @@ services:
       PROFILE_DIR: "/opt/aquila/profiles"
       RESULTS_PATH: "/opt/aquila/results/results.json"
       CONFIG_DIR: "/opt/aquila/config"
-      BACKEND_URL: "http://aquila-backend:8090"
+      BACKEND_URL: "http://sentri-backend:8090"
       KIOSK_CONTROL_URL: "http://host.docker.internal:9191"
     volumes:
-      - /opt/aquila/results:/opt/aquila/results
-      - /opt/aquila/logs:/opt/aquila/logs
-      - /opt/aquila/profiles:/opt/aquila/profiles
-      - /opt/aquila/config:/opt/aquila/config
+      - ${STATE_DIR:-/opt/aquila}/results:/opt/aquila/results
+      - ${STATE_DIR:-/opt/aquila}/logs:/opt/aquila/logs
+      - ${STATE_DIR:-/opt/aquila}/profiles:/opt/aquila/profiles
+      - ${STATE_DIR:-/opt/aquila}/config:/opt/aquila/config
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
       - "/dev/i2c-1:/dev/i2c-1"
@@ -88,9 +88,9 @@ services:
           memory: 512M
 
   ui:
-    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-ui:${IMAGE_TAG}
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/sentri}-ui:${IMAGE_TAG}
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
-    container_name: aquila-ui
+    container_name: sentri-ui
     ports:
       - "8080:80"
     extra_hosts:
@@ -110,7 +110,7 @@ services:
 
   watchtower:
     image: nickfedor/watchtower
-    container_name: aquila-watchtower
+    container_name: sentri-watchtower
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     ports:
       - "8081:8080"

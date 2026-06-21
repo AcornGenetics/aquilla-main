@@ -9,7 +9,7 @@ from config import get_src_basedir
 from sentri_curve.curve import Curve
 from sentri_curve.pcr_curve_helpers import get_curve_data
 
-# root_dir = Path("/home/pi/aquilla-main/logs/optics")
+# root_dir = Path("/home/pi/sentri/logs/optics")
 root_dir = Path(get_src_basedir()) / "logs" / "optics"
 
 get_curve_dir = "logs/optics/"

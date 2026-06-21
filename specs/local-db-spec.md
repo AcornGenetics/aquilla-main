@@ -518,7 +518,7 @@ def insert_operator_action(
 def insert_firmware_log(
     conn,
     device_id: str,
-    component: str,             # "aquila_app" | "kiosk" | "pi_os" | "instrument_fw"
+    component: str,             # "sentri_app" | "kiosk" | "pi_os" | "instrument_fw"
     new_version: str,
     update_status: str,         # "success" | "failed" | "rolled_back"
     previous_version: str = None,

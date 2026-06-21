@@ -172,7 +172,7 @@ This document defines the five bounded contexts of the Sentri qPCR system using 
 - **History Screen** (`history.html`): Expandable list of past runs with Cq summaries and plot images.
 - **State Machine** (`script.js`): WebSocket listener; swaps visible sections on `screen_change` events.
 - **Keyboard** (`keyboard.js`): On-screen text input component.
-- **Kiosk Service** (`aquila-kiosk.service`): systemd unit; starts Chromium on boot with touch flags.
+- **Kiosk Service** (`sentri-kiosk.service`): systemd unit; starts Chromium on boot with touch flags.
 
 **Key Files**
 - `sentri_web/static/run.html`

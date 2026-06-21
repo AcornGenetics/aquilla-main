@@ -72,7 +72,7 @@ A.7 Install x-server and browser
    sudo apt install -y nodejs npm
    sudo npm install -g serve
    
-   sudo cp ~/aquilla-main/server_web/serve.service /etc/systemd/system/
+   sudo cp ~/sentri/server_web/serve.service /etc/systemd/system/
    sudo systemctl enable serve.service
    sudo systemctl start serve.service
 
@@ -87,7 +87,7 @@ A.9 Docker + Watchtower (optional)
     c. Login to GHCR (for private images)
         echo '<PAT>' | docker login ghcr.io -u <github_user> --password-stdin
     d. Run containers
-        cd ~/aquilla-main
+        cd ~/sentri
         docker compose -f docker/docker-compose.yml up -d
     e. Start Watchtower (label-based)
         docker run -d --name watchtower --restart unless-stopped \

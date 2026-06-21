@@ -26,7 +26,7 @@ state_change_event = asyncio.Event()
 start_time = None
 elapsed_time = 0
 timer_running = None
-#results_path = Path("/home/pi/aquilla-main/sentri_web/results.json")
+#results_path = Path("/home/pi/sentri/sentri_web/results.json")
 results_path = None
 results_cleared = False
 DEV_SIMULATE = os.getenv("AQ_DEV_SIMULATE", "0") == "1"
@@ -1496,11 +1496,11 @@ async def wifi_saved():
 
 import base64
 
-WATCHTOWER_URL = os.getenv("WATCHTOWER_URL", "http://aquila-watchtower:8080")
+WATCHTOWER_URL = os.getenv("WATCHTOWER_URL", "http://sentri-watchtower:8080")
 WATCHTOWER_TOKEN = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
 _OTA_GHCR_USER = os.getenv("GHCR_USERNAME", "")
 _OTA_GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
-_OTA_GHCR_BASE = os.getenv("GHCR_REPO", "acorngenetics/aquilla-main")
+_OTA_GHCR_BASE = os.getenv("GHCR_REPO", "acorngenetics/sentri")
 _OTA_GHCR_REPO_API = _OTA_GHCR_BASE + "-api"
 _OTA_GHCR_REPO_UI  = _OTA_GHCR_BASE + "-ui"
 _OTA_IMAGE_TAG = os.getenv("IMAGE_TAG", "")   # dev | pilot | prod — set by device.env

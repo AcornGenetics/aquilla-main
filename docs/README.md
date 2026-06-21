@@ -44,10 +44,10 @@ Open `http://localhost:8090` in a browser. See `docs/onboarding/intern-onboardin
 pytest tests unit_tests -v
 
 # On-device candidate validation
-./scripts/test_candidate.sh ghcr.io/acorngenetics/aquilla-main-api:<tag>
+./scripts/test_candidate.sh ghcr.io/acorngenetics/sentri-api:<tag>
 
 # Promote a candidate to stable (separate command — does not auto-run)
-./scripts/promote_candidate.sh ghcr.io/acorngenetics/aquilla-main-api@sha256:<digest>
+./scripts/promote_candidate.sh ghcr.io/acorngenetics/sentri-api@sha256:<digest>
 ```
 
 Test results are written to `/opt/aquila/test-results/` on the device.
@@ -74,10 +74,10 @@ Test results are written to `/opt/aquila/test-results/` on the device.
 
 | Service | Port | Role |
 |---------|------|------|
-| `aquila-backend` | 8090 | FastAPI REST + WebSocket |
-| `aquila-app` | — | Assay loop (`application.py`) |
-| `aquila-ui` | 8080 | NGINX — serves static UI, proxies to backend |
-| `aquila-watchtower` | 8081 | Pulls updated images every 5 min |
+| `sentri-backend` | 8090 | FastAPI REST + WebSocket |
+| `sentri-app` | — | Assay loop (`application.py`) |
+| `sentri-ui` | 8080 | NGINX — serves static UI, proxies to backend |
+| `sentri-watchtower` | 8081 | Pulls updated images every 5 min |
 
 All containers share `/dev/ttyUSB0` (TEC), `/dev/i2c-1` (optics/lid), GPIO, and `/opt/aquila/` volumes.
 

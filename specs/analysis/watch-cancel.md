@@ -25,7 +25,7 @@ It targets, live:
 | Input | Type | Source | Notes |
 |-------|------|--------|-------|
 | Controller log | `--logger` path | `sentri` logger | abort, poll ladder, comms errors |
-| Web-app log | `--app` path | `aquila_app` logger | `Stop button pressed`, restarts; drives "secs since app" |
+| Web-app log | `--app` path | `sentri_app` logger | `Stop button pressed`, restarts; drives "secs since app" |
 | Lid heater log | `--lid` path (optional) | `lid_heater` logger | `LID WORKER … live=N` (#157) |
 
 Native paths `logs/…`; Docker host paths `data/logs/…`.

@@ -1,6 +1,6 @@
 # PRD: KMS-backed CA — password-gated device enrollment in deployment + mTLS→S3 verification slice
 
-> **Tracking issue:** [#176](https://github.com/AcornGenetics/aquilla-main/issues/176)
+> **Tracking issue:** [#176](https://github.com/AcornGenetics/sentri/issues/176)
 > **Revision 1 — 2026-06-17**
 >
 > **Tracer-bullet vertical slice** carved from `specs/Data-pipline/device-edge-mtls-migration-prd.md`.

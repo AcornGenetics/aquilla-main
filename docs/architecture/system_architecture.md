@@ -9,7 +9,7 @@ Sentri is a PCR instrument control system running on Raspberry Pi. It is compose
 ## Directory Structure
 
 ```
-aquilla-main/
+sentri/
 ├── sentri_web/          # FastAPI backend + static UI
 │   ├── main.py          # All REST endpoints + WebSocket state sync
 │   └── static/          # Vanilla HTML/CSS/JS frontend (no build step)
@@ -80,19 +80,19 @@ aquilla-main/
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  NGINX (aquila-ui, port 8080)                            │
+│  NGINX (sentri-ui, port 8080)                            │
 │  Serves static HTML/CSS/JS, proxies / → backend:8090     │
 └────────────────────────┬─────────────────────────────────┘
                          │ HTTP + WebSocket
 ┌────────────────────────▼─────────────────────────────────┐
-│  FastAPI Backend (aquila-backend, port 8090)             │
+│  FastAPI Backend (sentri-backend, port 8090)             │
 │  sentri_web/main.py                                      │
 │  ├─ REST: /run /stop /profiles /history /results         │
 │  └─ WebSocket /ws → broadcasts state changes to UI       │
 └────────────────────────┬─────────────────────────────────┘
                          │ HTTP (state_requests.py)
 ┌────────────────────────▼─────────────────────────────────┐
-│  Assay Loop (aquila-app)                                 │
+│  Assay Loop (sentri-app)                                 │
 │  application.py → state_run_assay.py                     │
 │  ├─ Orchestrates PCR protocol steps                      │
 │  ├─ Runs thermal, motor, optics threads concurrently     │
@@ -128,10 +128,10 @@ Defined in `fleet-config/docker-compose.yml`:
 
 | Service | Image | Port | Role |
 |---------|-------|------|------|
-| `aquila-backend` | `*-api` | 8090 | FastAPI REST + WebSocket |
-| `aquila-app` | `*-api` | — | Assay loop (`application.py`) |
-| `aquila-ui` | `*-ui` | 8080 | NGINX static + reverse proxy |
-| `aquila-watchtower` | `nickfedor/watchtower` | 8081 | Auto-update images every 5 min |
+| `sentri-backend` | `*-api` | 8090 | FastAPI REST + WebSocket |
+| `sentri-app` | `*-api` | — | Assay loop (`application.py`) |
+| `sentri-ui` | `*-ui` | 8080 | NGINX static + reverse proxy |
+| `sentri-watchtower` | `nickfedor/watchtower` | 8081 | Auto-update images every 5 min |
 
 All services share hardware device access (`/dev/ttyUSB0`, `/dev/i2c-1`, `/dev/spidev0.*`, `/dev/gpiomem`) and mount `/opt/aquila/` volumes.
 
@@ -212,7 +212,7 @@ States are defined in `config_files/state_config.json` and drive which HTML scre
 | 7 | Persistent directories (`/opt/aquila/`) |
 | 8 | Device identity + all config files |
 | 9 | GHCR login, download compose file, pull images |
-| 10 | Register `aquila-stack` systemd service |
+| 10 | Register `sentri-stack` systemd service |
 | 11 | Start Docker stack, Meerstetter first-time tuning |
 | 11b | Kiosk control service |
 | 12 | Tailscale VPN |
@@ -225,7 +225,7 @@ States are defined in `config_files/state_config.json` and drive which HTML scre
 ## Security Model
 
 - `/opt/aquila/config/` is `chmod 700`, files `chmod 600` — root-only
-- `pi` user has no `sudo` access except: `docker compose *`, `systemctl restart/status aquila-stack`, `systemctl restart/status kiosk-control`
+- `pi` user has no `sudo` access except: `docker compose *`, `systemctl restart/status sentri-stack`, `systemctl restart/status kiosk-control`
 - Root access is via Tailscale SSH (authenticated through Tailscale account, not local credentials)
 - Watchtower uses a per-device `WATCHTOWER_HTTP_API_TOKEN` (rotated per device)
 

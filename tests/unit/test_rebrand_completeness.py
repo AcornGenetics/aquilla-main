@@ -46,8 +46,13 @@ EXCLUDED_PATH_PREFIXES = (
     "CONTEXT.md",
     "docs/adr/",
     "specs/prd/aquila-to-sentri-rebrand-prd.md",
-    # --- the guard itself names the tokens as string literals ---
+    # --- rebrand guard tests: they name the codename to forbid it (#186/#187) ---
     "tests/unit/test_rebrand_completeness.py",
+    "tests/fleet_device/test_compose_dns_integrity.py",
+    "tests/fleet_device/test_image_path_agreement.py",
+    "tests/fleet_device/test_service_unit_integrity.py",
+    "tests/fleet_device/test_state_dir_param.py",
+    "tests/fleet_device/test_selective_rename_guard.py",
     # --- agent/tooling session artifacts: recorded data, not product ---
     ".hive-mind/",
     ".claude/",

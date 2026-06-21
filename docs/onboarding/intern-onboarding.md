@@ -12,8 +12,8 @@ If something in this guide is wrong or out of date, fix it. You're not the last 
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/AcornGenetics/aquilla-main.git
-cd aquilla-main
+git clone https://github.com/AcornGenetics/sentri.git
+cd sentri
 ```
 
 ### 2. Set up your Python environment
@@ -42,14 +42,14 @@ pip install -r requirements-test.txt  # test dependencies — always install thi
 
 ```json
 {
-  "src_basedir": "/Users/yourname/aquilla-main/"
+  "src_basedir": "/Users/yourname/sentri/"
 }
 ```
 
 **2. `config.py`** — change `DEFAULT_SRC_BASEDIR` to the same path:
 
 ```python
-DEFAULT_SRC_BASEDIR = "/Users/yourname/aquilla-main/"
+DEFAULT_SRC_BASEDIR = "/Users/yourname/sentri/"
 ```
 
 Verify it resolved correctly:
@@ -94,7 +94,7 @@ Key files to read on day 1:
 ### Communication
 
 - **Primary:** GitHub (issues, PRs, comments)
-- **Async updates:** Slack `#aquila-dev` — post your daily update by noon
+- **Async updates:** Slack `#sentri-dev` — post your daily update by noon
 - **Escalation:** Direct message your lead, or `@` them in Slack
 
 ### Git Workflow

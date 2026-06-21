@@ -52,7 +52,7 @@ def test_host_docker_internal_has_resolver():
     Any location block that proxy_passes to host.docker.internal must also
     declare a resolver directive. Without one, nginx resolves the upstream at
     startup and crashes if DNS isn't available yet — the bug that took down
-    aquila-ui on SN01.
+    sentri-ui on SN01.
     """
     conf = _read_conf()
     for block in _location_blocks(conf):
@@ -88,12 +88,12 @@ def test_no_bare_host_docker_internal_in_proxy_pass():
 def test_backend_upstream_uses_container_name():
     """
     The main backend proxy_pass must use the Docker service name
-    (aquila-backend), not localhost or a host IP. Container-to-container
+    (sentri-backend), not localhost or a host IP. Container-to-container
     traffic must go via the Docker network.
     """
     conf = _read_conf()
-    assert "proxy_pass http://aquila-backend:" in conf, (
-        "Main backend proxy_pass should use the container name 'aquila-backend', "
+    assert "proxy_pass http://sentri-backend:" in conf, (
+        "Main backend proxy_pass should use the container name 'sentri-backend', "
         "not localhost or a hardcoded IP."
     )
 

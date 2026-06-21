@@ -427,7 +427,7 @@ Tests are organized into 5 layers from fastest/cheapest to slowest/most expensiv
 | Test | What to assert |
 |---|---|
 | `/health` endpoint returns 200 | Container healthcheck passes within `start_period` |
-| Backend healthy before app starts | `aquila-app` does not start until `aquila-backend` is healthy |
+| Backend healthy before app starts | `sentri-app` does not start until `sentri-backend` is healthy |
 | Watchtower scans correct containers | Only labeled containers (`watchtower.enable=true`) updated |
 | `KIOSK_CONTROL_URL` set in app container | Env var present and points to `host.docker.internal:9191` |
 | Container restarts on failure | `restart: unless-stopped` causes recovery after crash |

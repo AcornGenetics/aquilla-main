@@ -13,7 +13,7 @@ import sys
 import time
 
 #logging.config.dictConfig( LOGGING_CONFIG )
-#logger = logging.getLogger( "aquila_logger" )
+#logger = logging.getLogger( "sentri_logger" )
 config = Config()
 
 def goto_position( pos_nr ):

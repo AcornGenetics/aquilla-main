@@ -8,7 +8,7 @@ files into logical homes. No `src/` layout — this is in-place device code.
 ## Target Structure
 
 ```
-aquilla-main/
+sentri/
 ├── application.py          # assay loop entry point
 ├── state_run_assay.py      # state machine (imported by application.py)
 ├── config.py               # config loader
@@ -35,7 +35,7 @@ aquilla-main/
 │   └── bundled/            # production profiles only — delete old test JSONs
 │
 ├── config_files/           # runtime config templates (unchanged)
-│   └── aquila_app.service  # ← from root
+│   └── sentri_app.service  # ← from root
 │
 ├── docker/                 # Docker assets (unchanged)
 │
@@ -136,7 +136,7 @@ Move files only. Zero risk.
 | Move to `scripts/hardware/` | `test_axis.py`, `test_fan.py`, `test_drawer.py`, `test_connection.py`, `test_lm35.py`, `test_positions.py`, `test_exit.py`, `toggle_pin.py`, `motor_disable.py`, `get_params.py`, `optics_read.py`, `pcr_meer_off.py`, `led_off.py`, `led_on.py`, `adc/`, `led/`, `beam_breaks/`, `motor_test/` |
 | Move to `scripts/hardware_tests/` | `led_current_verification.py` (run back to back with FAM/ROX), `raster_detailed_log_centered.py` (run back to back with TE blanks of FAM/ROX), `motor_drawer.py`, `motor_axis.py`, `test_adc4_logged.py`, `run_lid_heater.py`, `lod_verification_all.py` |
 | Move to `scripts/tools/` | `PCR_plot.py`, `Raster.py`, `diagnostic_sweep.py`, `melt_curve.py`, `convert_results_to_fake_run.py`, `meer_ss.py` |
-| Move to `config_files/` | `aquila_app.service` |
+| Move to `config_files/` | `sentri_app.service` |
 | Delete | `cmdline.txt`, `config.txt` (device-local, gitignored, never needed in repo) |
 | Delete | `ruvector.db` (runtime DB, gitignored) |
 | Decide | `compose.yaml` — NOT a duplicate of `docker/docker-compose.yml`; it uses `build: context: .` for local dev while the docker/ version pulls a registry image. Keep if local `docker compose up` is needed; delete only if the team has fully migrated to the fleet image workflow. |

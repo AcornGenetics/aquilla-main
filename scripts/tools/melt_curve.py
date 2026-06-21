@@ -20,7 +20,7 @@ from sentri_lib.adc_class import OpticalRead
 from sentri_lib.motor_class import Axis, Drawer
 
 logging.config.dictConfig( LOGGING_CONFIG )
-logger = logging.getLogger( "aquila_logger" )
+logger = logging.getLogger( "sentri_logger" )
 config = Config()
 
 axis = Axis( GPIO )

@@ -94,7 +94,7 @@ APP_LOGGING_CONFIG = {
         },
     },
     'loggers': {
-        'aquila_app': {
+        'sentri_app': {
             'handlers': ['file'],
             'level': 'DEBUG',
             'propagate': True,

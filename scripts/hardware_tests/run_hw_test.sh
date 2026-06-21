@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-CONTAINER="aquila-app"
+CONTAINER="sentri-app"
 HW_TESTS="scripts/hardware_tests"
 
 TEST="${1:-}"

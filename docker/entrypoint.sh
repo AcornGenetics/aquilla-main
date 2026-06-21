@@ -17,7 +17,7 @@ fi
 # healthy before starting. This removes the race condition without needing
 # a compose-file change on each device.
 if [[ "${1:-}" == *"application.py"* ]]; then
-  backend_url="${BACKEND_URL:-http://aquila-backend:8090}"
+  backend_url="${BACKEND_URL:-http://sentri-backend:8090}"
   echo "Waiting for backend at ${backend_url}/health ..."
   for i in $(seq 1 30); do
     if curl -sf "${backend_url}/health" > /dev/null 2>&1; then
