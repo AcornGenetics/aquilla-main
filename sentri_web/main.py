@@ -733,16 +733,55 @@ async def delete_history(payload: dict):
     _save_history(remaining)
     return {"ok": True, "remaining": len(remaining)}
 
+OPTICS_PATHS_PATH = BASE_DIR / "logs" / "optics_paths.json"
+OPTICS_PATHS_LIMIT = 20
+
+
+def _merge_optics_history(history, path):
+    """Pure: return new most-recent-first history with ``path`` merged in.
+
+    Blank/whitespace/None ``path`` is a no-op and returns the history unchanged.
+    Otherwise the (stripped) path is deduped and prepended, capped at the limit.
+    """
+    cleaned = (path or "").strip()
+    if not cleaned:
+        return list(history)
+    deduped = [p for p in history if p != cleaned]
+    return [cleaned, *deduped][:OPTICS_PATHS_LIMIT]
+
+
+def _load_optics_history() -> list:
+    if not OPTICS_PATHS_PATH.exists():
+        return []
+    try:
+        with OPTICS_PATHS_PATH.open() as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        return []
+    return []
+
+
+def _save_optics_history(history) -> None:
+    OPTICS_PATHS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with OPTICS_PATHS_PATH.open("w") as f:
+        json.dump(history, f, indent=2)
+
+
 @app.get("/dev/optics_path")
 async def get_dev_optics_path():
-    return {"path": dev_optics_path}
+    return {"path": dev_optics_path, "history": _load_optics_history()}
 
 @app.post("/dev/optics_path")
 async def set_dev_optics_path(payload: dict):
     global dev_optics_path
     path = payload.get("path") if isinstance(payload, dict) else None
-    dev_optics_path = path.strip() if path else None
-    return {"path": dev_optics_path}
+    cleaned = path.strip() if path else None
+    dev_optics_path = cleaned or None
+    history = _merge_optics_history(_load_optics_history(), cleaned)
+    _save_optics_history(history)
+    return {"path": dev_optics_path, "history": history}
 
 @app.get("/run/name")
 async def get_run_name():
