@@ -253,6 +253,11 @@ function updateDashboardSections(screen) {
     }
   });
 
+  if (screen !== "ready") {
+    if (typeof closeProfileCombo === "function") closeProfileCombo();
+    if (typeof closeOpticsCombo === "function") closeOpticsCombo();
+  }
+
   setRunResetVisibility(true);
 
   return true;
@@ -968,6 +973,190 @@ async function loadResults(){
     }
 }
 
+function syncProfileComboLabel() {
+    const select = document.getElementById("mySelect");
+    const label = document.getElementById("profile-combo-label");
+    if (!select || !label) return;
+    const opt = select.selectedOptions && select.selectedOptions[0];
+    label.textContent = (opt && !opt.disabled && opt.value) ? opt.textContent : "Select a profile";
+}
+
+function openProfileCombo() {
+    const btn = document.getElementById("profile-combo-button");
+    const list = document.getElementById("profile-combo-list");
+    if (!btn || !list) return;
+    list.classList.add("is-open");
+    btn.setAttribute("aria-expanded", "true");
+}
+
+function closeProfileCombo() {
+    const btn = document.getElementById("profile-combo-button");
+    const list = document.getElementById("profile-combo-list");
+    if (!btn || !list) return;
+    list.classList.remove("is-open");
+    btn.setAttribute("aria-expanded", "false");
+}
+
+function renderProfileCombo() {
+    const select = document.getElementById("mySelect");
+    const list = document.getElementById("profile-combo-list");
+    if (!select || !list) return;
+    list.innerHTML = "";
+    Array.from(select.options).forEach((opt) => {
+        if (opt.disabled || opt.value === "") return; // skip placeholder
+        const li = document.createElement("li");
+        li.setAttribute("role", "option");
+        li.dataset.value = opt.value;
+        li.textContent = opt.textContent;
+        li.addEventListener("click", () => {
+            select.value = opt.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            syncProfileComboLabel();
+            closeProfileCombo();
+        });
+        list.appendChild(li);
+    });
+    syncProfileComboLabel();
+}
+
+function setupProfileCombo() {
+    const btn = document.getElementById("profile-combo-button");
+    const list = document.getElementById("profile-combo-list");
+    if (!btn || !list || btn.dataset.comboReady) return;
+    btn.dataset.comboReady = "1";
+    btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (list.classList.contains("is-open")) closeProfileCombo();
+        else openProfileCombo();
+    });
+    btn.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown") {
+            event.preventDefault();
+            openProfileCombo();
+        } else if (event.key === "Escape") {
+            closeProfileCombo();
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeProfileCombo();
+    });
+    document.addEventListener("click", (event) => {
+        const combo = document.getElementById("profile-combo");
+        if (combo && !combo.contains(event.target)) closeProfileCombo();
+    });
+}
+
+let opticsHistory = [];
+let opticsActiveIndex = -1;
+
+function closeOpticsCombo() {
+    const input = document.getElementById("dev-optics-path");
+    const list = document.getElementById("optics-suggestions");
+    if (!list) return;
+    list.classList.remove("is-open");
+    if (input) input.setAttribute("aria-expanded", "false");
+    opticsActiveIndex = -1;
+}
+
+function renderOpticsSuggestions(filterText) {
+    const input = document.getElementById("dev-optics-path");
+    const list = document.getElementById("optics-suggestions");
+    if (!input || !list) return;
+    const needle = (filterText || "").trim().toLowerCase();
+    const matches = opticsHistory.filter((p) => p.toLowerCase().includes(needle));
+    list.innerHTML = "";
+    if (matches.length === 0) {
+        closeOpticsCombo();
+        return;
+    }
+    matches.forEach((path) => {
+        const li = document.createElement("li");
+        li.setAttribute("role", "option");
+        li.dataset.value = path;
+        li.textContent = path;
+        li.addEventListener("mousedown", (event) => {
+            event.preventDefault();  // fire before input blur
+            input.value = path;
+            saveOpticsPath(path);
+            closeOpticsCombo();
+        });
+        list.appendChild(li);
+    });
+    list.classList.add("is-open");
+    input.setAttribute("aria-expanded", "true");
+    opticsActiveIndex = -1;
+}
+
+function moveOpticsActive(delta) {
+    const list = document.getElementById("optics-suggestions");
+    if (!list) return;
+    const items = Array.from(list.querySelectorAll("[role='option']"));
+    if (items.length === 0) return;
+    opticsActiveIndex = (opticsActiveIndex + delta + items.length) % items.length;
+    items.forEach((el, i) => el.classList.toggle("is-active", i === opticsActiveIndex));
+}
+
+async function saveOpticsPath(path) {
+    try {
+        const resp = await fetch("/dev/optics_path", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path })
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data && Array.isArray(data.history)) opticsHistory = data.history;
+        }
+    } catch (error) {
+        console.error("Failed to save optics path", error);
+    }
+}
+
+async function setupOpticsCombo() {
+    const input = document.getElementById("dev-optics-path");
+    const list = document.getElementById("optics-suggestions");
+    if (!input || !list || input.dataset.comboReady) return;
+    input.dataset.comboReady = "1";
+    try {
+        const resp = await fetch("/dev/optics_path");
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data && data.path) input.value = data.path;
+            if (data && Array.isArray(data.history)) opticsHistory = data.history;
+        }
+    } catch (error) {
+        console.error("Failed to load optics path", error);
+    }
+    input.addEventListener("focus", () => renderOpticsSuggestions(input.value));
+    input.addEventListener("input", () => renderOpticsSuggestions(input.value));
+    input.addEventListener("keydown", (event) => {
+        const items = Array.from(list.querySelectorAll("[role='option']"));
+        if (event.key === "ArrowDown") {
+            event.preventDefault();
+            moveOpticsActive(1);
+        } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            moveOpticsActive(-1);
+        } else if (event.key === "Enter") {
+            if (opticsActiveIndex >= 0 && items[opticsActiveIndex]) {
+                input.value = items[opticsActiveIndex].dataset.value;
+            }
+            saveOpticsPath(input.value.trim());
+            closeOpticsCombo();
+        } else if (event.key === "Escape") {
+            closeOpticsCombo();
+        }
+    });
+    input.addEventListener("blur", () => {
+        saveOpticsPath(input.value.trim());
+        closeOpticsCombo();
+    });
+    document.addEventListener("click", (event) => {
+        const combo = document.getElementById("optics-combo");
+        if (combo && !combo.contains(event.target)) closeOpticsCombo();
+    });
+}
+
 async function loadProfiles(){
     const select = document.getElementById("mySelect");
     if (!select){
@@ -1074,6 +1263,8 @@ async function loadProfiles(){
             }
         });
 
+        renderProfileCombo();
+
     } catch (err) {
         console.error("Error loading profiles:" , err);
     }
@@ -1115,26 +1306,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const isDev = Boolean(status && status.dev_simulate);
         setOpticsVisibility(isDev);
         if (isDev && devOpticsPath) {
-            fetch("/dev/optics_path")
-              .then((response) => response.ok ? response.json() : null)
-              .then((data) => {
-                if (data && data.path) {
-                  devOpticsPath.value = data.path;
-                }
-              })
-              .catch(() => null);
-            devOpticsPath.addEventListener("blur", async () => {
-                const path = devOpticsPath.value.trim();
-                try {
-                    await fetch("/dev/optics_path", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ path })
-                    });
-                } catch (error) {
-                    console.error("Failed to save optics path", error);
-                }
-            });
+            setupOpticsCombo();
         }
       })
       .catch(() => {
@@ -1149,6 +1321,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (stopRunButton) {
         stopRunButton.addEventListener("click", notifyStopRun);
     }
+    setupProfileCombo();
     if (typeof loadProfiles === "function") {
         loadProfiles();
     }
