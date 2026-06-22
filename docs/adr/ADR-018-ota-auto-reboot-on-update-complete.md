@@ -1,4 +1,4 @@
-# ADR-016: OTA updates finish with a full device reboot + one-time completion modal
+# ADR-018: OTA updates finish with a full device reboot + one-time completion modal
 
 **Status:** Proposed
 **Date:** 2026-06-19

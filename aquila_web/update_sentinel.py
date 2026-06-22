@@ -1,4 +1,4 @@
-"""OTA update completion sentinel (issue #183, ADR-016).
+"""OTA update completion sentinel (issue #183, ADR-018).
 
 A tiny on-disk record at /opt/fleet/last_update.json that survives the Watchtower
 container swap and the post-update reboot, letting a freshly-started container know

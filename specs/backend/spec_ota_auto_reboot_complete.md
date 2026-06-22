@@ -12,7 +12,7 @@ After a manual OTA update, the kiosk freezes indefinitely on the update/loading 
 
 After an update completes, the device **reboots itself** (full software reboot) to guarantee a clean state across every layer (containers, X session, Chromium, hardware connections), and on the way back up shows a **one-time, blocking "Update Complete" modal** that the operator dismisses with **OK**. No manual reset required.
 
-Decision rationale (full reboot over the lighter kiosk-relaunch or reload-only options) is recorded in ADR-016.
+Decision rationale (full reboot over the lighter kiosk-relaunch or reload-only options) is recorded in ADR-018.
 
 ---
 
@@ -98,6 +98,6 @@ The two-state sentinel (`reboot_pending` → `show_complete` → deleted) guaran
 
 ## Out of scope
 
-- Lighter recovery (kiosk relaunch / reload-only) — considered and rejected; see ADR-016.
+- Lighter recovery (kiosk relaunch / reload-only) — considered and rejected; see ADR-018.
 - Changing the `script.js` WS-reconnect reload.
 - Persisting completion across reboots beyond the short sentinel TTL.

@@ -34,7 +34,7 @@ document.addEventListener("click", (event) => {
     .catch(() => {});
 })();
 
-// One-time "Update Complete" modal after an OTA auto-reboot (#183, ADR-016).
+// One-time "Update Complete" modal after an OTA auto-reboot (#183, ADR-018).
 // The backend reports status === "complete" once, driven by the on-disk sentinel.
 (function showUpdateCompleteModal() {
   if (document.querySelector(".update-complete-modal")) return;

@@ -127,7 +127,7 @@ def _start_chromium() -> tuple[bool, str]:
 
 
 def _reboot_host() -> tuple[bool, str]:
-    """Reboot the device. Used by the OTA auto-reboot flow (#183, ADR-016)."""
+    """Reboot the device. Used by the OTA auto-reboot flow (#183, ADR-018)."""
     result = subprocess.run(["systemctl", "reboot"], capture_output=True)
     if result.returncode == 0:
         return True, "rebooting"

@@ -1518,7 +1518,7 @@ _startup_image_digest_ui: str | None = os.getenv("RUNNING_IMAGE_DIGEST_UI") or N
 _latest_ghcr_digest: str | None = None
 _latest_ghcr_digest_ui: str | None = None
 
-# --- OTA auto-reboot completion sentinel (issue #183, ADR-016) ----------------
+# --- OTA auto-reboot completion sentinel (issue #183, ADR-018) ----------------
 from aquila_web import update_sentinel as _sentinel
 
 # Lives on the /opt/fleet host volume so it survives the container swap + reboot.
