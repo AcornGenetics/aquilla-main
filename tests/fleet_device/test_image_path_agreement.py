@@ -1,5 +1,5 @@
 """
-D3 — Image-path agreement (rebrand #187, ADR-015).
+D3 — Image-path agreement (rebrand #187, ADR-016).
 
 After the repo rename, CI publishes `ghcr.io/acorngenetics/sentri-{api,ui}`
 (derived from $GITHUB_REPOSITORY). The hardcoded compose/Dockerfile defaults do

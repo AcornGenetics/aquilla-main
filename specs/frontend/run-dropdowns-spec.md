@@ -5,7 +5,7 @@
 **Last updated:** 2026-06-16
 **GitHub PR:** #170
 **Affected screens:** `run` (ready section)
-**Source file(s):** `aquila_web/static/run.html`, `aquila_web/static/script.js`, `aquila_web/static/styles.css`, `aquila_web/main.py`
+**Source file(s):** `sentri_web/static/run.html`, `sentri_web/static/script.js`, `sentri_web/static/styles.css`, `sentri_web/main.py`
 
 ---
 
@@ -49,7 +49,7 @@ Optics dropdown (dev only):
 [open]   --blur / Esc / outside-->[closed]  (blur also saves current value)
 ```
 
-Driven by `setupProfileCombo` / `renderProfileCombo` / `syncProfileComboLabel` and `setupOpticsCombo` in `aquila_web/static/script.js`.
+Driven by `setupProfileCombo` / `renderProfileCombo` / `syncProfileComboLabel` and `setupOpticsCombo` in `sentri_web/static/script.js`.
 
 ---
 
@@ -109,7 +109,7 @@ Driven by `setupProfileCombo` / `renderProfileCombo` / `syncProfileComboLabel` a
 `GET /dev/optics_path` → `{ "path": str|null, "history": string[] }`
 `POST /dev/optics_path` body `{ "path": str }` → `{ "path": str|null, "history": string[] }`
 
-History rules — the transformation is a **pure function** (`_merge_optics_history(history, path) -> history` in `aquila_web/main.py`), with persistence and selection layered separately so the rules are testable without a backend, a file, or HTTP:
+History rules — the transformation is a **pure function** (`_merge_optics_history(history, path) -> history` in `sentri_web/main.py`), with persistence and selection layered separately so the rules are testable without a backend, a file, or HTTP:
 - Most-recent-first ordering.
 - De-duplicated (re-entering a path moves it to the front).
 - Capped at `OPTICS_PATHS_LIMIT = 20`; older entries dropped.

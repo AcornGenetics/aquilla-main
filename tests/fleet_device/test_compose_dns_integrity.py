@@ -1,5 +1,5 @@
 """
-D1 — Compose service-DNS integrity (rebrand #187, ADR-015).
+D1 — Compose service-DNS integrity (rebrand #187, ADR-016).
 
 The fleet runs as Docker Compose services that reach each other by
 container_name over the compose network (e.g. the UI's nginx proxies to

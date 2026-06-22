@@ -1,11 +1,11 @@
 """
-Completeness guard for the aquila -> sentri rebrand (issue #186, ADR-015).
+Completeness guard for the aquila -> sentri rebrand (issue #186, ADR-016).
 
 Asserts the retired `aquila` codename is absent from the source/config surfaces
 this issue owns. The guard is intentionally NOT repo-wide: it excludes
 - the deployment-pipeline files renamed in #187 (docker/, fleet-config/, etc.),
 - the operational carve-outs that deliberately keep the codename
-  (`AQ_` env-var prefix, `/opt/aquila` host path — see ADR-015),
+  (`AQ_` env-var prefix, `/opt/aquila` host path — see ADR-016),
 - prose that documents the codename on purpose (CONTEXT.md, ADRs, this PRD).
 
 Tokens are added one per TDD cycle as each namespace is renamed.
@@ -30,7 +30,7 @@ FORBIDDEN_TOKENS = [
 # Cycle 4: the brand WORD only. Matches `aquila`/`aquilla` (any case) as a
 # standalone word, but NOT when it is part of a dashed/underscored deployment
 # identifier (`aquila-backend`, `aquila_app`) or a path segment (`/opt/aquila`).
-# Those are renamed in #187 (deployment) or are kept carve-outs (ADR-015).
+# Those are renamed in #187 (deployment) or are kept carve-outs (ADR-016).
 BRAND_WORD = re.compile(r"(?<![\w/-])aquill?a(?![\w-])", re.IGNORECASE)
 
 # Paths whose codename references are owned elsewhere or deliberately kept.

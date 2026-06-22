@@ -1,5 +1,5 @@
 """
-D4 — selective-rename guard for the deployment pipeline (rebrand #187, ADR-015).
+D4 — selective-rename guard for the deployment pipeline (rebrand #187, ADR-016).
 
 The rebrand is deliberately selective: brand/deployment identifiers
 (`aquila-*` containers, `aquilla-main` image paths, `aquila_*` units) are

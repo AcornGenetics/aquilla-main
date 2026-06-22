@@ -26,7 +26,7 @@ jobs:
 
       # TEMPORARY dual-publish to the old image path during the aquila->sentri
       # cutover so not-yet-flipped devices keep updating. Remove in #188 once all
-      # devices report the new sentri-* digest (ADR-015).
+      # devices report the new sentri-* digest (ADR-016).
       - name: Set legacy repo for dual-publish
         run: echo "LEGACY_REPO=acorngenetics/aquilla-main" >> $GITHUB_ENV
 

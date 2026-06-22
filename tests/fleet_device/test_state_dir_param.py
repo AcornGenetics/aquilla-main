@@ -1,5 +1,5 @@
 """
-D5 — STATE_DIR parameterization (rebrand #187, ADR-015).
+D5 — STATE_DIR parameterization (rebrand #187, ADR-016).
 
 The `/opt/aquila` host state directory is a deliberate carve-out (kept), but to
 make a future migration to `/opt/sentri` a one-line env change rather than a

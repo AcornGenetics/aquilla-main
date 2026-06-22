@@ -1,6 +1,6 @@
 # PRD: aquila → sentri rebrand — code, CI/CD, and fleet cutover
 
-_Published to the tracker as [#185](https://github.com/AcornGenetics/aquilla-main/issues/185). Tracks #178. Decisions captured in ADR-015 (`docs/adr/ADR-015-aquila-to-sentri-rebrand-cutover.md`) and the glossary in `CONTEXT.md`._
+_Published to the tracker as [#185](https://github.com/AcornGenetics/aquilla-main/issues/185). Tracks #178. Decisions captured in ADR-016 (`docs/adr/ADR-016-aquila-to-sentri-rebrand-cutover.md`) and the glossary in `CONTEXT.md`._
 
 ## Problem Statement
 
@@ -42,7 +42,7 @@ From the user's perspective: the repo becomes `AcornGenetics/sentri`, `docker ps
 24. As a developer, I want a deployment-pipeline test that asserts every `http://NAME:PORT` reference resolves to a declared container, so that a half-renamed `container_name` is caught in CI, not in the field.
 25. As a developer, I want a test that asserts every `*.service` filename referenced in deploy scripts exists in the tree, so that a renamed unit with a stale script reference fails CI.
 26. As a developer, I want a test that asserts compose image defaults resolve to `acorngenetics/sentri-{api,ui}` and CI uses the `$GITHUB_REPOSITORY`-derived path, so that the freeze-trap default cannot regress.
-27. As a developer, I want a selective-rename guard that asserts `/opt/aquila` and `AQ_` tokens are preserved while brand DNS/image tokens are renamed, so that the ADR-015 scope is an executable invariant.
+27. As a developer, I want a selective-rename guard that asserts `/opt/aquila` and `AQ_` tokens are preserved while brand DNS/image tokens are renamed, so that the ADR-016 scope is an executable invariant.
 28. As a developer, I want a test that asserts bind mounts use `${STATE_DIR:-/opt/aquila}`, so that the parameterization preserves current behavior.
 29. As a developer, I want a repo-wide completeness guard asserting no residual `aquila`/`aquilla`/`aq_lib`/`aq_curve` tokens except the documented carve-outs, so that the rename is provably complete.
 30. As an engineer, I want the glossary (`CONTEXT.md`) to define **Sentri** as the brand and **Aquila** as the retired codename surviving only in the `AQ_` prefix, so that future readers understand the carve-outs.
@@ -52,7 +52,7 @@ From the user's perspective: the repo becomes `AcornGenetics/sentri`, `docker ps
 ## Implementation Decisions
 
 - **Scope, in:** all `aquila`/`aquilla` strings; `aquila_web` → `sentri_web`; `aq_lib`/`aq_curve` → `sentri_lib`/`sentri_curve` (no packaging metadata exists — they resolve via `PYTHONPATH`, so renaming is pure source plus the dynamic `importlib` strings); `container_name`s → `sentri-*`; systemd unit filenames; docs paths.
-- **Scope, deliberately out (operational carve-outs, per ADR-015):** the `AQ_` environment-variable prefix (values are set in each device's environment; `AQ_SYNC_DEVICE_ID` is cert-bound identity) and the `/opt/aquila` host state directory. Renaming either converts a string-replace into a stateful per-device migration for zero user-visible benefit.
+- **Scope, deliberately out (operational carve-outs, per ADR-016):** the `AQ_` environment-variable prefix (values are set in each device's environment; `AQ_SYNC_DEVICE_ID` is cert-bound identity) and the `/opt/aquila` host state directory. Renaming either converts a string-replace into a stateful per-device migration for zero user-visible benefit.
 - **`STATE_DIR` insurance:** parameterize the compose bind-mount host paths behind `${STATE_DIR:-/opt/aquila}` so a future `/opt/sentri` migration is a one-line env change. Default preserves current behavior exactly.
 - **CI image path:** `docker-build.yml`/`promote-images.yml` derive `REPO_LOWER` from `$GITHUB_REPOSITORY`, so published images follow the rename automatically. The two hardcoded compose defaults (`acorngenetics/aquilla-main`) do **not** follow and must be edited to `acorngenetics/sentri`.
 - **Cutover sequence (config-push-first):** rename repo → dual-publish both image paths for ~1 week → canary one device → flip remaining 7 (`GHCR_REPO=acorngenetics/sentri` in `/opt/fleet/.env` + `fleet-update.sh`, skipping mid-run devices) → verify each device's `RUNNING_IMAGE_DIGEST` → delete old GHCR packages → remove dual-publish CI step. `GHCR_REPO` (in `/opt/fleet/.env`) is the single control point for image namespace, the `raw.githubusercontent.com` compose fetch, and the `api.github.com` token check.
@@ -91,4 +91,4 @@ A good test here asserts **external/structural behavior** — that the deploymen
 - The fleet is **8 devices**, accessed manually via Tailscale SSH; there is no fleet-wide orchestrator, so the cutover is a hand-driven runbook (acceptable at this scale; a throwaway fan-out script would only be warranted at larger scale).
 - `deployment2.sh` is the real provisioner that writes `GHCR_REPO` into `/opt/fleet/.env`; `setup_fleet_device.sh` is the older/simpler one that omits it.
 - The mTLS Device Certificate is **not yet** deployed (the fleet is still on `AQ_SYNC_API_KEY`); when it lands it will live under `/opt/aquila/config`, which is another reason to keep that path stable.
-- ADR-015 is the authoritative decision record; this PRD operationalizes it into stories and tests.
+- ADR-016 is the authoritative decision record; this PRD operationalizes it into stories and tests.

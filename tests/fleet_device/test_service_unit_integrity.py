@@ -1,5 +1,5 @@
 """
-D2 — systemd service-unit reference integrity (rebrand #187, ADR-015).
+D2 — systemd service-unit reference integrity (rebrand #187, ADR-016).
 
 Deploy scripts install/enable/restart units by literal filename, guarded by
 `[[ -f ... ]]`. If a unit file is renamed but a script reference is missed, the

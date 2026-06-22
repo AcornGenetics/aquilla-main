@@ -1,4 +1,4 @@
-# ADR-015: aquila → sentri rebrand, and the fleet cutover sequence
+# ADR-016: aquila → sentri rebrand, and the fleet cutover sequence
 
 **Status:** Accepted
 **Date:** 2026-06-19
