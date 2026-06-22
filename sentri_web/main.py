@@ -605,7 +605,8 @@ async def timer(payload: TimerControl):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    # run_in_progress lets the fleet updater defer a device mid-run (#188, ADR-002).
+    return {"status": "ok", "run_in_progress": run_in_progress}
 
 
 @app.get("/version")
