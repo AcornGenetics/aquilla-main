@@ -1,4 +1,4 @@
-# ADR-015: Well Verdict precedence is Detected > Inconclusive > Not Detected
+# ADR-017: Well Verdict precedence is Detected > Inconclusive > Not Detected
 
 **Status:** Proposed
 **Date:** 2026-06-19

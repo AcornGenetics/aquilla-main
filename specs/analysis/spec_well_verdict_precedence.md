@@ -74,7 +74,7 @@ When a Channel's Call is `"ROX Unavailable"` (the `rox_unavailable` profile mode
 ### KPIs and QC Status
 
 - **Detected / Inconclusive KPIs** count Wells by **Well Verdict**, mutually exclusive — each Well lands in exactly one bucket. A `Detected (FAM) + Inconclusive (ROX)` Well counts **only** toward Detected, never both. `detected + inconclusive + not-detected = 4` always.
-- **QC Status is channel-sensitive** (decoupled from the verdict): `Review` if *any* Channel on *any* Well has an `Inconclusive` Call (excluding `ROX Unavailable`), else `Pass`. Consequence: a `Detected(FAM) + Inconclusive(ROX)` Well counts toward the **Detected** KPI but still flips QC Status to **Review** — an inconclusive Channel is never silently passed behind a Detected verdict. (See ADR-015.)
+- **QC Status is channel-sensitive** (decoupled from the verdict): `Review` if *any* Channel on *any* Well has an `Inconclusive` Call (excluding `ROX Unavailable`), else `Pass`. Consequence: a `Detected(FAM) + Inconclusive(ROX)` Well counts toward the **Detected** KPI but still flips QC Status to **Review** — an inconclusive Channel is never silently passed behind a Detected verdict. (See ADR-017.)
 
 ---
 
