@@ -3,6 +3,11 @@ set -euo pipefail
 
 FLEET_ENV="/opt/fleet/.env"
 DEVICE_ENV="/opt/aquila/config/device.env"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Refuse to recreate containers while a PCR run is in progress (#188, ADR-002) —
+# the `up -d` below would kill the run. Forwards operator flags (e.g. --force).
+"${SCRIPT_DIR}/run_guard.sh" "$@" || exit $?
 
 GHCR_TOKEN=$(grep ^GHCR_TOKEN= "${DEVICE_ENV}" | cut -d= -f2)
 GHCR_TOKEN_2=$(grep ^GHCR_TOKEN_2= "${DEVICE_ENV}" 2>/dev/null | cut -d= -f2 || echo "")
