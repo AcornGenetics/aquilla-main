@@ -186,7 +186,7 @@ async def wifi_forget(body: WifiForget):
 
 ## Step 4 — Frontend: wifi.html
 
-New static page at `aquila_web/static/wifi.html`.
+New static page at `sentri_web/static/wifi.html`.
 
 ### Layout
 ```
@@ -227,7 +227,7 @@ Rather than adding a WiFi link to every nav bar immediately, add a **WiFi Settin
 section and link inside `help.html` only. This keeps the scope small and lets the
 feature be tested before promoting it to the main nav.
 
-**In `aquila_web/static/help.html`** — add to the sidebar nav:
+**In `sentri_web/static/help.html`** — add to the sidebar nav:
 ```html
 <a href="/wifi">WiFi Settings</a>
 ```
@@ -251,13 +251,13 @@ When ready to add WiFi to all pages, add to the nav in each of these files:
 ```
 
 Pages to update:
-- `aquila_web/static/run.html`
-- `aquila_web/static/help.html`
-- `aquila_web/static/history.html`
-- `aquila_web/static/history_detail.html`
-- `aquila_web/static/profiles.html`
-- `aquila_web/static/profiles/index.html`
-- `aquila_web/static/profiles/edit.html`
+- `sentri_web/static/run.html`
+- `sentri_web/static/help.html`
+- `sentri_web/static/history.html`
+- `sentri_web/static/history_detail.html`
+- `sentri_web/static/profiles.html`
+- `sentri_web/static/profiles/index.html`
+- `sentri_web/static/profiles/edit.html`
 
 ---
 
@@ -279,12 +279,12 @@ async def wifi_page():
 - [ ] If Option A: rebuild and push the `api` image (`docker build -f docker/Dockerfile.api`)
 - [ ] If Option A: update `/opt/fleet/docker-compose.yml` with D-Bus socket mount
 - [ ] If Option B: add WiFi handlers to `scripts/kiosk-control/kiosk_control.py`
-- [ ] Add 4 WiFi endpoints to `aquila_web/main.py`
-- [ ] Create `aquila_web/static/wifi.html`
-- [ ] Add WiFi link/section to `aquila_web/static/help.html`
+- [ ] Add 4 WiFi endpoints to `sentri_web/main.py`
+- [ ] Create `sentri_web/static/wifi.html`
+- [ ] Add WiFi link/section to `sentri_web/static/help.html`
 - [ ] Add FastAPI `/wifi` route to `main.py`
 - [ ] Restart the stack: `docker compose -f /opt/fleet/docker-compose.yml up -d`
-- [ ] Confirm `nmcli` runs inside the container (Option A): `docker exec aquila-backend nmcli general status`
+- [ ] Confirm `nmcli` runs inside the container (Option A): `docker exec sentri-backend nmcli general status`
 - [ ] Test scan, connect, and forget flows on device
 
 ---

@@ -677,7 +677,7 @@ Version history for every software component on the device.
 CREATE TABLE IF NOT EXISTS firmware_log (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     device_id           TEXT    NOT NULL,
-    component           TEXT    NOT NULL,           -- "aquila_app" | "kiosk" | "pi_os" | "instrument_fw"
+    component           TEXT    NOT NULL,           -- "sentri_app" | "kiosk" | "pi_os" | "instrument_fw"
     previous_version    TEXT,
     new_version         TEXT    NOT NULL,
     update_method       TEXT,                       -- "ota" | "manual" | "factory_flash"

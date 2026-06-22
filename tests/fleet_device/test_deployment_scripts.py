@@ -45,7 +45,7 @@ def test_kiosk_control_installer_installs_python_entrypoint() -> None:
 def test_kiosk_control_update_script_supports_repo_less_devices() -> None:
     script_text = Path("scripts/kiosk-control/update_host_service.sh").read_text()
 
-    assert "raw.githubusercontent.com/AcornGenetics/aquilla-main" in script_text
+    assert "raw.githubusercontent.com/AcornGenetics/sentri" in script_text
     assert "BRANCH=" in script_text
     assert "kiosk_control.py" in script_text
     assert "kiosk-control.service" in script_text

@@ -25,7 +25,7 @@ def _detected_fixture() -> Path:
 @pytest.fixture(autouse=True)
 def isolate_history(monkeypatch, tmp_path):
     """Redirect HISTORY_PATH to a tmp file so tests don't pollute real history."""
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
     tmp_history = tmp_path / "history.json"
     monkeypatch.setattr(web_main, "HISTORY_PATH", tmp_history)
     yield tmp_history

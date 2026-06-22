@@ -25,10 +25,10 @@ from statistics import mean, stdev
 # Try to import hardware libraries
 try:
     import RPi.GPIO as GPIO
-    from aq_lib.motor_class import Axis, Drawer
-    from aq_lib.config_module import Config
-    from aq_lib.adc_class import OpticalRead
-    from aq_lib.led_class import LED
+    from sentri_lib.motor_class import Axis, Drawer
+    from sentri_lib.config_module import Config
+    from sentri_lib.adc_class import OpticalRead
+    from sentri_lib.led_class import LED
     HARDWARE_AVAILABLE = True
     
     # Load config

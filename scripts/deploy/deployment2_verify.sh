@@ -116,15 +116,15 @@ test_phase_9() {
     check 9 "GHCR login succeeded"            "grep -q 'ghcr.io' /root/.docker/config.json"
     check 9 "docker-compose.yml downloaded"   "test -f /opt/fleet/docker-compose.yml"
     check 9 "compose file non-empty"          "test -s /opt/fleet/docker-compose.yml"
-    check 9 "backend image pulled"            "docker images | grep -q 'aquilla-main-api'"
-    check 9 "ui image pulled"                 "docker images | grep -q 'aquilla-main-ui'"
+    check 9 "backend image pulled"            "docker images | grep -q 'sentri-api'"
+    check 9 "ui image pulled"                 "docker images | grep -q 'sentri-ui'"
     check 9 "update.sh exists and executable" "test -x /opt/fleet/update.sh"
 }
 
 test_phase_10() {
     echo "── Phase 10: systemd Service"
-    check 10 "service file exists" "test -f /etc/systemd/system/aquila-stack.service"
-    check 10 "service enabled"     "systemctl is-enabled aquila-stack.service | grep -q enabled"
+    check 10 "service file exists" "test -f /etc/systemd/system/sentri-stack.service"
+    check 10 "service enabled"     "systemctl is-enabled sentri-stack.service | grep -q enabled"
 }
 
 test_phase_11() {
@@ -133,15 +133,15 @@ test_phase_11() {
     token=$(grep WATCHTOWER_HTTP_API_TOKEN /opt/aquila/config/device.env | cut -d= -f2)
     check 11 "DEVICE_ID set"             "grep -q 'DEVICE_ID=' /opt/aquila/config/device.env"
     check 11 "IMAGE_TAG is valid ring"   "grep -E 'IMAGE_TAG=(dev|pilot|prod)' /opt/aquila/config/device.env"
-    check 11 "aquila-backend running"    \
-        "docker ps --filter name=aquila-backend --format '{{.Status}}' | grep -q Up"
-    check 11 "aquila-app running"        \
-        "docker ps --filter name=aquila-app --format '{{.Status}}' | grep -q Up"
-    check 11 "aquila-ui running"         \
-        "docker ps --filter name=aquila-ui --format '{{.Status}}' | grep -q Up"
+    check 11 "sentri-backend running"    \
+        "docker ps --filter name=sentri-backend --format '{{.Status}}' | grep -q Up"
+    check 11 "sentri-app running"        \
+        "docker ps --filter name=sentri-app --format '{{.Status}}' | grep -q Up"
+    check 11 "sentri-ui running"         \
+        "docker ps --filter name=sentri-ui --format '{{.Status}}' | grep -q Up"
     check 11 "backend reachable :8090"   "curl -sf http://localhost:8090/health"
-    check 11 "aquila-watchtower running" \
-        "docker ps --filter name=aquila-watchtower --format '{{.Status}}' | grep -q Up"
+    check 11 "sentri-watchtower running" \
+        "docker ps --filter name=sentri-watchtower --format '{{.Status}}' | grep -q Up"
     check 11 "watchtower webhook responds" \
         "curl -sf -o /dev/null -w '%{http_code}' -X POST http://localhost:8081/v1/update \
          -H 'Authorization: Bearer ${token}' | grep -q 200"

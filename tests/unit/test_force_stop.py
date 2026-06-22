@@ -3,8 +3,8 @@ from threading import Event
 import pytest
 from fastapi.testclient import TestClient
 
-from aq_lib.thermal_engine import RunStopped, thermal_engine
-from aquila_web import main as web_main
+from sentri_lib.thermal_engine import RunStopped, thermal_engine
+from sentri_web import main as web_main
 
 
 class DummyMeer:

@@ -1,21 +1,21 @@
 import time 
-from aq_lib.adc_class import OpticalRead
+from sentri_lib.adc_class import OpticalRead
 from statistics import stdev
 import time
 import sys
 import sys
-from aq_lib.led_class import LED
-from aq_lib.motor_class import Axis, Drawer
+from sentri_lib.led_class import LED
+from sentri_lib.motor_class import Axis, Drawer
 import logging
 import logging.config
 from datetime import datetime
 
-from aq_lib.utils import load_json
-from aq_lib.utils import LogFileName
-from aq_lib.utils import LOGGING_CONFIG
+from sentri_lib.utils import load_json
+from sentri_lib.utils import LogFileName
+from sentri_lib.utils import LOGGING_CONFIG
 
 logging.config.dictConfig( LOGGING_CONFIG )
-logger = logging.getLogger( "aquila.optics" )
+logger = logging.getLogger( "sentri.optics" )
 
 AXIS_MAX_STEPS = 2160  # Physical axis limit for this unit
 

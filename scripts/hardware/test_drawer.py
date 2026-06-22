@@ -2,8 +2,8 @@
 import sys
 import RPi.GPIO as GPIO
 
-from aq_lib.motor_class import Drawer
-from aq_lib.config_module import Config
+from sentri_lib.motor_class import Drawer
+from sentri_lib.config_module import Config
 
 config = Config()
 drawer = Drawer( )

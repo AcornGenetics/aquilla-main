@@ -1,0 +1,14 @@
+[Unit]
+Description=Aquila backend (application.py, sentri)
+After=network.target
+
+[Service]
+User=pi
+Environment=PYTHONPATH=/home/pi/sentri
+Environment=AQ_SRC_BASEDIR=/home/pi/sentri
+WorkingDirectory=/home/pi/sentri
+ExecStart=/home/pi/sentri/venv/bin/python3 /home/pi/sentri/application.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

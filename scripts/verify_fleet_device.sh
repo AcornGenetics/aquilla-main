@@ -10,15 +10,15 @@ if [[ -f /opt/aquila/config/device.env ]]; then
 fi
 
 echo "Checking running containers..."
-docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "aquila-(backend|ui|watchtower|node-exporter)" || true
+docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "sentri-(backend|ui|watchtower|node-exporter)" || true
 
 echo "Checking backend health (if running)..."
-if docker ps --format "{{.Names}}" | grep -q "aquila-backend"; then
-  docker inspect --format '{{json .State.Health}}' aquila-backend || true
+if docker ps --format "{{.Names}}" | grep -q "sentri-backend"; then
+  docker inspect --format '{{json .State.Health}}' sentri-backend || true
 fi
 
 echo "Checking Watchtower API (if running)..."
-if docker ps --format "{{.Names}}" | grep -q "aquila-watchtower"; then
+if docker ps --format "{{.Names}}" | grep -q "sentri-watchtower"; then
   if [[ -n "${WATCHTOWER_HTTP_API_TOKEN:-}" ]]; then
     curl -s -o /dev/null -w "Watchtower API status: %{http_code}\n" \
       -X POST -H "Authorization: Bearer ${WATCHTOWER_HTTP_API_TOKEN}" \

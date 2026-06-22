@@ -15,21 +15,21 @@ Choose one:
 - Docker Hub
 
 Example image names:
-- `ghcr.io/ORG/aquila-backend`
-- `ghcr.io/ORG/aquila-ui`
-- `ghcr.io/ORG/aquila-streamlit` (optional)
+- `ghcr.io/ORG/sentri-backend`
+- `ghcr.io/ORG/sentri-ui`
+- `ghcr.io/ORG/sentri-streamlit` (optional)
 
 ## 2) Image build + push workflow
 ### Manual (laptop)
 ```bash
 docker buildx build --platform linux/arm64 \
-  -f docker/Dockerfile.api -t ghcr.io/ORG/aquila-backend:v1.0.0 --push .
+  -f docker/Dockerfile.api -t ghcr.io/ORG/sentri-backend:v1.0.0 --push .
 
 docker buildx build --platform linux/arm64 \
-  -f docker/Dockerfile.ui -t ghcr.io/ORG/aquila-ui:v1.0.0 --push .
+  -f docker/Dockerfile.ui -t ghcr.io/ORG/sentri-ui:v1.0.0 --push .
 
 docker buildx build --platform linux/arm64 \
-  -f docker/Dockerfile.streamlit -t ghcr.io/ORG/aquila-streamlit:v1.0.0 --push .
+  -f docker/Dockerfile.streamlit -t ghcr.io/ORG/sentri-streamlit:v1.0.0 --push .
 ```
 
 ### CI (recommended)
@@ -42,7 +42,7 @@ Create `docker-compose.prod.yml` on each device:
 ```yaml
 services:
   backend:
-    image: ghcr.io/ORG/aquila-backend:v1.0.0
+    image: ghcr.io/ORG/sentri-backend:v1.0.0
     ports:
       - "8090:8090"
     volumes:
@@ -60,14 +60,14 @@ services:
     restart: unless-stopped
 
   ui:
-    image: ghcr.io/ORG/aquila-ui:v1.0.0
+    image: ghcr.io/ORG/sentri-ui:v1.0.0
     ports:
       - "8080:80"
     restart: unless-stopped
 
   # optional, only if you want Streamlit deployed
   streamlit:
-    image: ghcr.io/ORG/aquila-streamlit:v1.0.0
+    image: ghcr.io/ORG/sentri-streamlit:v1.0.0
     ports:
       - "8501:8501"
     restart: unless-stopped

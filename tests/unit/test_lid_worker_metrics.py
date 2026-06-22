@@ -7,7 +7,7 @@ across runs without coming back to zero). No hardware — pure logic.
 """
 import pytest
 
-from aq_lib import lid_worker_metrics as lwm
+from sentri_lib import lid_worker_metrics as lwm
 
 
 @pytest.fixture(autouse=True)

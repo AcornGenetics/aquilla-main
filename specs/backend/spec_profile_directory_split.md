@@ -80,7 +80,7 @@ cp -f "${profile}" "${profile_dir}/bundled/"
 
 ---
 
-## API changes (`aquila_web/main.py`)
+## API changes (`sentri_web/main.py`)
 
 ### `list_profiles()`
 
@@ -156,8 +156,8 @@ Add `bundled` boolean to each profile entry:
 | File | Change |
 |---|---|
 | `docker/entrypoint.sh` | Write to `profiles/bundled/`, use `cp -f`, `mkdir -p bundled` |
-| `aquila_web/main.py` | `_migrate_profiles()` at startup; save/delete blocked on bundled; `bundled` field in response; local/ as save target |
-| `aquila_web/static/profiles/index.html` or profiles JS | Lock icon on bundled profiles; hide edit/delete for bundled |
+| `sentri_web/main.py` | `_migrate_profiles()` at startup; save/delete blocked on bundled; `bundled` field in response; local/ as save target |
+| `sentri_web/static/profiles/index.html` or profiles JS | Lock icon on bundled profiles; hide edit/delete for bundled |
 | `unit_tests/test_device_profile_filtering.py` | Migration logic, filter, 403 responses, deduplication |
 
 No changes to `device_profiles.json`, `profile_groups.json`, Dockerfile, or docker-compose.

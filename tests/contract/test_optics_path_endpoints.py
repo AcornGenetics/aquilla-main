@@ -13,7 +13,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def isolated_optics_storage(monkeypatch, tmp_path):
     """Point optics-history persistence at a throwaway file per test."""
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
     monkeypatch.setattr(
         web_main, "OPTICS_PATHS_PATH", tmp_path / "optics_paths.json", raising=False
     )

@@ -1,6 +1,6 @@
-# Aquila
+# Sentri
 
-Aquila is a PCR instrument control system running on Raspberry Pi. It controls thermals, motors, optics, and a lid heater through a FastAPI backend + WebSocket UI, with Docker-based fleet deployment and Watchtower auto-updates.
+Sentri is a PCR instrument control system running on Raspberry Pi. It controls thermals, motors, optics, and a lid heater through a FastAPI backend + WebSocket UI, with Docker-based fleet deployment and Watchtower auto-updates.
 
 ---
 
@@ -11,7 +11,7 @@ A PCR run goes through these stages:
 1. Operator selects a profile (assay protocol) on the kiosk touchscreen
 2. The assay loop (`application.py`) drives the hardware through each thermal cycle
 3. The optical sensor reads fluorescence per tube per cycle
-4. `aq_curve/` processes raw data: baseline correction → cross-talk removal → Cq detection
+4. `sentri_curve/` processes raw data: baseline correction → cross-talk removal → Cq detection
 5. Results (Detected / Inconclusive / Not Detected per tube) are stored and shown on screen
 
 ---
@@ -30,7 +30,7 @@ pip install -r requirements-test.txt
 pytest tests unit_tests -v -m "not hardware and not e2e"
 
 # 4. Start the app in simulation mode
-AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=3 uvicorn aquila_web.main:app --host 127.0.0.1 --port 8090
+AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=3 uvicorn sentri_web.main:app --host 127.0.0.1 --port 8090
 ```
 
 Open `http://localhost:8090` in a browser. See `docs/onboarding/intern-onboarding.md` for full setup details including `src_basedir` configuration.
@@ -44,10 +44,10 @@ Open `http://localhost:8090` in a browser. See `docs/onboarding/intern-onboardin
 pytest tests unit_tests -v
 
 # On-device candidate validation
-./scripts/test_candidate.sh ghcr.io/acorngenetics/aquilla-main-api:<tag>
+./scripts/test_candidate.sh ghcr.io/acorngenetics/sentri-api:<tag>
 
 # Promote a candidate to stable (separate command — does not auto-run)
-./scripts/promote_candidate.sh ghcr.io/acorngenetics/aquilla-main-api@sha256:<digest>
+./scripts/promote_candidate.sh ghcr.io/acorngenetics/sentri-api@sha256:<digest>
 ```
 
 Test results are written to `/opt/aquila/test-results/` on the device.
@@ -58,9 +58,9 @@ Test results are written to `/opt/aquila/test-results/` on the device.
 
 | Path | What's in it |
 |------|-------------|
-| `aquila_web/` | FastAPI backend (`main.py`) + static HTML/JS frontend |
-| `aq_lib/` | Hardware drivers: TEC, motors, optics, lid heater, fan |
-| `aq_curve/` | PCR curve analysis: baseline, cross-talk, Cq, result calls |
+| `sentri_web/` | FastAPI backend (`main.py`) + static HTML/JS frontend |
+| `sentri_lib/` | Hardware drivers: TEC, motors, optics, lid heater, fan |
+| `sentri_curve/` | PCR curve analysis: baseline, cross-talk, Cq, result calls |
 | `fleet-config/` | Production `docker-compose.yml` (4 services + Watchtower) |
 | `scripts/` | Device provisioning, kiosk control, Grafana setup |
 | `config_files/` | Per-device and runtime config templates |
@@ -74,10 +74,10 @@ Test results are written to `/opt/aquila/test-results/` on the device.
 
 | Service | Port | Role |
 |---------|------|------|
-| `aquila-backend` | 8090 | FastAPI REST + WebSocket |
-| `aquila-app` | — | Assay loop (`application.py`) |
-| `aquila-ui` | 8080 | NGINX — serves static UI, proxies to backend |
-| `aquila-watchtower` | 8081 | Pulls updated images every 5 min |
+| `sentri-backend` | 8090 | FastAPI REST + WebSocket |
+| `sentri-app` | — | Assay loop (`application.py`) |
+| `sentri-ui` | 8080 | NGINX — serves static UI, proxies to backend |
+| `sentri-watchtower` | 8081 | Pulls updated images every 5 min |
 
 All containers share `/dev/ttyUSB0` (TEC), `/dev/i2c-1` (optics/lid), GPIO, and `/opt/aquila/` volumes.
 

@@ -1,5 +1,5 @@
 """
-Unit tests for _merge_optics_history() in aquila_web/main.py.
+Unit tests for _merge_optics_history() in sentri_web/main.py.
 
 Pure function: given the current recent-optics-path history and a candidate
 path, return the new history (most-recent-first, deduped, capped). No file IO.
@@ -23,7 +23,7 @@ if "serial" not in sys.modules:
     _st.list_ports = _lp
     sys.modules.update({"serial": _s, "serial.tools": _st, "serial.tools.list_ports": _lp})
 
-from aquila_web.main import _merge_optics_history, OPTICS_PATHS_LIMIT
+from sentri_web.main import _merge_optics_history, OPTICS_PATHS_LIMIT
 
 
 def test_new_path_is_prepended_to_history():

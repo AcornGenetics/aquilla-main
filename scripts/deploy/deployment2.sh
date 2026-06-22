@@ -9,7 +9,7 @@ set -euo pipefail
 [[ "${EUID}" -ne 0 ]] && { echo "Run as root: sudo bash deployment2.sh"; exit 1; }
 
 PI_HOME="/home/pi"
-GHCR_REPO="${GHCR_REPO:-acorngenetics/aquilla-main}"
+GHCR_REPO="${GHCR_REPO:-acorngenetics/sentri}"
 RAW_REPO_URL="https://raw.githubusercontent.com/${GHCR_REPO}/main"
 MEERSTETTER_XMLS=(${MEERSTETTER_XMLS:-"24NOV25.SN1.Config.w.PT1000.cal.1.xml"})
 
@@ -119,7 +119,7 @@ if [[ ! -e /dev/spidev0.0 ]]; then
     echo ""
     echo "  /dev/spidev0.0 not yet present — reboot required to load SPI kernel module."
     echo "  Rebooting in 5 seconds... Re-run deployment2.sh after reboot to continue from Phase 3."
-    touch /tmp/aquila_spi_reboot_pending
+    touch /tmp/sentri_spi_reboot_pending
     sleep 5
     reboot
 fi
@@ -254,7 +254,7 @@ rm -f "${PI_HOME}/.config/labwc/autostart"
 # Install boot splash page
 curl -fsSL \
     -H "Authorization: token ${GHCR_TOKEN}" \
-    "${RAW_REPO_URL}/aquila_web/static/splash.html" \
+    "${RAW_REPO_URL}/sentri_web/static/splash.html" \
     -o /opt/aquila/splash.html
 
 mkdir -p "${PI_HOME}/.config/openbox"
@@ -669,8 +669,8 @@ chmod +x /opt/fleet/update.sh
 
 run_test "docker-compose.yml downloaded"   "test -f /opt/fleet/docker-compose.yml"
 run_test "compose file non-empty"          "test -s /opt/fleet/docker-compose.yml"
-run_test "backend image pulled"            "docker images | grep -q 'aquilla-main-api'"
-run_test "ui image pulled"                 "docker images | grep -q 'aquilla-main-ui'"
+run_test "backend image pulled"            "docker images | grep -q 'sentri-api'"
+run_test "ui image pulled"                 "docker images | grep -q 'sentri-ui'"
 run_test "update.sh exists and executable" "test -x /opt/fleet/update.sh"
 
 phase_pass "docker-compose.yml downloaded, all images pulled"
@@ -680,7 +680,7 @@ phase_pass "docker-compose.yml downloaded, all images pulled"
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 10 "Register systemd Service"
 
-cat > /etc/systemd/system/aquila-stack.service <<'EOF'
+cat > /etc/systemd/system/sentri-stack.service <<'EOF'
 [Unit]
 Description=Aquila Docker Compose Stack
 After=docker.service network-online.target
@@ -699,12 +699,12 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable aquila-stack.service
+systemctl enable sentri-stack.service
 
-run_test "service file exists" "test -f /etc/systemd/system/aquila-stack.service"
-run_test "service enabled"     "systemctl is-enabled aquila-stack.service | grep -q enabled"
+run_test "service file exists" "test -f /etc/systemd/system/sentri-stack.service"
+run_test "service enabled"     "systemctl is-enabled sentri-stack.service | grep -q enabled"
 
-phase_pass "aquila-stack.service registered and enabled"
+phase_pass "sentri-stack.service registered and enabled"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 11 — Fleet Device Configuration (Start Stack)
@@ -727,10 +727,10 @@ done
 echo "  Running Meerstetter first-time tuning..."
 if ! docker exec \
     -e CONFIG_DIR=/opt/aquila/config \
-    aquila-app \
+    sentri-app \
     python3 - <<'PY'
-from aq_lib.config_module import Config
-from aq_lib.meerstetter import MeerStetter
+from sentri_lib.config_module import Config
+from sentri_lib.meerstetter import MeerStetter
 
 config = Config()
 device_type = int(config.pcr["device_type"])
@@ -764,15 +764,15 @@ WATCHTOWER_TOKEN=$(grep WATCHTOWER_HTTP_API_TOKEN /opt/aquila/config/device.env 
 
 run_test "DEVICE_ID set"            "grep -q 'DEVICE_ID=' /opt/aquila/config/device.env"
 run_test "IMAGE_TAG is valid ring"   "grep -E 'IMAGE_TAG=(dev|pilot|prod)' /opt/aquila/config/device.env"
-run_test "aquila-backend running"    \
-    "docker ps --filter name=aquila-backend --format '{{.Status}}' | grep -q Up"
-run_test "aquila-app running"        \
-    "docker ps --filter name=aquila-app --format '{{.Status}}' | grep -q Up"
-run_test "aquila-ui running"         \
-    "docker ps --filter name=aquila-ui --format '{{.Status}}' | grep -q Up"
+run_test "sentri-backend running"    \
+    "docker ps --filter name=sentri-backend --format '{{.Status}}' | grep -q Up"
+run_test "sentri-app running"        \
+    "docker ps --filter name=sentri-app --format '{{.Status}}' | grep -q Up"
+run_test "sentri-ui running"         \
+    "docker ps --filter name=sentri-ui --format '{{.Status}}' | grep -q Up"
 run_test "backend reachable :8090"   "curl -sf http://localhost:8090/health"
-run_test "aquila-watchtower running" \
-    "docker ps --filter name=aquila-watchtower --format '{{.Status}}' | grep -q Up"
+run_test "sentri-watchtower running" \
+    "docker ps --filter name=sentri-watchtower --format '{{.Status}}' | grep -q Up"
 run_test "watchtower webhook responds" \
     "curl -sf -o /dev/null -w '%{http_code}' -X POST http://localhost:8081/v1/update \
      -H 'Authorization: Bearer ${WATCHTOWER_TOKEN}' | grep -q 200"
@@ -956,7 +956,7 @@ fi
 # Download acornlogo SVG from repo if not already on device
 if [[ ! -f "${ACORN_LOGO_SVG}" ]]; then
     curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
-        "${RAW_REPO_URL}/aquila_web/static/acornlogo.svg" \
+        "${RAW_REPO_URL}/sentri_web/static/acornlogo.svg" \
         -o "${ACORN_LOGO_SVG}" 2>/dev/null || true
 fi
 

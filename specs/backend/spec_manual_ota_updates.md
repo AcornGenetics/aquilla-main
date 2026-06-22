@@ -34,7 +34,7 @@ User opens Help → Updates tab:
 
 ## What Is Already Built
 
-### Backend (`aquila_web/main.py`, lines 1315–1479)
+### Backend (`sentri_web/main.py`, lines 1315–1479)
 
 | Component | Status |
 |-----------|--------|
@@ -46,7 +46,7 @@ User opens Help → Updates tab:
 | `POST /update/dismiss` — clears badge | Done |
 | `POST /update/reset` — dev helper | Done |
 
-### UI (`aquila_web/static/help.html`, lines 261–405)
+### UI (`sentri_web/static/help.html`, lines 261–405)
 
 | Component | Status |
 |-----------|--------|
@@ -81,7 +81,7 @@ User opens Help → Updates tab:
 
 Without `--interval`, Watchtower sits idle and only acts when `POST /v1/update` is called. The background poller in `main.py` handles detection.
 
-### 2. `aquila_web/main.py` — add run-active guard to `/update/apply`
+### 2. `sentri_web/main.py` — add run-active guard to `/update/apply`
 
 The `/update/apply` endpoint must reject the request if a PCR run is currently in progress.
 
@@ -155,4 +155,4 @@ The UI already handles the error case (`d.ok === false` renders the error string
 | File | Change |
 |------|--------|
 | `fleet-config/docker-compose.yml` | Remove `--interval 300` from watchtower command |
-| `aquila_web/main.py` | Add run-active guard to `apply_update()` |
+| `sentri_web/main.py` | Add run-active guard to `apply_update()` |

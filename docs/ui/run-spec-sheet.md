@@ -1,7 +1,7 @@
 # Run Page Spec Sheet (`/run`)
 
 ## Overview
-- Route: `/run` serves `aquila_web/static/run.html`.
+- Route: `/run` serves `sentri_web/static/run.html`.
 - Layout: fixed desktop viewport (800 × 400) with centered main content.
 - Page states: `Ready` (default), `Running`, `Results` (hidden via `.is-hidden`).
 

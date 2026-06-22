@@ -33,8 +33,8 @@ from statistics import mean, stdev
 
 # Try to import hardware libraries - graceful fallback for testing
 try:
-    from aq_lib.adc_class import OpticalRead
-    from aq_lib.led_class import LED
+    from sentri_lib.adc_class import OpticalRead
+    from sentri_lib.led_class import LED
     HARDWARE_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Hardware libraries not available: {e}", file=sys.stderr)

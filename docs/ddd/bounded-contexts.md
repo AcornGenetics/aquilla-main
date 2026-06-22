@@ -1,9 +1,9 @@
-# Aquila DDD Bounded Contexts
+# Sentri DDD Bounded Contexts
 
 **Date**: 2026-04-30  
 **Status**: Current
 
-This document defines the five bounded contexts of the Aquila qPCR system using Domain-Driven Design vocabulary.
+This document defines the five bounded contexts of the Sentri qPCR system using Domain-Driven Design vocabulary.
 
 ---
 
@@ -11,7 +11,7 @@ This document defines the five bounded contexts of the Aquila qPCR system using 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Aquila System                                │
+│                        Sentri System                                │
 │                                                                     │
 │  ┌──────────────────┐    ┌──────────────────┐                      │
 │  │  Device Control  │───▶│  PCR Analysis    │                      │
@@ -60,11 +60,11 @@ This document defines the five bounded contexts of the Aquila qPCR system using 
 
 **Key Files**
 - `state_run_assay.py` — AssayInterface aggregate root
-- `aq_lib/motor_class.py` — Motor aggregate
-- `aq_lib/meerstetter.py` — ThermalBlock infrastructure
-- `aq_lib/thermal_engine.py` — thermal profile execution
+- `sentri_lib/motor_class.py` — Motor aggregate
+- `sentri_lib/meerstetter.py` — ThermalBlock infrastructure
+- `sentri_lib/thermal_engine.py` — thermal profile execution
 - `adc_class.py` — OpticalReader
-- `aq_lib/lid_temperature.py`, `aq_lib/regulate.py` — LidHeater
+- `sentri_lib/lid_temperature.py`, `sentri_lib/regulate.py` — LidHeater
 
 **Integrates with**
 - Web/API: publishes run state via `state_requests.py` HTTP calls
@@ -96,11 +96,11 @@ This document defines the five bounded contexts of the Aquila qPCR system using 
 - **PlotRenderer**: Generates PNG visualizations from Curve data.
 
 **Key Files**
-- `aq_curve/curve.py` — Curve aggregate
-- `aq_curve/evaluator.py` — Evaluator
-- `aq_curve/analysis_service.py` — AnalysisService
-- `aq_curve/plot_utils.py` — PlotRenderer
-- `aq_curve/pcr_curve_config.py` — Analysis parameters (thresholds, R² cutoffs)
+- `sentri_curve/curve.py` — Curve aggregate
+- `sentri_curve/evaluator.py` — Evaluator
+- `sentri_curve/analysis_service.py` — AnalysisService
+- `sentri_curve/plot_utils.py` — PlotRenderer
+- `sentri_curve/pcr_curve_config.py` — Analysis parameters (thresholds, R² cutoffs)
 
 **Domain Events**
 - `RunAnalysisComplete` → triggers results JSON write and plot generation
@@ -134,7 +134,7 @@ This document defines the five bounded contexts of the Aquila qPCR system using 
 - **StateManager**: Holds current screen state; broadcasts WebSocket events on change.
 
 **Key Files**
-- `aquila_web/main.py` — All routes and WebSocket logic
+- `sentri_web/main.py` — All routes and WebSocket logic
 
 **API Surface**
 - `POST /run/` — start a run
@@ -172,14 +172,14 @@ This document defines the five bounded contexts of the Aquila qPCR system using 
 - **History Screen** (`history.html`): Expandable list of past runs with Cq summaries and plot images.
 - **State Machine** (`script.js`): WebSocket listener; swaps visible sections on `screen_change` events.
 - **Keyboard** (`keyboard.js`): On-screen text input component.
-- **Kiosk Service** (`aquila-kiosk.service`): systemd unit; starts Chromium on boot with touch flags.
+- **Kiosk Service** (`sentri-kiosk.service`): systemd unit; starts Chromium on boot with touch flags.
 
 **Key Files**
-- `aquila_web/static/run.html`
-- `aquila_web/static/history.html`
-- `aquila_web/static/script.js`
-- `aquila_web/static/keyboard.js`
-- `aquila_web/static/styles.css`
+- `sentri_web/static/run.html`
+- `sentri_web/static/history.html`
+- `sentri_web/static/script.js`
+- `sentri_web/static/keyboard.js`
+- `sentri_web/static/styles.css`
 
 **Integrates with**
 - Web/API: WebSocket connection to `ws://localhost:8090/ws`; REST calls for profiles, history, run control
@@ -188,13 +188,13 @@ This document defines the five bounded contexts of the Aquila qPCR system using 
 
 ## 5. Fleet Deployment / Device Management
 
-**Purpose**: Provision, configure, update, and monitor the fleet of Aquila devices.
+**Purpose**: Provision, configure, update, and monitor the fleet of Sentri devices.
 
 **Ubiquitous Language**
 
 | Term | Meaning |
 |------|---------|
-| Device | A physical Aquila unit identified by hostname (e.g., `sn01`) |
+| Device | A physical Sentri unit identified by hostname (e.g., `sn01`) |
 | Fleet | The collection of all deployed devices |
 | Provisioning | Initial setup of a device: OS, Docker, config files, credentials |
 | OTA Update | Over-the-air software update delivered by pushing a new container image |

@@ -388,7 +388,7 @@ def insert_sync_log(
 ) -> int
 ```
 
-**Called from:** `aquila_web/sync.py` — wrap the existing `sync_pending_events()` call
+**Called from:** `sentri_web/sync.py` — wrap the existing `sync_pending_events()` call
 to record the outcome here.
 
 ---
@@ -518,7 +518,7 @@ def insert_operator_action(
 def insert_firmware_log(
     conn,
     device_id: str,
-    component: str,             # "aquila_app" | "kiosk" | "pi_os" | "instrument_fw"
+    component: str,             # "sentri_app" | "kiosk" | "pi_os" | "instrument_fw"
     new_version: str,
     update_status: str,         # "success" | "failed" | "rolled_back"
     previous_version: str = None,
@@ -575,7 +575,7 @@ def get_pending_sync_count(conn) -> dict
 
 ## 4. Sync Thread Integration
 
-The sync thread in `aquila_web/sync.py` currently pushes a single `events` table.
+The sync thread in `sentri_web/sync.py` currently pushes a single `events` table.
 With the new schema, it iterates over all syncable tables:
 
 ```python
@@ -630,7 +630,7 @@ These tables have data in memory right now. They just need the DB layer inserted
 | 9 | `thermocouple_diagnostics` | Pre-run self-check in `meerstetter.py` |
 | 10 | `network_events` | `src/network_monitor.py` — poll interface state |
 | 11 | `process_health` | Watchdog heartbeat per thread |
-| 12 | `sync_log` | Wrap `aquila_web/sync.py` outcome recording |
+| 12 | `sync_log` | Wrap `sentri_web/sync.py` outcome recording |
 
 ### Phase 3 — Requires new analytical modules
 

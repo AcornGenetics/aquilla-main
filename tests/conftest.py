@@ -26,7 +26,7 @@ def _reset_web_state(client: TestClient) -> None:
 @pytest.fixture
 def client():
     """FastAPI TestClient with clean state before each test."""
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
     with TestClient(web_main.app) as c:
         _reset_web_state(c)
         yield c

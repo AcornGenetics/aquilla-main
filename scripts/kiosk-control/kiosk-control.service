@@ -1,6 +1,6 @@
 [Unit]
 Description=Aquila Kiosk Control API
-Documentation=https://github.com/AcornGenetics/aquilla-main
+Documentation=https://github.com/AcornGenetics/sentri
 After=network.target graphical-session.target
 Wants=graphical-session.target
 

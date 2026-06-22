@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from aq_curve.pcr_curve_helpers import get_threshold, interpolate_ct, compute_cq
+from sentri_curve.pcr_curve_helpers import get_threshold, interpolate_ct, compute_cq
 
 
 # --- get_threshold (relative / fraction-based) ---

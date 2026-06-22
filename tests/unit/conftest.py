@@ -34,7 +34,7 @@ class DummyMeer:
         self.log_calls.append({"endtime": endtime})
         # Respect stop_event so tests that set it don't hang
         if stop_event and stop_event.is_set():
-            from aq_lib.thermal_engine import RunStopped
+            from sentri_lib.thermal_engine import RunStopped
             raise RunStopped("stopped in mock")
 
     def setKp(self, value):

@@ -15,9 +15,9 @@ All app updates are delivered by pulling new container images via Watchtower —
 
 | Component | Where | Why |
 |---|---|---|
-| `aquila-backend` (FastAPI/uvicorn :8090) | Container | No hardware access, pure HTTP — safe to auto-update |
-| `aquila-app` (application.py) | Container (same image as backend) | All Python code shared; needs `privileged: true` + device passthrough |
-| `aquila-ui` (nginx + static files) | Container | Separate update cadence from Python backend |
+| `sentri-backend` (FastAPI/uvicorn :8090) | Container | No hardware access, pure HTTP — safe to auto-update |
+| `sentri-app` (application.py) | Container (same image as backend) | All Python code shared; needs `privileged: true` + device passthrough |
+| `sentri-ui` (nginx + static files) | Container | Separate update cadence from Python backend |
 | `watchtower` | Container | Auto-pulls new images on schedule or webhook |
 | Chromium kiosk | Host | X11 DISPLAY is user-session-scoped, not exposable to Docker |
 | Openbox autostart | Host | Session-level, single source of truth for kiosk launch |
@@ -26,12 +26,12 @@ All app updates are delivered by pulling new container images via Watchtower —
 
 ### One Image, Two Containers
 
-`aquila-backend` and `aquila-app` both use the same Docker image (built from `Dockerfile.api`).
-They share all Python code (`aq_lib/`, `aq_curve/`, `config.py`, `profiles/`).
+`sentri-backend` and `sentri-app` both use the same Docker image (built from `Dockerfile.api`).
+They share all Python code (`sentri_lib/`, `sentri_curve/`, `config.py`, `profiles/`).
 The difference is the `command:` override in docker-compose:
 
-- `aquila-backend` → `uvicorn main:app --host 0.0.0.0 --port 8090`
-- `aquila-app` → `python3 application.py`
+- `sentri-backend` → `uvicorn main:app --host 0.0.0.0 --port 8090`
+- `sentri-app` → `python3 application.py`
 
 ---
 
@@ -94,7 +94,7 @@ Each file written by the script:
 | `/etc/lightdm/lightdm.conf.d/autologin.conf` | bash heredoc | `autologin-session=openbox` |
 | `/etc/systemd/system/kiosk-control.service` | bash heredoc | kiosk-control.py systemd unit |
 | `/usr/local/bin/kiosk_control.py` | `curl` from GitHub raw URL | Host-side WiFi + kiosk start/stop HTTP service |
-| `/etc/systemd/system/aquila-stack.service` | bash heredoc | Starts `docker compose up -d` on boot |
+| `/etc/systemd/system/sentri-stack.service` | bash heredoc | Starts `docker compose up -d` on boot |
 
 ### Config Path
 
@@ -114,17 +114,17 @@ The telemetry stack (node-exporter, vmagent, vector) is being removed — not us
 
 | Service | Container name | Port | Notes |
 |---|---|---|---|
-| `backend` | `aquila-backend` | `8090:8090` | FastAPI/uvicorn |
-| `app` | `aquila-app` | — | `python3 application.py`, `hostname: ${DEVICE_HOSTNAME}` |
-| `ui` | `aquila-ui` | `8080:80` | nginx static files |
-| `watchtower` | `aquila-watchtower` | `8081:8080` | webhook trigger on 8081 |
+| `backend` | `sentri-backend` | `8090:8090` | FastAPI/uvicorn |
+| `app` | `sentri-app` | — | `python3 application.py`, `hostname: ${DEVICE_HOSTNAME}` |
+| `ui` | `sentri-ui` | `8080:80` | nginx static files |
+| `watchtower` | `sentri-watchtower` | `8081:8080` | webhook trigger on 8081 |
 | ~~`node-exporter`~~ | — | — | **REMOVED** |
 | ~~`vmagent`~~ | — | — | **REMOVED** |
 | ~~`vector`~~ | — | — | **REMOVED** |
 
 ### DEVICE_HOSTNAME Pattern (confirmed from current compose)
 
-`aquila-app` sets `hostname: ${DEVICE_HOSTNAME}` so that `socket.gethostname()` inside the container
+`sentri-app` sets `hostname: ${DEVICE_HOSTNAME}` so that `socket.gethostname()` inside the container
 returns the device serial (e.g. `sn03`) rather than the container ID. `DEVICE_HOSTNAME` is loaded
 from `device.env` via `env_file:`. This is the existing pattern — keep as-is.
 
@@ -224,8 +224,8 @@ apt-get install -y chromium openbox xserver-xorg x11-xserver-utils xinput unclut
 | `pip install -r requirements.txt` | Not needed | Dependencies baked into image |
 | `kanshi` | Not needed | Replaced by xrandr in Openbox autostart |
 | `nodejs`, `npm`, `serve` | Not needed | serve.service removed |
-| `aquila_app.service` | Not needed | Replaced by Docker Compose |
-| `aquila_web.service` | Not needed | Replaced by Docker Compose |
+| `sentri_app.service` | Not needed | Replaced by Docker Compose |
+| `sentri_web.service` | Not needed | Replaced by Docker Compose |
 
 #### Verification (runs automatically at end of phase)
 > Full test definitions: [deployment2_tests.md — Phase 1](deployment2_tests.md#phase-1--os-prerequisites-and-host-packages)
@@ -359,7 +359,7 @@ Downloads `kiosk_control.py` from GitHub and registers it as a systemd service:
 Service unit:
 ```ini
 [Unit]
-Description=Aquila Kiosk Control
+Description=Sentri Kiosk Control
 After=network.target
 
 [Service]
@@ -528,10 +528,10 @@ docker compose --env-file /opt/fleet/.env -f /opt/fleet/docker-compose.yml up -d
 
 ### Phase 10 — Register systemd Service
 
-Creates `/etc/systemd/system/aquila-stack.service`:
+Creates `/etc/systemd/system/sentri-stack.service`:
 ```ini
 [Unit]
-Description=Aquila Docker Compose Stack
+Description=Sentri Docker Compose Stack
 After=docker.service network-online.target
 Requires=docker.service
 
@@ -548,14 +548,14 @@ WantedBy=multi-user.target
 ```
 ```bash
 systemctl daemon-reload
-systemctl enable aquila-stack.service
+systemctl enable sentri-stack.service
 ```
 
 #### Verification (runs automatically at end of phase)
 > Full test definitions: [deployment2_tests.md — Phase 10](deployment2_tests.md#phase-10--systemd-service)
 ```
-✓ Phase 10 complete — aquila-stack.service registered and enabled
-✗ Phase 10 FAILED — aquila-stack.service not enabled. Run: systemctl daemon-reload && systemctl enable aquila-stack.service
+✓ Phase 10 complete — sentri-stack.service registered and enabled
+✗ Phase 10 FAILED — sentri-stack.service not enabled. Run: systemctl daemon-reload && systemctl enable sentri-stack.service
 ```
 
 ---
@@ -569,12 +569,12 @@ docker compose --env-file /opt/fleet/.env \
   -f /opt/fleet/docker-compose.yml up -d
 ```
 
-Once the backend is healthy, apply the initial Meerstetter tuning parameters (runs inside the `aquila-app` container):
+Once the backend is healthy, apply the initial Meerstetter tuning parameters (runs inside the `sentri-app` container):
 
 ```bash
-docker exec -e CONFIG_DIR=/opt/aquila/config aquila-app python3 - <<'PY'
-from aq_lib.config_module import Config
-from aq_lib.meerstetter import MeerStetter
+docker exec -e CONFIG_DIR=/opt/aquila/config sentri-app python3 - <<'PY'
+from sentri_lib.config_module import Config
+from sentri_lib.meerstetter import MeerStetter
 
 config = Config()
 device_type = int(config.pcr["device_type"])
@@ -606,7 +606,7 @@ Watchtower will watch the running containers and automatically pull new images f
 > Full test definitions: [deployment2_tests.md — Phase 11](deployment2_tests.md#phase-11--fleet-device-configuration)
 ```
 ✓ Phase 11 complete — all 4 containers running, backend reachable on :8090, watchtower webhook responding
-✗ Phase 11 FAILED — aquila-app not running. Check: docker logs aquila-app
+✗ Phase 11 FAILED — sentri-app not running. Check: docker logs sentri-app
 ```
 
 ---
@@ -723,7 +723,7 @@ The script runs verification tests after each step and exits on first failure.
 2. Watchtower polls every 300s OR receives webhook: `POST http://<device>:8081/v1/update`
    with header `Authorization: Bearer <WATCHTOWER_HTTP_API_TOKEN>`
 3. Watchtower pulls new image → stops old container → starts new one
-4. `aquila-app` re-homes motors on startup (expected, existing behavior)
+4. `sentri-app` re-homes motors on startup (expected, existing behavior)
 5. No SSH, no git, no files touched on device
 
 ### Manual Stack Update (Compose Structure Changes)
@@ -737,8 +737,8 @@ ssh pi@<device> bash /opt/fleet/update.sh
 
 ## What Is NOT on the Device After deployment2.sh
 
-- No git repo (`aquilla-main` directory does not exist)
+- No git repo (`sentri` directory does not exist)
 - No Python venv (Python lives inside the container image)
-- No `serve.service`, `aquila_app.service`, or `aquila_web.service`
+- No `serve.service`, `sentri_app.service`, or `sentri_web.service`
 - No telemetry stack (node-exporter, vmagent, vector)
-- Replaced by: `aquila-stack.service` → `docker compose up -d`
+- Replaced by: `sentri-stack.service` → `docker compose up -d`

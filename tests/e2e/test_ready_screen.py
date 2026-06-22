@@ -1,5 +1,5 @@
 """
-E2E tests for the Run / Ready screen of the Aquila PCR kiosk UI.
+E2E tests for the Run / Ready screen of the Sentri PCR kiosk UI.
 Requires a running backend at base_url (default http://localhost:8090).
 Run with: pytest -m e2e tests/e2e/test_ready_screen.py
 """

@@ -94,7 +94,7 @@ internet. If the device is offline, records queue locally and sync later.
 │  /opt/aquila/database/          │
 │    device_log.db  (SQLite)      │
 │                                 │
-│  aquila-backend container       │
+│  sentri-backend container       │
 │    GET  /device-log/parts       │
 │    POST /device-log/parts       │
 │    PUT  /device-log/parts/{id}  │
@@ -344,7 +344,7 @@ async def device_log_page():
       (as `SUPABASE_URL=` and `SUPABASE_KEY=` — values filled in per device)
 - [ ] Add `httpx` to `requirements-backend.txt`
 - [ ] Rebuild and push the `api` Docker image
-- [ ] Restart `aquila-backend` container on the Pi
+- [ ] Restart `sentri-backend` container on the Pi
 
 ---
 

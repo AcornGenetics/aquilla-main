@@ -12,8 +12,8 @@ If something in this guide is wrong or out of date, fix it. You're not the last 
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/AcornGenetics/aquilla-main.git
-cd aquilla-main
+git clone https://github.com/AcornGenetics/sentri.git
+cd sentri
 ```
 
 ### 2. Set up your Python environment
@@ -42,14 +42,14 @@ pip install -r requirements-test.txt  # test dependencies — always install thi
 
 ```json
 {
-  "src_basedir": "/Users/yourname/aquilla-main/"
+  "src_basedir": "/Users/yourname/sentri/"
 }
 ```
 
 **2. `config.py`** — change `DEFAULT_SRC_BASEDIR` to the same path:
 
 ```python
-DEFAULT_SRC_BASEDIR = "/Users/yourname/aquilla-main/"
+DEFAULT_SRC_BASEDIR = "/Users/yourname/sentri/"
 ```
 
 Verify it resolved correctly:
@@ -64,7 +64,7 @@ python -c "from config import get_src_basedir; print(get_src_basedir())"
 ### 5. Run the app in simulation mode
 
 ```bash
-AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=3 uvicorn aquila_web.main:app --host 127.0.0.1 --port 8090
+AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=3 uvicorn sentri_web.main:app --host 127.0.0.1 --port 8090
 ```
 Open `http://localhost:8090` in a browser. You should see the UI.
 ---
@@ -75,10 +75,10 @@ The codebase has five main bounded contexts. Learn the one relevant to your work
 
 | Directory | What it does |
 |-----------|-------------|
-| `aq_lib/` | Hardware device control — thermal, motor, LED, ADC, lid sensor |
-| `aq_curve/` | PCR curve analysis — sigmoid fitting, Cq calculation, R² |
-| `aquila_web/` | FastAPI backend + WebSocket + local/cloud DB |
-| `aquila_web/static/` | Kiosk frontend — plain HTML/JS, no build step |
+| `sentri_lib/` | Hardware device control — thermal, motor, LED, ADC, lid sensor |
+| `sentri_curve/` | PCR curve analysis — sigmoid fitting, Cq calculation, R² |
+| `sentri_web/` | FastAPI backend + WebSocket + local/cloud DB |
+| `sentri_web/static/` | Kiosk frontend — plain HTML/JS, no build step |
 | `tests/` + `unit_tests/` | Test suite |
 
 Key files to read on day 1:
@@ -94,7 +94,7 @@ Key files to read on day 1:
 ### Communication
 
 - **Primary:** GitHub (issues, PRs, comments)
-- **Async updates:** Slack `#aquila-dev` — post your daily update by noon
+- **Async updates:** Slack `#sentri-dev` — post your daily update by noon
 - **Escalation:** Direct message your lead, or `@` them in Slack
 
 ### Git Workflow

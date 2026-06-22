@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 import sys
 import RPi.GPIO as GPIO
-from aq_lib.motor_class import Axis
-from aq_lib.config_module import Config
+from sentri_lib.motor_class import Axis
+from sentri_lib.config_module import Config
 
 config = Config()
 

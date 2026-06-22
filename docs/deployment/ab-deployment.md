@@ -1,4 +1,4 @@
-# A/B Deployment System — Aquila Devices
+# A/B Deployment System — Sentri Devices
 
 ## Why This Exists
 
@@ -13,7 +13,7 @@ replaces the live slot.
 
 Two independent ideas:
 
-- **Image version** — what CI built: `ghcr.io/acorngenetics/aquilla-main-api:<git-sha>`
+- **Image version** — what CI built: `ghcr.io/acorngenetics/sentri-api:<git-sha>`
 - **Slot** — where that version runs on the device: `A` or `B`
 
 CI builds one image per version. The device controller decides which slot gets it.
@@ -33,9 +33,9 @@ CI builds one image per version. The device controller decides which slot gets i
 
 | Slot A | Slot B |
 |--------|--------|
-| `aquila-backend-a` | `aquila-backend-b` |
-| `aquila-app-a` | `aquila-app-b` |
-| `aquila-ui-a` | `aquila-ui-b` |
+| `sentri-backend-a` | `sentri-backend-b` |
+| `sentri-app-a` | `sentri-app-b` |
+| `sentri-ui-a` | `sentri-ui-b` |
 
 ### Front Door (Proxy)
 
@@ -72,7 +72,7 @@ docker/docker-compose.proxy.yml     # front-door nginx proxy
 
 - `/opt/aquila` volume mounts (results, logs, profiles, config)
 - Hardware device mappings (`/dev/ttyUSB0`, `/dev/i2c-1`, `/dev/spidev*`, `/dev/gpiomem`)
-- `aquila_internal` Docker network
+- `sentri_internal` Docker network
 - `extra_hosts: host.docker.internal:host-gateway`
 - Logging: `json-file`, max 10m / 3 files
 - Restart: `unless-stopped`
@@ -82,27 +82,27 @@ docker/docker-compose.proxy.yml     # front-door nginx proxy
 ```yaml
 services:
   backend-a:
-    container_name: aquila-backend-a
+    container_name: sentri-backend-a
     image: ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG_API}
     environment:
       SLOT: "A"
-      BACKEND_URL: "http://aquila-backend-a:8090"
-    networks: [aquila_internal]
+      BACKEND_URL: "http://sentri-backend-a:8090"
+    networks: [sentri_internal]
 
   app-a:
-    container_name: aquila-app-a
+    container_name: sentri-app-a
     image: ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG_API}
     command: ["python3", "application.py"]
     environment:
       SLOT: "A"
-      BACKEND_URL: "http://aquila-backend-a:8090"
+      BACKEND_URL: "http://sentri-backend-a:8090"
     depends_on: [backend-a]
-    networks: [aquila_internal]
+    networks: [sentri_internal]
 
   ui-a:
-    container_name: aquila-ui-a
+    container_name: sentri-ui-a
     image: ghcr.io/${GHCR_REPO}-ui:${IMAGE_TAG_UI}
-    networks: [aquila_internal]
+    networks: [sentri_internal]
 ```
 
 ### Proxy (always running)
@@ -110,22 +110,22 @@ services:
 ```yaml
 services:
   proxy:
-    container_name: aquila-proxy
+    container_name: sentri-proxy
     image: nginx:stable-alpine
     ports:
       - "8080:80"
       - "8090:8090"
     volumes:
       - /opt/aquila/config/proxy.conf:/etc/nginx/conf.d/default.conf:ro
-    networks: [aquila_internal]
+    networks: [sentri_internal]
     restart: unless-stopped
 ```
 
 Proxy config template for slot A (`docker/nginx.proxy-a.conf`):
 
 ```nginx
-upstream active_backend { server aquila-backend-a:8090; }
-upstream active_ui      { server aquila-ui-a:80; }
+upstream active_backend { server sentri-backend-a:8090; }
+upstream active_ui      { server sentri-ui-a:80; }
 
 server {
     listen 8090;
@@ -167,10 +167,10 @@ Inputs: $SLOT (A or B)
 1. Wait up to 60s for all slot containers to reach running state
 2. Check none are in restart loop (restart count < 3)
 3. Check Docker health status (backend has HEALTHCHECK already)
-4. GET http://aquila-backend-{slot}:8090/health → expect 200
-5. GET http://aquila-backend-{slot}:8090/version → expect 200
-6. GET http://aquila-ui-{slot}:80/ → expect 200
-7. Confirm application.py process alive in aquila-app-{slot}
+4. GET http://sentri-backend-{slot}:8090/health → expect 200
+5. GET http://sentri-backend-{slot}:8090/version → expect 200
+6. GET http://sentri-ui-{slot}:80/ → expect 200
+7. Confirm application.py process alive in sentri-app-{slot}
 8. Verify /opt/aquila/profiles exists and is non-empty
 9. Check /dev/ttyUSB0, /dev/i2c-1, /dev/spidev0.0 are present
 10. Scan last 50 log lines of each container for: ImportError, PermissionError, crash
@@ -182,7 +182,7 @@ Inputs: $SLOT (A or B)
 ```
 Inputs: $TARGET_SLOT
 1. Copy docker/nginx.proxy-{target_slot}.conf → /opt/aquila/config/proxy.conf
-2. docker exec aquila-proxy nginx -s reload
+2. docker exec sentri-proxy nginx -s reload
 3. Write TARGET_SLOT → /opt/aquila/config/active_slot
 4. Write API_TAG → /opt/aquila/config/current_good_api_tag
 5. Write UI_TAG → /opt/aquila/config/current_good_ui_tag
@@ -205,7 +205,7 @@ Inputs: $TARGET_SLOT (the slot that failed)
 ## Deployment Flow
 
 ```
-CI pushes ghcr.io/acorngenetics/aquilla-main-api:<sha>
+CI pushes ghcr.io/acorngenetics/sentri-api:<sha>
                          │
                          ▼
           deploy_candidate.sh <api-sha> <ui-sha>
@@ -246,7 +246,7 @@ watchtower:
 ```
 
 - Only manages containers with `com.centurylinklabs.watchtower.enable=true`
-- Remove that label from slot containers — Watchtower should **not** touch `aquila-backend-a/b`, `aquila-ui-a/b`
+- Remove that label from slot containers — Watchtower should **not** touch `sentri-backend-a/b`, `sentri-ui-a/b`
 - Watchtower can optionally be used to notify when new images are available, triggering `deploy_candidate.sh` via webhook
 
 ---
@@ -258,14 +258,14 @@ watchtower:
 SLOT=A
 IMAGE_TAG_API=<git-sha>
 IMAGE_TAG_UI=<git-sha>
-BACKEND_URL=http://aquila-backend-a:8090
+BACKEND_URL=http://sentri-backend-a:8090
 KIOSK_CONTROL_URL=http://host.docker.internal:9191
 
 # Slot B  
 SLOT=B
 IMAGE_TAG_API=<git-sha>
 IMAGE_TAG_UI=<git-sha>
-BACKEND_URL=http://aquila-backend-b:8090
+BACKEND_URL=http://sentri-backend-b:8090
 KIOSK_CONTROL_URL=http://host.docker.internal:9191
 ```
 
@@ -288,7 +288,7 @@ KIOSK_CONTROL_URL=http://host.docker.internal:9191
 - [ ] Create `docker/docker-compose.base.yml` with shared volumes, networks, device mounts
 - [ ] Create `docker/docker-compose.slot-a.yml` (backend-a, app-a, ui-a)
 - [ ] Create `docker/docker-compose.slot-b.yml` (backend-b, app-b, ui-b)
-- [ ] Create `docker/docker-compose.proxy.yml` (aquila-proxy)
+- [ ] Create `docker/docker-compose.proxy.yml` (sentri-proxy)
 - [ ] Create `docker/nginx.proxy-a.conf` and `docker/nginx.proxy-b.conf`
 - [ ] Initialize state files: `active_slot=A`, `current_good_api_tag`, `current_good_ui_tag`
 - [ ] Update `scripts/setup/device_prod.sh` (and dev/pilot) to write initial `active_slot=A`

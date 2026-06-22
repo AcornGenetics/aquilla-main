@@ -5,7 +5,7 @@
 **Last updated:** YYYY-MM-DD
 **GitHub issue:** #[number]
 **Affected screens:** [list screen names from state machine]
-**Source file(s):** `aquila_web/static/[filename]`
+**Source file(s):** `sentri_web/static/[filename]`
 
 ---
 
@@ -13,7 +13,7 @@
 
 What user-facing flow does this spec describe?
 
-Context: The Aquila UI is plain HTML/JS (no build step, per ADR-003). It runs in Chromium kiosk mode on the Pi display (ADR-005). Screen transitions are driven by a JSON state machine (ADR-006).
+Context: The Sentri UI is plain HTML/JS (no build step, per ADR-003). It runs in Chromium kiosk mode on the Pi display (ADR-005). Screen transitions are driven by a JSON state machine (ADR-006).
 
 ---
 
@@ -34,7 +34,7 @@ Context: The Aquila UI is plain HTML/JS (no build step, per ADR-003). It runs in
 [screen_b] --[success]--> [screen_c]
 ```
 
-Reference the state definitions in: `aquila_web/static/[state-config-file]`
+Reference the state definitions in: `sentri_web/static/[state-config-file]`
 
 ---
 

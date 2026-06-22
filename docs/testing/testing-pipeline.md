@@ -1,4 +1,4 @@
-# Aquila On-Device Testing Pipeline
+# Sentri On-Device Testing Pipeline
 
 ## Overview
 
@@ -46,7 +46,7 @@ Every service must have a real Docker `HEALTHCHECK`, not just "container started
 ```yaml
 services:
   backend:
-    image: ghcr.io/acorngenetics/aquilla-main-api:${IMAGE_TAG}
+    image: ghcr.io/acorngenetics/sentri-api:${IMAGE_TAG}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
       interval: 10s
@@ -55,7 +55,7 @@ services:
       start_period: 20s
 
   ui:
-    image: ghcr.io/acorngenetics/aquilla-main-ui:${IMAGE_TAG}
+    image: ghcr.io/acorngenetics/sentri-ui:${IMAGE_TAG}
     depends_on:
       backend:
         condition: service_healthy
@@ -76,7 +76,7 @@ Use Compose profiles to keep testing optional but built-in:
 ```yaml
 services:
   backend:
-    image: ghcr.io/acorngenetics/aquilla-main-api:${STABLE_DIGEST}
+    image: ghcr.io/acorngenetics/sentri-api:${STABLE_DIGEST}
     ports: ["8090:8090"]
 
   backend_candidate:
@@ -168,7 +168,7 @@ echo "Candidate passed."
 Keep test and promote as **separate commands** so an agent cannot accidentally deploy just by running tests.
 
 ```bash
-./scripts/promote_candidate.sh ghcr.io/acorngenetics/aquilla-main-api@sha256:...
+./scripts/promote_candidate.sh ghcr.io/acorngenetics/sentri-api@sha256:...
 ```
 
 ---
@@ -204,7 +204,7 @@ Every test run writes a result locally:
 ```json
 {
   "timestamp": "2026-04-15T16:22:00Z",
-  "candidate_image": "ghcr.io/acorngenetics/aquilla-main-api@sha256:abcd...",
+  "candidate_image": "ghcr.io/acorngenetics/sentri-api@sha256:abcd...",
   "device_id": "sn03",
   "suite": ["smoke", "integration", "regression"],
   "result": "pass",
@@ -222,7 +222,7 @@ Agents inspect the latest result before changing code.
 ## Repo Structure
 
 ```
-aquila-main/
+sentri/
   docker/
     compose.yml
     compose.candidate.yml

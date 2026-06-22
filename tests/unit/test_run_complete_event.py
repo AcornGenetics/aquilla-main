@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 # serial is a hardware-only package not installed in CI; stub it so that
-# aq_lib.state_requests (which transitively imports config_module) can be
+# sentri_lib.state_requests (which transitively imports config_module) can be
 # imported without a physical device present.
 for _hw_mod in ("serial", "serial.tools", "serial.tools.list_ports"):
     sys.modules.setdefault(_hw_mod, MagicMock())
@@ -20,7 +20,7 @@ for _hw_mod in ("serial", "serial.tools", "serial.tools.list_ports"):
 # config_module.Config reads a hardware-specific host_config.json that maps
 # device hostnames to hardware settings — not present on dev machines.
 # Stub the whole module so Config() construction doesn't raise KeyError.
-sys.modules.setdefault("aq_lib.config_module", MagicMock())
+sys.modules.setdefault("sentri_lib.config_module", MagicMock())
 
 import pytest
 from fastapi.testclient import TestClient
@@ -34,7 +34,7 @@ def db_client(tmp_path, monkeypatch):
     """TestClient backed by an isolated, temporary SQLite DB."""
     db_path = tmp_path / "test_events.db"
     monkeypatch.setenv("AQ_LOCAL_DB_PATH", str(db_path))
-    from aquila_web import local_db, main as web_main
+    from sentri_web import local_db, main as web_main
     local_db.init_local_db()
     with TestClient(web_main.app) as c:
         yield c, local_db
@@ -81,7 +81,7 @@ class TestEmitRunComplete:
     """state_requests.emit_run_complete() calls the correct HTTP endpoint."""
 
     def test_posts_to_events_run_complete_endpoint(self, monkeypatch):
-        import aq_lib.state_requests as sr
+        import sentri_lib.state_requests as sr
 
         calls = []
 
@@ -92,7 +92,7 @@ class TestEmitRunComplete:
             calls.append({"url": url, "json": json})
             return _FakeResponse()
 
-        monkeypatch.setattr("aq_lib.state_requests.requests.post", fake_post)
+        monkeypatch.setattr("sentri_lib.state_requests.requests.post", fake_post)
         sr.emit_run_complete("Run 1", "basic_pcr.json", "/logs/results/run1.json")
         assert len(calls) == 1
         assert calls[0]["url"].endswith("/events/run_complete")

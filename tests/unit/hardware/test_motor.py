@@ -1,5 +1,5 @@
 """
-Unit tests for aq_lib/motor_class.py (Axis and Drawer).
+Unit tests for sentri_lib/motor_class.py (Axis and Drawer).
 
 RPi.GPIO is patched at the module level before motor_class is imported so no
 real hardware is required.  Config() is also replaced by a stub that returns
@@ -97,15 +97,15 @@ def gpio():
 @pytest.fixture()
 def motor_module(gpio):
     """
-    Force-import aq_lib.motor_class with:
+    Force-import sentri_lib.motor_class with:
       - RPi.GPIO replaced by MockGPIO
-      - aq_lib.config_module.Config replaced by _StubConfig
+      - sentri_lib.config_module.Config replaced by _StubConfig
     Yields the module so tests can instantiate Axis/Drawer.
     """
     fake_rpi_pkg, fake_gpio = _make_fake_rpi_modules(gpio)
 
-    # Build a stub aq_lib.config_module that returns _StubConfig
-    fake_config_mod = types.ModuleType("aq_lib.config_module")
+    # Build a stub sentri_lib.config_module that returns _StubConfig
+    fake_config_mod = types.ModuleType("sentri_lib.config_module")
     fake_config_mod.Config = _StubConfig
 
     with patch.dict(
@@ -113,14 +113,14 @@ def motor_module(gpio):
         {
             "RPi": fake_rpi_pkg,
             "RPi.GPIO": fake_gpio,
-            "aq_lib.config_module": fake_config_mod,
+            "sentri_lib.config_module": fake_config_mod,
         },
     ):
         # Evict stale cached module so module-level code re-runs with our mocks
-        for key in ["aq_lib.motor_class"]:
+        for key in ["sentri_lib.motor_class"]:
             sys.modules.pop(key, None)
 
-        mod = importlib.import_module("aq_lib.motor_class")
+        mod = importlib.import_module("sentri_lib.motor_class")
         yield mod
 
 

@@ -157,13 +157,13 @@ Pass = `✓`, Fail = `✗` with reason. A failed test stops the script.
 | GHCR login succeeded | `grep -q "ghcr.io" /root/.docker/config.json` | exits 0 |
 | docker-compose.yml downloaded | `test -f /opt/fleet/docker-compose.yml` | exits 0 |
 | compose file non-empty | `test -s /opt/fleet/docker-compose.yml` | exits 0 |
-| backend image pulled | `docker images \| grep -q "aquilla-main-api"` | exits 0 |
-| ui image pulled | `docker images \| grep -q "aquilla-main-ui"` | exits 0 |
+| backend image pulled | `docker images \| grep -q "sentri-api"` | exits 0 |
+| ui image pulled | `docker images \| grep -q "sentri-ui"` | exits 0 |
 | update.sh exists and executable | `test -x /opt/fleet/update.sh` | exits 0 |
 
 ```
 ✓ Phase 9 complete — docker-compose.yml downloaded, all images pulled
-✗ Phase 9 FAILED — aquilla-main-api image not found. Check GHCR login and IMAGE_TAG.
+✗ Phase 9 FAILED — sentri-api image not found. Check GHCR login and IMAGE_TAG.
 ```
 
 ---
@@ -172,12 +172,12 @@ Pass = `✓`, Fail = `✗` with reason. A failed test stops the script.
 
 | Test | Command | Pass Condition |
 |---|---|---|
-| service file exists | `test -f /etc/systemd/system/aquila-stack.service` | exits 0 |
-| service enabled | `systemctl is-enabled aquila-stack.service` | prints `enabled` |
+| service file exists | `test -f /etc/systemd/system/sentri-stack.service` | exits 0 |
+| service enabled | `systemctl is-enabled sentri-stack.service` | prints `enabled` |
 
 ```
-✓ Phase 10 complete — aquila-stack.service registered and enabled
-✗ Phase 10 FAILED — aquila-stack.service not enabled. Run: systemctl daemon-reload && systemctl enable aquila-stack.service
+✓ Phase 10 complete — sentri-stack.service registered and enabled
+✗ Phase 10 FAILED — sentri-stack.service not enabled. Run: systemctl daemon-reload && systemctl enable sentri-stack.service
 ```
 
 ---
@@ -188,11 +188,11 @@ Pass = `✓`, Fail = `✗` with reason. A failed test stops the script.
 |---|---|---|
 | DEVICE_ID set in device.env | `grep -q "DEVICE_ID=" /opt/aquila/config/device.env` | exits 0 |
 | IMAGE_TAG is valid ring | `grep -E "IMAGE_TAG=(dev\|pilot\|prod)" /opt/aquila/config/device.env` | exits 0 |
-| aquila-backend running | `docker ps --filter name=aquila-backend --format '{{.Status}}' \| grep -q Up` | exits 0 |
-| aquila-app running | `docker ps --filter name=aquila-app --format '{{.Status}}' \| grep -q Up` | exits 0 |
-| aquila-ui running | `docker ps --filter name=aquila-ui --format '{{.Status}}' \| grep -q Up` | exits 0 |
+| sentri-backend running | `docker ps --filter name=sentri-backend --format '{{.Status}}' \| grep -q Up` | exits 0 |
+| sentri-app running | `docker ps --filter name=sentri-app --format '{{.Status}}' \| grep -q Up` | exits 0 |
+| sentri-ui running | `docker ps --filter name=sentri-ui --format '{{.Status}}' \| grep -q Up` | exits 0 |
 | backend reachable | `curl -sf http://localhost:8090/health` | exits 0 |
-| watchtower running | `docker ps --filter name=aquila-watchtower --format '{{.Status}}' \| grep -q Up` | exits 0 |
+| watchtower running | `docker ps --filter name=sentri-watchtower --format '{{.Status}}' \| grep -q Up` | exits 0 |
 | watchtower webhook responds | see below | returns HTTP 200 |
 
 **Watchtower webhook smoke test:**
@@ -203,11 +203,11 @@ curl -sf -o /dev/null -w "%{http_code}" -X POST http://localhost:8081/v1/update 
 ```
 Confirms: webhook port is open, token is correctly wired, and Watchtower accepts the trigger.
 > Note: a 200 response means Watchtower accepted the request and will attempt a pull.
-> Check `docker logs aquila-watchtower` afterwards to confirm GHCR auth succeeded.
+> Check `docker logs sentri-watchtower` afterwards to confirm GHCR auth succeeded.
 
 ```
 ✓ Phase 11 complete — all 4 containers running, backend reachable on :8090, watchtower webhook responding
-✗ Phase 11 FAILED — aquila-app not running. Check: docker logs aquila-app
+✗ Phase 11 FAILED — sentri-app not running. Check: docker logs sentri-app
 ```
 
 ---
@@ -263,7 +263,7 @@ Run these manually after first reboot to verify the full stack is up:
 
 | Test | Command | Pass Condition |
 |---|---|---|
-| All containers running | `docker ps --format '{{.Names}} {{.Status}}' \| grep aquila` | shows 4 containers Up |
+| All containers running | `docker ps --format '{{.Names}} {{.Status}}' \| grep sentri` | shows 4 containers Up |
 | Backend API healthy | `curl -sf http://localhost:8090/health` | returns 200 |
 | Kiosk process running | `ps aux \| grep chromium \| grep -v grep` | shows chromium process |
 | kanshi running | `ps aux \| grep kanshi \| grep -v grep` | shows kanshi process |

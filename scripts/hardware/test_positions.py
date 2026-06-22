@@ -3,17 +3,17 @@ import logging.config
 import RPi.GPIO as GPIO
 import sys
 
-from aq_lib.config_module import Config
-from aq_lib.utils import load_json
-from aq_lib.utils import LogFileName
-from aq_lib.utils import LOGGING_CONFIG
+from sentri_lib.config_module import Config
+from sentri_lib.utils import load_json
+from sentri_lib.utils import LogFileName
+from sentri_lib.utils import LOGGING_CONFIG
 
-from aq_lib.motor_class import Axis, Drawer
+from sentri_lib.motor_class import Axis, Drawer
 import sys
 import time
 
 #logging.config.dictConfig( LOGGING_CONFIG )
-#logger = logging.getLogger( "aquila_logger" )
+#logger = logging.getLogger( "sentri_logger" )
 config = Config()
 
 def goto_position( pos_nr ):

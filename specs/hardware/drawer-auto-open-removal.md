@@ -23,7 +23,7 @@ As of current, the drawer of the SENTRI opens automatically when the device turn
 | Home limit / flag sensor | (TBD — optical or microswitch) | GPIO digital input (`HME_PIN`, active-HIGH) | Read by `isHome()`. **Still used after this change** — startup homing is retained. |
 | Raspberry Pi GPIO header | RPi (BCM mode), 3.3 V logic | GPIO | Owns all four drawer signals listed below. |
 
-### GPIO pin map — `Drawer` class, `aq_lib/motor_class.py`
+### GPIO pin map — `Drawer` class, `sentri_lib/motor_class.py`
 
 | Signal | Constant | BCM pin | Direction | Notes |
 |--------|----------|---------|-----------|-------|

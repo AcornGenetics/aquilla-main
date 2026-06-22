@@ -1,4 +1,4 @@
-from aq_lib.meerstetter import MeerStetter
+from sentri_lib.meerstetter import MeerStetter
 
 meer1091 = (0x0403, 0x6001, 1089 )
 device = MeerStetter.find_meer( * meer1091 )

@@ -24,6 +24,12 @@ jobs:
       - name: Set lowercase repo
         run: echo "REPO_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
+      # TEMPORARY dual-publish to the old image path during the aquila->sentri
+      # cutover so not-yet-flipped devices keep updating. Remove in #188 once all
+      # devices report the new sentri-* digest (ADR-016).
+      - name: Set legacy repo for dual-publish
+        run: echo "LEGACY_REPO=acorngenetics/aquilla-main" >> $GITHUB_ENV
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -48,6 +54,8 @@ jobs:
             ghcr.io/${{ env.REPO_LOWER }}-api:latest
             ghcr.io/${{ env.REPO_LOWER }}-api:${{ github.sha }}
             ${{ inputs.ring_tag && format('ghcr.io/{0}-api:{1}', env.REPO_LOWER, inputs.ring_tag) || '' }}
+            ghcr.io/${{ env.LEGACY_REPO }}-api:latest
+            ${{ inputs.ring_tag && format('ghcr.io/{0}-api:{1}', env.LEGACY_REPO, inputs.ring_tag) || '' }}
 
       - name: Build and push UI image
         uses: docker/build-push-action@v5
@@ -60,3 +68,5 @@ jobs:
             ghcr.io/${{ env.REPO_LOWER }}-ui:latest
             ghcr.io/${{ env.REPO_LOWER }}-ui:${{ github.sha }}
             ${{ inputs.ring_tag && format('ghcr.io/{0}-ui:{1}', env.REPO_LOWER, inputs.ring_tag) || '' }}
+            ghcr.io/${{ env.LEGACY_REPO }}-ui:latest
+            ${{ inputs.ring_tag && format('ghcr.io/{0}-ui:{1}', env.LEGACY_REPO, inputs.ring_tag) || '' }}

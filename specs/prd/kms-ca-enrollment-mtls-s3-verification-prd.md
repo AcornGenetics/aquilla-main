@@ -1,6 +1,6 @@
 # PRD: KMS-backed CA — password-gated device enrollment in deployment + mTLS→S3 verification slice
 
-> **Tracking issue:** [#176](https://github.com/AcornGenetics/aquilla-main/issues/176)
+> **Tracking issue:** [#176](https://github.com/AcornGenetics/sentri/issues/176)
 > **Revision 1 — 2026-06-17**
 >
 > **Tracer-bullet vertical slice** carved from `specs/Data-pipline/device-edge-mtls-migration-prd.md`.
@@ -72,7 +72,7 @@ From my (the operator's) and the fleet's perspective:
 - The script **stops prompting for and writing `AQ_SYNC_API_KEY`**; the Fleet API Key is removed from new deployments. Enrollment failure (bad password / signing error) **exits non-zero with a clear message** — no silent completion.
 - Pure logic (CSR subject construction = `CN=Device ID`) is extracted into Python so it is unit-testable; the on-device keygen/install steps are host-dependent.
 
-### Device Sync auth (`aquila_web/sync.py`)
+### Device Sync auth (`sentri_web/sync.py`)
 - The Sync client **drops the `x-api-key` header** and presents the **client certificate + key** on the POST (`cert=(client_cert, client_key)` style). Certificate/key paths come from `device.env`. The Event payload shape is **unchanged** (still keyed on `device_id`).
 
 ### mTLS gateway → S3 (reuse existing SAM ingest path)
@@ -86,7 +86,7 @@ From my (the operator's) and the fleet's perspective:
 
 Good tests assert **external behavior at the highest available seam** — what the device puts on the wire, what the signing path returns for good vs. bad input, and what infra resources exist — not internal call order. Mock the network boundary (`requests.post`) and AWS boundaries (botocore `Stubber` / `tmp_path`) rather than reaching for real services in unit tests.
 
-- **Device Sync auth — existing seam (`POST /sync/flush` → `aquila_web.sync`).** Prior art: `tests/unit/test_background_sync.py` (monkeypatches `aquila_web.sync.requests.post`, captures call kwargs). Replace the `x-api-key` assertion with: the client-certificate tuple is passed and **no** `x-api-key` header is present. Keep "no endpoint → synced 0" and "network error swallowed, events stay pending" green.
+- **Device Sync auth — existing seam (`POST /sync/flush` → `sentri_web.sync`).** Prior art: `tests/unit/test_background_sync.py` (monkeypatches `sentri_web.sync.requests.post`, captures call kwargs). Replace the `x-api-key` assertion with: the client-certificate tuple is passed and **no** `x-api-key` header is present. Keep "no endpoint → synced 0" and "network error swallowed, events stay pending" green.
 - **CSR subject construction.** Pure-logic unit test (`unit_tests/`): given a Device ID, the CSR subject is `CN=<Device ID>`. Prior art: `unit_tests/test_optics_history.py`, `tests/unit/test_device_id.py`.
 - **CA bootstrap + signing.** Unit test the cert-assembly + signing logic against a **stubbed KMS** (botocore `Stubber`): root cert is signed via KMS `Sign`; a device CSR with a valid enrollment password is signed and carries `CN` from the CSR; a **wrong/absent password is refused without a `Sign` call**; re-running bootstrap against an existing CA refuses to clobber. Prior art for handler/infra-style tests: `tests/infra/` (`test_s3_archiver.py`, `test_ingest_handler.py`).
 - **Gateway mTLS + truststore.** Light infra assertion: parse `infra/template.yaml` and assert the HttpApi has mTLS enabled, references the S3 truststore, disables the default execute-api endpoint, and that the `S3ArchiverFunction` → `RawEventsBucket` route is intact. Prior art: `tests/infra/conftest.py` template-parsing pattern.

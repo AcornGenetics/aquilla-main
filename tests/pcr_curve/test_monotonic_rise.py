@@ -1,4 +1,4 @@
-from aq_curve.evaluator import check_monotonic_rise
+from sentri_curve.evaluator import check_monotonic_rise
 
 
 def test_monotonic_rise(curve_data, curve):

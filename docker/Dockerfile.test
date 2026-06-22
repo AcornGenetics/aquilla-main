@@ -1,4 +1,4 @@
-FROM ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG:-pilot}
+FROM ghcr.io/${GHCR_REPO:-acorngenetics/sentri}-api:${IMAGE_TAG:-pilot}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \

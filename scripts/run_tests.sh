@@ -27,10 +27,10 @@ run_pytest() {
 case "$MODE" in
   hardware)
     echo "Stopping containers to release GPIO..."
-    sudo docker stop aquila-app aquila-backend 2>/dev/null || true
+    sudo docker stop sentri-app sentri-backend 2>/dev/null || true
     run_pytest -m hardware -v
     echo "Restarting containers..."
-    sudo docker start aquila-backend aquila-app 2>/dev/null || true
+    sudo docker start sentri-backend sentri-app 2>/dev/null || true
     ;;
   all)
     run_pytest -m "unit or contract or state or integration" -v

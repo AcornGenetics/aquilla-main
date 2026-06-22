@@ -6,7 +6,7 @@
 set -euo pipefail
 
 BRANCH="${BRANCH:-main}"
-RAW_REPO_URL="${RAW_REPO_URL:-https://raw.githubusercontent.com/AcornGenetics/aquilla-main/${BRANCH}}"
+RAW_REPO_URL="${RAW_REPO_URL:-https://raw.githubusercontent.com/AcornGenetics/sentri/${BRANCH}}"
 SERVICE_DIR="${SERVICE_DIR:-/etc/systemd/system}"
 BIN_DIR="${BIN_DIR:-/usr/local/bin}"
 KIOSK_CONTROL_URL="${KIOSK_CONTROL_URL:-http://127.0.0.1:9191}"

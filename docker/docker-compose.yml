@@ -4,7 +4,7 @@
 
 services:
   backend:
-    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/sentri}-api:${IMAGE_TAG:-latest}
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     ports:
@@ -33,7 +33,7 @@ services:
     restart: unless-stopped
 
   ui:
-    image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-ui:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_REPO:-acorngenetics/sentri}-ui:${IMAGE_TAG:-latest}
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     ports:

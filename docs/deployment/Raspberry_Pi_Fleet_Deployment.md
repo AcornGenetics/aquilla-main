@@ -93,7 +93,7 @@ version: "3.9"
 services:
 
   app:
-    image: ghcr.io/org/aquila-api:pilot
+    image: ghcr.io/org/sentri-api:pilot
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
@@ -154,9 +154,9 @@ Use deployment rings:
 
 Devices use different tags:
 
-    aquila-api:dev
-    aquila-api:pilot
-    aquila-api:prod
+    sentri-api:dev
+    sentri-api:pilot
+    sentri-api:prod
 
 ------------------------------------------------------------------------
 
@@ -210,13 +210,13 @@ jobs:
 
     - name: Build image
       run: |
-        docker build -t ghcr.io/org/aquila-api:${{ github.sha }} .
-        docker push ghcr.io/org/aquila-api:${{ github.sha }}
+        docker build -t ghcr.io/org/sentri-api:${{ github.sha }} .
+        docker push ghcr.io/org/sentri-api:${{ github.sha }}
 
     - name: Tag pilot
       run: |
-        docker tag ghcr.io/org/aquila-api:${{ github.sha }} ghcr.io/org/aquila-api:pilot
-        docker push ghcr.io/org/aquila-api:pilot
+        docker tag ghcr.io/org/sentri-api:${{ github.sha }} ghcr.io/org/sentri-api:pilot
+        docker push ghcr.io/org/sentri-api:pilot
 ```
 
 ------------------------------------------------------------------------

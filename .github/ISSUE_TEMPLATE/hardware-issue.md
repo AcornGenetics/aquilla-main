@@ -21,7 +21,7 @@ One sentence describing the hardware issue.
 
 ## Device Info
 
-- Device hostname / serial: [e.g., aquila-001.local]
+- Device hostname / serial: [e.g., sentri-001.local]
 - Is this reproducible on multiple devices? Yes | No | Unknown
 
 ## Symptom

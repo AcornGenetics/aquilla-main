@@ -1,4 +1,4 @@
-from aq_lib.meerstetter import MeerStetter
+from sentri_lib.meerstetter import MeerStetter
 import time
 from serial import Serial
 

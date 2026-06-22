@@ -6,7 +6,7 @@
 
 ## Problem Statement
 
-Aquilla runs PCR assays on Sentri devices deployed in the field. There is currently no way to observe how those devices are performing across the fleet. When a protocol produces a high rate of inconclusive results — meaning the analysis engine cannot determine Detected or Not Detected — there is no signal to investigate whether the issue is with the protocol configuration, a specific device, or a systemic problem. Run results exist only locally on each Sentri and are not collected or queryable in aggregate.
+Sentri runs PCR assays on Sentri devices deployed in the field. There is currently no way to observe how those devices are performing across the fleet. When a protocol produces a high rate of inconclusive results — meaning the analysis engine cannot determine Detected or Not Detected — there is no signal to investigate whether the issue is with the protocol configuration, a specific device, or a systemic problem. Run results exist only locally on each Sentri and are not collected or queryable in aggregate.
 
 ## Solution
 

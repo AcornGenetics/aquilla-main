@@ -1,8 +1,8 @@
 import time
 import pprint
 
-from aq_lib.meerstetter import MeerStetter
-from aq_lib.config_module import Config
+from sentri_lib.meerstetter import MeerStetter
+from sentri_lib.config_module import Config
 
 config = Config()
 

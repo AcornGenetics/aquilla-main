@@ -5,7 +5,7 @@
 **Last updated:** 2026-06-15
 **GitHub issue:** #TBD
 **Type:** Diagnostic study (read-only + temporary instrumentation). **No fix is in scope** — the deliverable is a *confirmed trigger* (or a documented "cause still unknown" with next steps).
-**Source file(s):** `state_run_assay.py`, `aq_lib/regulate.py`, `aq_lib/state_requests.py`, `aq_lib/thermal_engine.py`, `aquila_web/main.py`, `application.py`
+**Source file(s):** `state_run_assay.py`, `sentri_lib/regulate.py`, `sentri_lib/state_requests.py`, `sentri_lib/thermal_engine.py`, `sentri_web/main.py`, `application.py`
 
 ---
 
@@ -26,15 +26,15 @@ This much is established from code and from the observed symptom (lands on `read
 1. A self-cancel always lands on `ready`. The only way to land on `ready` mid-run is the `except RunStopped` path (`state_run_assay.py:242-244, 269-270`).
 2. `RunStopped` is raised **only** when `stop_event.is_set()` (`thermal_engine.py:13-14`).
 3. `stop_event` is set **only** by `_monitor_stop_request` (`state_run_assay.py:315-322`), which sets it when `check_stop_request()` returns `True`.
-4. `check_stop_request()` (`aq_lib/state_requests.py:138-153`) returns `True` in **exactly two** cases:
-   - **Trigger 1 — real flag:** the web app returns `stop_requested: true`. The *only* code that sets that flag is `POST /button/stop` (`aquila_web/main.py:909-914`, logs `"Stop button pressed"` at line 913).
+4. `check_stop_request()` (`sentri_lib/state_requests.py:138-153`) returns `True` in **exactly two** cases:
+   - **Trigger 1 — real flag:** the web app returns `stop_requested: true`. The *only* code that sets that flag is `POST /button/stop` (`sentri_web/main.py:909-914`, logs `"Stop button pressed"` at line 913).
    - **Trigger 2 — safety net:** `_stop_poll_failures` reaches `_STOP_POLL_FAILURE_LIMIT` (10) consecutive failed polls (~5 s of the web app being unreachable), which **forces** a stop regardless of the flag (`state_requests.py:149-151`, logs `"Backend unreachable for N consecutive polls — forcing stop"`).
 
 > A thermal/serial fault is **ruled out as the direct cause**: it would raise a plain exception and land on the **error screen `-1`** (`state_run_assay.py:248-251`), not `ready`. Heat can only matter *indirectly* (see Hypothesis H1 and H4).
 
 Two-process architecture (critical to interpretation):
 - **Controller process** = `application.py` → `AssayInterface` (`state_run_assay.py`). Owns the Meerstetter serial, the I2C ADC, GPIO, the lid heater, optics, motors. **One long-lived process**, looping `ready()/run()/end()` forever (`application.py:14-18`).
-- **Web app process** = `aquila_web/main.py` (FastAPI/uvicorn on `:8090`). Holds the `stop_requested` flag and serves `/button_status/`.
+- **Web app process** = `sentri_web/main.py` (FastAPI/uvicorn on `:8090`). Holds the `stop_requested` flag and serves `/button_status/`.
 
 The controller polls the web app over HTTP. They are **separate processes**, so a controller-side problem (e.g. leaked threads) does **not** directly freeze the web app — any link between them is via shared host resources (CPU, I2C bus, SoC temperature). Keep this in mind when reading evidence.
 
@@ -72,7 +72,7 @@ docker ps --format '{{.Names}}\t{{.Status}}\t{{.Image}}'
 | Thing | Native | Docker |
 |---|---|---|
 | Controller PID | `pgrep -f application.py` | `docker exec <backend> pgrep -f application.py` |
-| Web app PID | `pgrep -f 'uvicorn\|aquila_web'` | `docker exec <backend> pgrep -f 'uvicorn\|aquila_web'` |
+| Web app PID | `pgrep -f 'uvicorn\|sentri_web'` | `docker exec <backend> pgrep -f 'uvicorn\|sentri_web'` |
 | Controller log | `logs/logger.log` | `data/logs/logger.log` (host mount) or `docker exec <c> cat /opt/aquila/logs/logger.log` |
 | Web app log | `logs/app_logger.log` | `data/logs/app_logger.log` |
 | Lid heater log | `logs/lid_heater/lid_heater_logger.log` | `data/logs/lid_heater/lid_heater_logger.log` |
@@ -87,7 +87,7 @@ docker ps --format '{{.Names}}\t{{.Status}}\t{{.Image}}'
 
 These changes **only add logging** — no control flow changes. They are removed at the end of the study (§11). Purpose: make the lid-thread leak (H1) and heat behavior directly visible in logs, so no live shell is required.
 
-### 5.1 `aq_lib/regulate.py` — lid-worker lifecycle + live count + heat visibility
+### 5.1 `sentri_lib/regulate.py` — lid-worker lifecycle + live count + heat visibility
 
 Add a module-level live counter and instrument `lid_heater_worker`:
 
@@ -148,7 +148,7 @@ logger.info("RUN START index=%d", self._run_index)
 # in hw_deinitialize(), immediately AFTER the join:
 if hasattr(self, "lid_thread") and self.lid_thread.is_alive():
     self.lid_thread.join(timeout=5)
-from aq_lib.regulate import _lid_workers_live
+from sentri_lib.regulate import _lid_workers_live
 still_alive = self.lid_thread.is_alive() if hasattr(self, "lid_thread") else False
 logger.info("LID JOIN DONE run_index=%d thread_still_alive=%s lid_live=%d",
             self._run_index, still_alive, _lid_workers_live)
@@ -455,8 +455,8 @@ After a verdict is reached:
 
 ## 12. References
 
-- Mechanism: `state_run_assay.py:169-289` (`run`), `:315-322` (`_monitor_stop_request`), `:292-298` (`hw_deinitialize`); `aq_lib/thermal_engine.py:9-14`; `aq_lib/state_requests.py:129-153`; `aquila_web/main.py:164, 909-921, 1003, 666-680, 760+, 1711-1719`.
-- Lid heater: `aq_lib/regulate.py:14, 43-88` (module `adc` singleton, worker loop).
+- Mechanism: `state_run_assay.py:169-289` (`run`), `:315-322` (`_monitor_stop_request`), `:292-298` (`hw_deinitialize`); `sentri_lib/thermal_engine.py:9-14`; `sentri_lib/state_requests.py:129-153`; `sentri_web/main.py:164, 909-921, 1003, 666-680, 760+, 1711-1719`.
+- Lid heater: `sentri_lib/regulate.py:14, 43-88` (module `adc` singleton, worker loop).
 - Process model: `application.py:12-25`; `compose.yaml`.
 - Glossary: `CONTEXT.md` (Abort, Stop Request, Self-Cancellation — pending).
 - Related ADRs: ADR-002 (Watchtower updates → H7), ADR-004 (FastAPI/WebSocket state → H2/H3), ADR-007 (simulation mode → Step 2).

@@ -1,5 +1,5 @@
-# Aquila
-Aquila PCR system project.
+# Sentri
+Sentri PCR system project.
 
 ## Quick Links
 - Fleet setup: `docs/deployment/full_setup.md`
@@ -8,10 +8,10 @@ Aquila PCR system project.
 - Fleet compose (device): `fleet-config/docker-compose.yml`
 
 ## Project Structure
-- `aq_lib/`: hardware control drivers (motors, TEC, lid heater, state requests)
-- `aq_curve/`: PCR curve analysis + results processing
-- `aquila_web/`: FastAPI backend and UI routes
-- `aquila_web/static/`: no-build HTML/CSS/JS UI assets
+- `sentri_lib/`: hardware control drivers (motors, TEC, lid heater, state requests)
+- `sentri_curve/`: PCR curve analysis + results processing
+- `sentri_web/`: FastAPI backend and UI routes
+- `sentri_web/static/`: no-build HTML/CSS/JS UI assets
 - `config_files/`: runtime configs and templates
 - `config_files/meerstetter/`: Meerstetter XML configs copied to `/opt/aquila/config/meerstetter`
 - `profiles/`: assay/profile JSON files
@@ -20,16 +20,16 @@ Aquila PCR system project.
 - `docs/`: internal documentation (ADRs, debugging, onboarding, architecture)
 
 ## Key Backend Files
-- `aquila_web/main.py`: FastAPI app, API routes, simulation toggles
+- `sentri_web/main.py`: FastAPI app, API routes, simulation toggles
 - `application.py`: main assay loop (hardware required)
 - `state_run_assay.py`: assay state machine
 - `config.py`: source base dir + config helpers
 
 ## Key Frontend Files
-- `aquila_web/static/run.html`: primary run UI
-- `aquila_web/static/history.html`: run history UI
-- `aquila_web/static/script.js`: UI logic + WebSocket state updates
-- `aquila_web/static/styles.css`: global styles
+- `sentri_web/static/run.html`: primary run UI
+- `sentri_web/static/history.html`: run history UI
+- `sentri_web/static/script.js`: UI logic + WebSocket state updates
+- `sentri_web/static/styles.css`: global styles
 
 ## Docker Images
 - API Dockerfile: `docker/Dockerfile.api`
@@ -101,7 +101,7 @@ Every new feature must include tests. A feature is not complete until:
 Hardware-only behavior that cannot be tested in CI should be documented with `@pytest.mark.hardware`.
 
 ## Local Development
-- Backend (FastAPI): run from `aquila_web/` with `uvicorn main:app --host 127.0.0.1 --port 8090`
+- Backend (FastAPI): run from `sentri_web/` with `uvicorn main:app --host 127.0.0.1 --port 8090`
 - Simulated runs: `AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=10 uvicorn main:app --host 127.0.0.1 --port 8090`
 
 ## Deployment Scripts
@@ -114,7 +114,7 @@ Hardware-only behavior that cannot be tested in CI should be documented with `@p
 The device UI displays the software version in the **Help** screen, at the bottom of the Help Topics panel.
 
 To update the version:
-1. Edit `aquila_web/static/help.html` — change the text inside `<p class="help-version">`.
+1. Edit `sentri_web/static/help.html` — change the text inside `<p class="help-version">`.
 2. Update this section with the new version number and a brief changelog note.
 
 | Version | Notes |
@@ -124,8 +124,8 @@ To update the version:
 | V 1.1.0 | Initial versioned release. Version shown in Help screen. Purple run-start dot removed from Run screen. |
 
 ## Runbook
-- Start backend UI (local): `cd aquila_web && uvicorn main:app --host 127.0.0.1 --port 8090`
-- Start backend UI (simulated): `cd aquila_web && AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=10 uvicorn main:app --host 127.0.0.1 --port 8090`
+- Start backend UI (local): `cd sentri_web && uvicorn main:app --host 127.0.0.1 --port 8090`
+- Start backend UI (simulated): `cd sentri_web && AQ_DEV_SIMULATE=1 AQ_DEV_RUN_DURATION=10 uvicorn main:app --host 127.0.0.1 --port 8090`
 - Start assay loop (hardware): `python application.py`
 - Start Streamlit plotter: `streamlit run PCR_plot.py`
 - Start local Docker stack: `docker compose -f docker/docker-compose.yml up -d`

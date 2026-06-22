@@ -1,7 +1,7 @@
 """
 Safety-net tests for the two functions called in main.py's run-completion path:
-  - Curve.results_to_json  (line 390 of aquila_web/main.py)
-  - generate_optics_plot   (line 393 of aquila_web/main.py)
+  - Curve.results_to_json  (line 390 of sentri_web/main.py)
+  - generate_optics_plot   (line 393 of sentri_web/main.py)
 
 These use the real optics fixture (no stubs) to catch regressions introduced
 when the AnalysisService refactor moves these calls through a new layer.
@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from aq_curve.curve import Curve
-from aq_curve.plot_utils import generate_optics_plot
+from sentri_curve.curve import Curve
+from sentri_curve.plot_utils import generate_optics_plot
 
 OPTICS_LOG = (
     Path(__file__).parents[3] / "tests" / "fixtures" / "optics" / "sample_run.log"

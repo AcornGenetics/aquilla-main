@@ -1,16 +1,16 @@
-# Aquila System Architecture
+# Sentri System Architecture
 
 ## Overview
 
-Aquila is a PCR instrument control system running on Raspberry Pi. It is composed of three independent Docker services (backend API, assay loop, UI), a hardware abstraction library, and a PCR curve analysis engine. Deployment is managed via Docker Compose with Watchtower for auto-updates across a fleet of devices.
+Sentri is a PCR instrument control system running on Raspberry Pi. It is composed of three independent Docker services (backend API, assay loop, UI), a hardware abstraction library, and a PCR curve analysis engine. Deployment is managed via Docker Compose with Watchtower for auto-updates across a fleet of devices.
 
 ---
 
 ## Directory Structure
 
 ```
-aquilla-main/
-├── aquila_web/          # FastAPI backend + static UI
+sentri/
+├── sentri_web/          # FastAPI backend + static UI
 │   ├── main.py          # All REST endpoints + WebSocket state sync
 │   └── static/          # Vanilla HTML/CSS/JS frontend (no build step)
 │       ├── script.js    # UI logic + WebSocket client
@@ -20,7 +20,7 @@ aquilla-main/
 │       ├── complete.html# Results display
 │       ├── history.html # Run history list
 │       └── history_detail.html / history_detail.js
-├── aq_lib/              # Hardware control library
+├── sentri_lib/              # Hardware control library
 │   ├── meerstetter.py   # Thermal controller (TEC) serial protocol
 │   ├── motor_class.py   # Stepper motors (carousel + drawer)
 │   ├── lid_temperature.py # ADS1115 ADC lid temperature sensor
@@ -30,7 +30,7 @@ aquilla-main/
 │   ├── state_requests.py# HTTP client → backend state endpoints
 │   ├── hw_api.py        # High-level hardware abstraction
 │   └── config_module.py # Loads host_config.json per hostname
-├── aq_curve/            # PCR curve analysis
+├── sentri_curve/            # PCR curve analysis
 │   ├── curve.py         # Baseline correction, cross-talk, Cq calculation
 │   └── evaluator.py     # Positive/negative detection
 ├── docker/              # Container build files
@@ -68,10 +68,10 @@ aquilla-main/
 
 | Domain | Key Files | Responsibility |
 |--------|-----------|----------------|
-| **Device Control** | `aq_lib/`, `adc_class.py`, `fan_class.py` | Motors, thermal, optics, GPIO |
-| **PCR Analysis** | `aq_curve/` | Curve processing, Cq calculation, result interpretation |
-| **Web/API** | `aquila_web/main.py` | REST endpoints, WebSocket, profiles, history |
-| **UI/Kiosk** | `aquila_web/static/`, `scripts/kiosk-control/` | Frontend screens, X11 kiosk, Chromium |
+| **Device Control** | `sentri_lib/`, `adc_class.py`, `fan_class.py` | Motors, thermal, optics, GPIO |
+| **PCR Analysis** | `sentri_curve/` | Curve processing, Cq calculation, result interpretation |
+| **Web/API** | `sentri_web/main.py` | REST endpoints, WebSocket, profiles, history |
+| **UI/Kiosk** | `sentri_web/static/`, `scripts/kiosk-control/` | Frontend screens, X11 kiosk, Chromium |
 | **Deployment/Monitoring** | `fleet-config/`, `deployment2.sh`, `scripts/` | Docker Compose, Grafana Alloy, Watchtower, Tailscale |
 
 ---
@@ -80,19 +80,19 @@ aquilla-main/
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  NGINX (aquila-ui, port 8080)                            │
+│  NGINX (sentri-ui, port 8080)                            │
 │  Serves static HTML/CSS/JS, proxies / → backend:8090     │
 └────────────────────────┬─────────────────────────────────┘
                          │ HTTP + WebSocket
 ┌────────────────────────▼─────────────────────────────────┐
-│  FastAPI Backend (aquila-backend, port 8090)             │
-│  aquila_web/main.py                                      │
+│  FastAPI Backend (sentri-backend, port 8090)             │
+│  sentri_web/main.py                                      │
 │  ├─ REST: /run /stop /profiles /history /results         │
 │  └─ WebSocket /ws → broadcasts state changes to UI       │
 └────────────────────────┬─────────────────────────────────┘
                          │ HTTP (state_requests.py)
 ┌────────────────────────▼─────────────────────────────────┐
-│  Assay Loop (aquila-app)                                 │
+│  Assay Loop (sentri-app)                                 │
 │  application.py → state_run_assay.py                     │
 │  ├─ Orchestrates PCR protocol steps                      │
 │  ├─ Runs thermal, motor, optics threads concurrently     │
@@ -100,7 +100,7 @@ aquilla-main/
 └────────────────────────┬─────────────────────────────────┘
                          │
 ┌────────────────────────▼─────────────────────────────────┐
-│  Hardware Layer (aq_lib/)                                │
+│  Hardware Layer (sentri_lib/)                                │
 │  ├─ Thermal:  meerstetter.py → /dev/ttyUSB0             │
 │  │            TEC PID control, Kp=80 Ti=5 Td=4           │
 │  ├─ Motors:   motor_class.py → GPIO (step/dir/enable)    │
@@ -113,7 +113,7 @@ aquilla-main/
 └────────────────────────┬─────────────────────────────────┘
                          │ Raw optical data
 ┌────────────────────────▼─────────────────────────────────┐
-│  PCR Analysis (aq_curve/)                                │
+│  PCR Analysis (sentri_curve/)                                │
 │  ├─ curve.py: baseline correction, cross-talk removal    │
 │  ├─ Cq detection via threshold (default 0.2 per dye)     │
 │  └─ evaluator.py: positive/negative call per tube        │
@@ -128,10 +128,10 @@ Defined in `fleet-config/docker-compose.yml`:
 
 | Service | Image | Port | Role |
 |---------|-------|------|------|
-| `aquila-backend` | `*-api` | 8090 | FastAPI REST + WebSocket |
-| `aquila-app` | `*-api` | — | Assay loop (`application.py`) |
-| `aquila-ui` | `*-ui` | 8080 | NGINX static + reverse proxy |
-| `aquila-watchtower` | `nickfedor/watchtower` | 8081 | Auto-update images every 5 min |
+| `sentri-backend` | `*-api` | 8090 | FastAPI REST + WebSocket |
+| `sentri-app` | `*-api` | — | Assay loop (`application.py`) |
+| `sentri-ui` | `*-ui` | 8080 | NGINX static + reverse proxy |
+| `sentri-watchtower` | `nickfedor/watchtower` | 8081 | Auto-update images every 5 min |
 
 All services share hardware device access (`/dev/ttyUSB0`, `/dev/i2c-1`, `/dev/spidev0.*`, `/dev/gpiomem`) and mount `/opt/aquila/` volumes.
 
@@ -185,7 +185,7 @@ States are defined in `config_files/state_config.json` and drive which HTML scre
 
 ## PCR Curve Analysis
 
-`aq_curve/curve.py` processes raw fluorescence data:
+`sentri_curve/curve.py` processes raw fluorescence data:
 
 1. Extract optical reads per cycle per tube per dye
 2. Baseline correction: subtract mean of cycles 5–15
@@ -193,7 +193,7 @@ States are defined in `config_files/state_config.json` and drive which HTML scre
 4. Threshold detection: default 0.2 per dye
 5. Cq calculation: linear regression around threshold crossing
 
-`aq_curve/evaluator.py` calls Detected / Inconclusive / Not Detected per tube.
+`sentri_curve/evaluator.py` calls Detected / Inconclusive / Not Detected per tube.
 
 ---
 
@@ -212,7 +212,7 @@ States are defined in `config_files/state_config.json` and drive which HTML scre
 | 7 | Persistent directories (`/opt/aquila/`) |
 | 8 | Device identity + all config files |
 | 9 | GHCR login, download compose file, pull images |
-| 10 | Register `aquila-stack` systemd service |
+| 10 | Register `sentri-stack` systemd service |
 | 11 | Start Docker stack, Meerstetter first-time tuning |
 | 11b | Kiosk control service |
 | 12 | Tailscale VPN |
@@ -225,7 +225,7 @@ States are defined in `config_files/state_config.json` and drive which HTML scre
 ## Security Model
 
 - `/opt/aquila/config/` is `chmod 700`, files `chmod 600` — root-only
-- `pi` user has no `sudo` access except: `docker compose *`, `systemctl restart/status aquila-stack`, `systemctl restart/status kiosk-control`
+- `pi` user has no `sudo` access except: `docker compose *`, `systemctl restart/status sentri-stack`, `systemctl restart/status kiosk-control`
 - Root access is via Tailscale SSH (authenticated through Tailscale account, not local credentials)
 - Watchtower uses a per-device `WATCHTOWER_HTTP_API_TOKEN` (rotated per device)
 

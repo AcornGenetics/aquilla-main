@@ -22,8 +22,8 @@ It also reports the **co-incidence delta** — the seconds between the last thin
 
 | Input | Type | Source | Notes |
 |-------|------|--------|-------|
-| Controller log | `logger.log` (native) / `data/logs/logger.log` (Docker) | `aquila` logger | The decisive file — holds the abort and the safety-net ladder |
-| Web-app log | `app_logger.log` | `aquila_app` logger | Holds `Stop button pressed`, restart markers |
+| Controller log | `logger.log` (native) / `data/logs/logger.log` (Docker) | `sentri` logger | The decisive file — holds the abort and the safety-net ladder |
+| Web-app log | `app_logger.log` | `sentri_app` logger | Holds `Stop button pressed`, restart markers |
 | Lid heater log (optional) | `lid_heater/lid_heater_logger.log` | `lid_heater` logger | Holds `LID WORKER … live=N` from issue #157 |
 | Window | `int` seconds (default 30) | CLI arg | How far before/after a cancel to slice the other logs |
 

@@ -83,13 +83,13 @@ ping [device-hostname].local
 
 ```bash
 # Restart the application service (Pi only)
-sudo systemctl restart aquila
+sudo systemctl restart sentri
 
 # Check service status
-sudo systemctl status aquila
+sudo systemctl status sentri
 
 # View recent logs with timestamps
-journalctl -u aquila -n 50 --no-pager
+journalctl -u sentri -n 50 --no-pager
 
 # Run in simulation mode locally
 SIMULATION=true python application.py

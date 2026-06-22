@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from aq_lib.device_id import inject_hw_serial_env, read_rpi_serial
+from sentri_lib.device_id import inject_hw_serial_env, read_rpi_serial
 
 CPUINFO_WITH_SERIAL = (
     "processor\t: 0\n"

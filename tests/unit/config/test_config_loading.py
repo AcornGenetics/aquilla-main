@@ -1,5 +1,5 @@
 """
-Unit tests for aq_lib.config_module.Config — loading, hostname dispatch,
+Unit tests for sentri_lib.config_module.Config — loading, hostname dispatch,
 fallback paths, malformed JSON, and schema validation.
 
 All tests use monkeypatch to set environment variables and tmp_path for
@@ -28,7 +28,7 @@ if "serial" not in sys.modules:
     sys.modules["serial.tools"] = _serial_tools
     sys.modules["serial.tools.list_ports"] = _list_ports_mod
 
-from aq_lib.config_module import Config
+from sentri_lib.config_module import Config
 
 # Path to the real config files shipped with the project
 REAL_CONFIG_DIR = str(

@@ -5,7 +5,7 @@
 **Last updated:** 2026-06-02
 **GitHub issue:** #94
 **Affected screens:** `running` 
-**Source file(s):** `aquila_web/static/run.html`, `aquila_web/static/script.js`, `aquila_web/static/styles.css`
+**Source file(s):** `sentri_web/static/run.html`, `sentri_web/static/script.js`, `sentri_web/static/styles.css`
 
 ---
 
@@ -19,7 +19,7 @@ A stopping-run-flag is implemented to indicate to the user that the machine is i
 
 ## 2. Screen Inventory
 
-The Stopping Run flag only affects one screen state — `running` (reported via the WebSocket `panel.screen` field, defined in `aquila_web/main.py`). No new screen is added.
+The Stopping Run flag only affects one screen state — `running` (reported via the WebSocket `panel.screen` field, defined in `sentri_web/main.py`). No new screen is added.
 
 | Screen ID | Name    | Entry condition                                                   | Exit conditions                                                                                                      |
 | --------- | ------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |

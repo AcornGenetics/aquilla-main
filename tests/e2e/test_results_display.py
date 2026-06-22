@@ -1,5 +1,5 @@
 """
-E2E tests for results rendering on the Aquila PCR kiosk run page.
+E2E tests for results rendering on the Sentri PCR kiosk run page.
 Requires a running backend at base_url (default http://localhost:8090).
 Run with: pytest -m e2e tests/e2e/test_results_display.py
 """

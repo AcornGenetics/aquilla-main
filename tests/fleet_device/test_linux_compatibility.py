@@ -81,7 +81,7 @@ class TestLinuxCompatibility:
         On Linux, Docker Desktop is not present so the hostname only resolves
         via extra_hosts + Docker's embedded DNS (127.0.0.11). Without a
         resolver, nginx looks it up at startup before DNS is ready and crashes.
-        This is the exact bug that took down aquila-ui on SN01.
+        This is the exact bug that took down sentri-ui on SN01.
         """
         content = NGINX_CONF.read_text()
         if "host.docker.internal" not in content:
@@ -122,9 +122,11 @@ class TestLinuxCompatibility:
                     continue
                 if host_path == "/root/.docker/config.json":
                     continue
-                assert host_path.startswith("/opt/aquila") or host_path.startswith("/root"), (
+                # STATE_DIR parameterizes the host path; its default preserves /opt/aquila (#187).
+                allowed = ("/opt/aquila", "${STATE_DIR:-/opt/aquila}", "/root", "/opt/fleet")
+                assert host_path.startswith(allowed), (
                     f"Service '{name}' volume '{volume}' mounts from '{host_path}' "
-                    f"— expected /opt/aquila/... path for device deployment"
+                    f"— expected a /opt/aquila/... (or ${{STATE_DIR}}) path for device deployment"
                 )
 
     def test_compose_no_platform_mac(self):

@@ -76,7 +76,7 @@ if the KMS gap still needs the framebuffer fix above).
 For the gap between kernel init and X11 starting, add a one-shot systemd service that
 runs before `lightdm` or the display manager:
 
-**`/etc/systemd/system/aquila-black-fb.service`**
+**`/etc/systemd/system/sentri-black-fb.service`**
 ```ini
 [Unit]
 Description=Set framebuffer to black before display manager starts
@@ -114,7 +114,7 @@ for flag in "quiet" "loglevel=3" "logo.nologo" "vt.global_cursor_default=0"; do
 done
 
 # Install black framebuffer service
-cat > /etc/systemd/system/aquila-black-fb.service << 'EOF'
+cat > /etc/systemd/system/sentri-black-fb.service << 'EOF'
 [Unit]
 Description=Set framebuffer to black before display manager starts
 Before=lightdm.service display-manager.service
@@ -130,12 +130,12 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable aquila-black-fb.service
+systemctl enable sentri-black-fb.service
 
 run_test "quiet in cmdline"      "grep -q 'quiet' ${CMDLINE_FILE}"
 run_test "loglevel=3 in cmdline" "grep -q 'loglevel=3' ${CMDLINE_FILE}"
 run_test "logo.nologo in cmdline" "grep -q 'logo.nologo' ${CMDLINE_FILE}"
-run_test "black-fb service enabled" "systemctl is-enabled aquila-black-fb.service"
+run_test "black-fb service enabled" "systemctl is-enabled sentri-black-fb.service"
 ```
 
 ## What Is NOT Changing
@@ -151,7 +151,7 @@ run_test "black-fb service enabled" "systemctl is-enabled aquila-black-fb.servic
 |------|--------|
 | `config.txt` | Add `framebuffer_ignore_alpha=1` (already has `disable_splash=1`) |
 | `scripts/deploy/deployment2.sh` | New phase: add cmdline flags, install systemd service |
-| `/etc/systemd/system/aquila-black-fb.service` | New file on device (created by deployment2.sh) |
+| `/etc/systemd/system/sentri-black-fb.service` | New file on device (created by deployment2.sh) |
 
 ## Acceptance Criteria
 

@@ -30,7 +30,7 @@ def test_button_run_no_run_name_returns_ok_false(client):
     The API's _set_run_name() ignores blank strings, so we patch the module
     global directly to simulate the run_name-empty condition.
     """
-    from aquila_web import main as web_main
+    from sentri_web import main as web_main
 
     client.post("/profile/select", json={"profile": "some_profile.json"})
     original = web_main.run_name

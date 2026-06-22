@@ -29,7 +29,7 @@ An IAM user or role with permissions to create Lambda, API Gateway, SQS, S3, RDS
 ## Deploy the stack
 
 ```bash
-cd aquilla-main/infra
+cd sentri/infra
 sam build
 sam deploy --guided
 ```

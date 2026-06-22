@@ -1,4 +1,4 @@
-from aq_curve.evaluator import check_cycle_location
+from sentri_curve.evaluator import check_cycle_location
 
 
 def test_cycle_location(curve_data, curve):

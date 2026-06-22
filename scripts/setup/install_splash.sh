@@ -8,7 +8,7 @@ set -euo pipefail
 
 [[ "${EUID}" -ne 0 ]] && { echo "Run as root: sudo bash install_splash.sh"; exit 1; }
 
-GHCR_REPO="${GHCR_REPO:-acorngenetics/aquilla-main}"
+GHCR_REPO="${GHCR_REPO:-acorngenetics/sentri}"
 RAW_REPO_URL="https://raw.githubusercontent.com/${GHCR_REPO}/main"
 PI_HOME="/home/pi"
 AUTOSTART="${PI_HOME}/.config/openbox/autostart"
@@ -20,7 +20,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 # ── Download splash page ──────────────────────────────────────────────────────
 echo "  → Downloading splash.html..."
-curl -fsSL "${RAW_REPO_URL}/aquila_web/static/splash.html" -o /opt/aquila/splash.html
+curl -fsSL "${RAW_REPO_URL}/sentri_web/static/splash.html" -o /opt/aquila/splash.html
 echo "  ✓ splash.html installed to /opt/aquila/splash.html"
 
 # ── Update Openbox autostart if needed ───────────────────────────────────────
