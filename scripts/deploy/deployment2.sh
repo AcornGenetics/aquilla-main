@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # deployment2.sh — Aquila device deployment
 # Usage: sudo bash deployment2.sh
-# All values can be pre-set as env vars to skip prompts:
-#   DEVICE_HOSTNAME=sn04 IMAGE_TAG=prod GHCR_USER=... GHCR_TOKEN=... sudo bash deployment2.sh
+# All values can be pre-set as env vars to skip prompts. Put them AFTER sudo so they
+# survive into the root shell (sudo strips the caller's environment by default):
+#   sudo DEVICE_HOSTNAME=sn04 IMAGE_TAG=prod GHCR_USER=... GHCR_TOKEN=... bash deployment2.sh
 set -euo pipefail
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
@@ -243,99 +244,11 @@ run_test "fbdev not installed"            "! dpkg -l xserver-xorg-video-fbdev 2>
 phase_pass "LightDM configured for X11/Openbox autologin (Wayland compositor disabled)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phase 5 — Chromium Kiosk (Openbox autostart)
-# ═══════════════════════════════════════════════════════════════════════════════
-phase_start 5 "Chromium Kiosk (Openbox autostart)"
-
-# Remove stale Wayland/desktop launcher paths so only one launch path exists
-rm -f "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
-rm -f "${PI_HOME}/.config/labwc/autostart"
-
-# Install boot splash page
-curl -fsSL \
-    -H "Authorization: token ${GHCR_TOKEN}" \
-    "${RAW_REPO_URL}/aquila_web/static/splash.html" \
-    -o /opt/aquila/splash.html
-
-mkdir -p "${PI_HOME}/.config/openbox"
-
-cat > "${PI_HOME}/.config/openbox/autostart" <<'EOF'
-# Disable screen blanking and power management
-xset s off
-xset s noblank
-xset -dpms
-
-# Auto-detect connected HDMI output (handles HDMI-2, HDMI-A-2, etc.)
-HDMI_OUT=$(xrandr --query | grep -E "^HDMI.* connected" | head -1 | awk '{print $1}')
-if [ -n "$HDMI_OUT" ]; then
-    xrandr --output "$HDMI_OUT" --mode 1024x768 --rate 60 --rotate right
-fi
-
-xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
-  "Coordinate Transformation Matrix" \
-  0 1 0 -1 0 1 0 0 1
-
-# Clear the root-window cursor (covers terminal and behind Chromium).
-# X is already started with `-nocursor` (see LightDM autologin.conf) so the pointer
-# is never rendered. We deliberately do NOT run unclutter: it only hides on an idle
-# timer and re-shows the cursor on pointer/touch events, causing a startup flash and
-# a lingering cursor over dropdowns on every tap.
-xsetroot -cursor_name none
-
-# Allow display and compositor to settle before launching Chromium
-sleep 3
-
-# If kiosk_disabled flag exists, show desktop instead of kiosk.
-# Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
-if [ ! -f /tmp/kiosk_disabled ]; then
-  chromium \
-    --kiosk file:///opt/aquila/splash.html \
-    --incognito \
-    --noerrdialogs \
-    --disable-infobars \
-    --disable-session-crashed-bubble \
-    --check-for-update-interval=31536000 \
-    --disable-pinch \
-    --overscroll-history-navigation=0 \
-    --disable-features=TranslateUI \
-    --touch-events=enabled \
-    --enable-touch-drag-drop \
-    --enable-gpu-rasterization \
-    --use-angle=gles \
-    --ozone-platform=x11 \
-    --disable-web-security \
-    --allow-file-access-from-files \
-    --user-data-dir=/tmp/chromium-kiosk \
-    --disk-cache-size=0 \
-    --start-maximized \
-    --hide-scrollbars \
-    >/dev/null 2>&1 &
-fi
-EOF
-
-chown -R pi:pi "${PI_HOME}/.config/openbox"
-
-AUTOSTART="${PI_HOME}/.config/openbox/autostart"
-run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
-run_test "splash page installed"       "test -f /opt/aquila/splash.html"
-run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
-run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
-run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
-run_test "user-data-dir flag present"  "grep -q 'user-data-dir' ${AUTOSTART}"
-run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
-run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
-run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
-run_test "no stale Wayland .desktop"   "test ! -f ${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
-run_test "correct file ownership"      "stat -c '%U' ${AUTOSTART} | grep -q pi"
-
-phase_pass "Openbox autostart configured — X11 kiosk with rotation and touch mapping"
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 6 — Display and Touch (verified via autostart)
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 6 "Display and Touch configuration"
 
-# xrandr and xinput are called at runtime from Openbox autostart (Phase 5).
+# xrandr and xinput are called at runtime from Openbox autostart (Phase 9b).
 # This phase verifies the required tools are present on the host.
 run_test "xrandr binary present"  "which xrandr"
 run_test "xinput binary present"  "which xinput"
@@ -674,6 +587,94 @@ run_test "ui image pulled"                 "docker images | grep -q 'aquilla-mai
 run_test "update.sh exists and executable" "test -x /opt/fleet/update.sh"
 
 phase_pass "docker-compose.yml downloaded, all images pulled"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 9b — Chromium Kiosk (Openbox autostart)
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "9b" "Chromium Kiosk (Openbox autostart)"
+
+# Remove stale Wayland/desktop launcher paths so only one launch path exists
+rm -f "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
+rm -f "${PI_HOME}/.config/labwc/autostart"
+
+# Install boot splash page
+curl -fsSL \
+    -H "Authorization: token ${GHCR_TOKEN}" \
+    "${RAW_REPO_URL}/aquila_web/static/splash.html" \
+    -o /opt/aquila/splash.html
+
+mkdir -p "${PI_HOME}/.config/openbox"
+
+cat > "${PI_HOME}/.config/openbox/autostart" <<'EOF'
+# Disable screen blanking and power management
+xset s off
+xset s noblank
+xset -dpms
+
+# Auto-detect connected HDMI output (handles HDMI-2, HDMI-A-2, etc.)
+HDMI_OUT=$(xrandr --query | grep -E "^HDMI.* connected" | head -1 | awk '{print $1}')
+if [ -n "$HDMI_OUT" ]; then
+    xrandr --output "$HDMI_OUT" --mode 1024x768 --rate 60 --rotate right
+fi
+
+xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
+  "Coordinate Transformation Matrix" \
+  0 1 0 -1 0 1 0 0 1
+
+# Clear the root-window cursor (covers terminal and behind Chromium).
+# X is already started with `-nocursor` (see LightDM autologin.conf) so the pointer
+# is never rendered. We deliberately do NOT run unclutter: it only hides on an idle
+# timer and re-shows the cursor on pointer/touch events, causing a startup flash and
+# a lingering cursor over dropdowns on every tap.
+xsetroot -cursor_name none
+
+# Allow display and compositor to settle before launching Chromium
+sleep 3
+
+# If kiosk_disabled flag exists, show desktop instead of kiosk.
+# Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
+if [ ! -f /tmp/kiosk_disabled ]; then
+  chromium \
+    --kiosk file:///opt/aquila/splash.html \
+    --incognito \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --check-for-update-interval=31536000 \
+    --disable-pinch \
+    --overscroll-history-navigation=0 \
+    --disable-features=TranslateUI \
+    --touch-events=enabled \
+    --enable-touch-drag-drop \
+    --enable-gpu-rasterization \
+    --use-angle=gles \
+    --ozone-platform=x11 \
+    --disable-web-security \
+    --allow-file-access-from-files \
+    --user-data-dir=/tmp/chromium-kiosk \
+    --disk-cache-size=0 \
+    --start-maximized \
+    --hide-scrollbars \
+    >/dev/null 2>&1 &
+fi
+EOF
+
+chown -R pi:pi "${PI_HOME}/.config/openbox"
+
+AUTOSTART="${PI_HOME}/.config/openbox/autostart"
+run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
+run_test "splash page installed"       "test -f /opt/aquila/splash.html"
+run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
+run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
+run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
+run_test "user-data-dir flag present"  "grep -q 'user-data-dir' ${AUTOSTART}"
+run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
+run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
+run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
+run_test "no stale Wayland .desktop"   "test ! -f ${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
+run_test "correct file ownership"      "stat -c '%U' ${AUTOSTART} | grep -q pi"
+
+phase_pass "Openbox autostart configured — X11 kiosk with rotation and touch mapping"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 10 — Register systemd Service
