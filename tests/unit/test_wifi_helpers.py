@@ -161,35 +161,144 @@ class TestWifiScan:
 
 
 # ===========================================================================
+# kiosk_control — _delete_profiles_for_ssid
+# ===========================================================================
+
+class TestDeleteProfilesForSsid:
+    def test_deletes_profile_whose_ssid_matches(self):
+        side_effects = [
+            _nmcli_result(0, "HomeNet:802-11-wireless"),  # NAME,TYPE list
+            _nmcli_result(0, "HomeNet"),                  # ssid for HomeNet → matches
+            _nmcli_result(0, ""),                         # delete
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
+            kc._delete_profiles_for_ssid("HomeNet")
+        calls = [c[0] for c in mock_nmcli.call_args_list]
+        assert any(c[:2] == ("connection", "delete") for c in calls)
+
+    def test_does_not_delete_non_matching_profile(self):
+        side_effects = [
+            _nmcli_result(0, "OfficeNet:802-11-wireless"),
+            _nmcli_result(0, "OfficeNet"),  # ssid → does not match HomeNet
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
+            kc._delete_profiles_for_ssid("HomeNet")
+        calls = [c[0] for c in mock_nmcli.call_args_list]
+        assert not any(c[:2] == ("connection", "delete") for c in calls)
+
+    def test_deletes_multiple_profiles_for_same_ssid(self):
+        # iPhone hotspots can create several numbered profiles for the same SSID.
+        side_effects = [
+            _nmcli_result(0, "iPhone:802-11-wireless\niPhone (2):802-11-wireless"),
+            _nmcli_result(0, "HomeNet"),  # ssid for "iPhone" → matches
+            _nmcli_result(0, ""),         # delete "iPhone"
+            _nmcli_result(0, "HomeNet"),  # ssid for "iPhone (2)" → also matches
+            _nmcli_result(0, ""),         # delete "iPhone (2)"
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
+            kc._delete_profiles_for_ssid("HomeNet")
+        delete_calls = [c[0] for c in mock_nmcli.call_args_list if c[0][:2] == ("connection", "delete")]
+        assert len(delete_calls) == 2
+
+    def test_skips_non_wireless_connections(self):
+        side_effects = [
+            _nmcli_result(0, "Wired:802-3-ethernet\nVPN:vpn"),
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
+            kc._delete_profiles_for_ssid("HomeNet")
+        # Only the list call — no ssid checks, no deletes
+        assert mock_nmcli.call_count == 1
+
+    def test_empty_profile_list_is_a_noop(self):
+        with patch.object(kc, "_nmcli", return_value=_nmcli_result(0, "")) as mock_nmcli:
+            kc._delete_profiles_for_ssid("HomeNet")
+        assert mock_nmcli.call_count == 1  # only the NAME,TYPE list call
+
+
+# ===========================================================================
 # kiosk_control — _wifi_connect
 # ===========================================================================
 
 class TestWifiConnect:
-    def test_connect_with_password_calls_correct_args(self):
-        with patch.object(kc, "_nmcli", return_value=_nmcli_result(0, "")) as mock_nmcli:
-            kc._wifi_connect("HomeNet", "secret")
-        mock_nmcli.assert_called_once_with(
-            "device", "wifi", "connect", "HomeNet", "password", "secret"
-        )
+    def _no_profiles(self):
+        """Side-effect list when there are no saved profiles."""
+        return [_nmcli_result(0, "")]  # NAME,TYPE list → empty
 
-    def test_connect_without_password_omits_password_arg(self):
-        with patch.object(kc, "_nmcli", return_value=_nmcli_result(0, "")) as mock_nmcli:
+    def test_connect_with_password_creates_explicit_wpa_psk_profile(self):
+        side_effects = self._no_profiles() + [
+            _nmcli_result(0, ""),  # connection add
+            _nmcli_result(0, ""),  # connection up
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
+            kc._wifi_connect("HomeNet", "secret")
+        calls = [c[0] for c in mock_nmcli.call_args_list]
+        add_call = next(c for c in calls if c[:2] == ("connection", "add"))
+        assert "wifi-sec.key-mgmt" in add_call
+        assert "wpa-psk" in add_call
+        assert "wifi-sec.psk" in add_call
+        assert "secret" in add_call
+
+    def test_connect_with_password_does_not_use_device_wifi_connect(self):
+        side_effects = self._no_profiles() + [
+            _nmcli_result(0, ""),  # connection add
+            _nmcli_result(0, ""),  # connection up
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
+            kc._wifi_connect("HomeNet", "secret")
+        calls = [c[0] for c in mock_nmcli.call_args_list]
+        assert not any(c[:3] == ("device", "wifi", "connect") for c in calls)
+
+    def test_connect_without_password_uses_device_wifi_connect(self):
+        side_effects = self._no_profiles() + [
+            _nmcli_result(0, ""),  # device wifi connect
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
             kc._wifi_connect("OpenNet", "")
-        mock_nmcli.assert_called_once_with(
-            "device", "wifi", "connect", "OpenNet"
-        )
+        calls = [c[0] for c in mock_nmcli.call_args_list]
+        assert any(c[:3] == ("device", "wifi", "connect") for c in calls)
 
     def test_returns_ok_true_on_success(self):
-        with patch.object(kc, "_nmcli", return_value=_nmcli_result(0, "")):
+        side_effects = self._no_profiles() + [
+            _nmcli_result(0, ""),  # connection add
+            _nmcli_result(0, ""),  # connection up
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects):
             result = kc._wifi_connect("HomeNet", "secret")
         assert result["ok"] is True
         assert result["error"] is None
 
-    def test_returns_ok_false_on_failure(self):
-        with patch.object(kc, "_nmcli", return_value=_nmcli_result(1, "", "Secrets were required")):
+    def test_returns_ok_false_when_connection_add_fails(self):
+        side_effects = self._no_profiles() + [
+            _nmcli_result(1, "", "Error: failed to add connection"),
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects):
+            result = kc._wifi_connect("HomeNet", "wrongpass")
+        assert result["ok"] is False
+        assert "failed to add" in result["error"]
+
+    def test_returns_ok_false_when_connection_up_fails(self):
+        side_effects = self._no_profiles() + [
+            _nmcli_result(0, ""),                              # connection add OK
+            _nmcli_result(1, "", "Secrets were required"),     # connection up fails
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects):
             result = kc._wifi_connect("HomeNet", "wrongpass")
         assert result["ok"] is False
         assert "Secrets were required" in result["error"]
+
+    def test_purges_existing_stale_profile_before_connecting(self):
+        side_effects = [
+            _nmcli_result(0, "HomeNet:802-11-wireless"),  # list profiles
+            _nmcli_result(0, "HomeNet"),                  # ssid check → match
+            _nmcli_result(0, ""),                         # delete stale profile
+            _nmcli_result(0, ""),                         # connection add
+            _nmcli_result(0, ""),                         # connection up
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
+            result = kc._wifi_connect("HomeNet", "newpass")
+        assert result["ok"] is True
+        calls = [c[0] for c in mock_nmcli.call_args_list]
+        assert any(c[:2] == ("connection", "delete") for c in calls)
 
 
 # ===========================================================================
@@ -197,21 +306,33 @@ class TestWifiConnect:
 # ===========================================================================
 
 class TestWifiForget:
-    def test_forget_calls_connection_delete(self):
-        with patch.object(kc, "_nmcli", return_value=_nmcli_result(0, "")) as mock_nmcli:
-            kc._wifi_forget("HomeNet")
-        mock_nmcli.assert_called_once_with("connection", "delete", "HomeNet")
-
-    def test_returns_ok_true_on_success(self):
-        with patch.object(kc, "_nmcli", return_value=_nmcli_result(0, "")):
+    def test_forget_deletes_all_profiles_matching_ssid(self):
+        side_effects = [
+            _nmcli_result(0, "HomeNet:802-11-wireless"),
+            _nmcli_result(0, "HomeNet"),  # ssid match
+            _nmcli_result(0, ""),         # delete
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
             result = kc._wifi_forget("HomeNet")
         assert result["ok"] is True
+        calls = [c[0] for c in mock_nmcli.call_args_list]
+        assert any(c[:2] == ("connection", "delete") for c in calls)
 
-    def test_returns_ok_false_when_not_found(self):
-        with patch.object(kc, "_nmcli", return_value=_nmcli_result(1, "", "No connection profile found")):
+    def test_returns_ok_true_when_no_profile_exists(self):
+        with patch.object(kc, "_nmcli", return_value=_nmcli_result(0, "")):
             result = kc._wifi_forget("NonExistent")
-        assert result["ok"] is False
-        assert "No connection profile found" in result["error"]
+        assert result["ok"] is True
+        assert result["error"] is None
+
+    def test_returns_ok_true_on_success(self):
+        side_effects = [
+            _nmcli_result(0, "HomeNet:802-11-wireless"),
+            _nmcli_result(0, "HomeNet"),
+            _nmcli_result(0, ""),
+        ]
+        with patch.object(kc, "_nmcli", side_effect=side_effects):
+            result = kc._wifi_forget("HomeNet")
+        assert result["ok"] is True
 
 
 # ===========================================================================
@@ -342,10 +463,16 @@ class TestApplyWifiConfig:
         wifi_json = tmp_path / "wifi.json"
         wifi_json.write_text(json.dumps({"ssid": "TestNet", "psk": "testpass"}))
 
+        def fake_run(cmd, **kwargs):
+            mock = MagicMock()
+            mock.returncode = 0
+            # Profile list returns empty → no stale profiles to delete
+            mock.stdout = ""
+            return mock
+
         with patch.object(apply_wifi, "CONFIG_PATH", wifi_json), \
              patch("apply_wifi.shutil.which", return_value="/usr/bin/nmcli"), \
-             patch("apply_wifi.subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
+             patch("apply_wifi.subprocess.run", side_effect=fake_run) as mock_run:
             apply_wifi.apply_wifi_config()
 
         mock_run.assert_any_call(
@@ -354,8 +481,15 @@ class TestApplyWifiConfig:
             text=True,
             check=False,
         )
-        mock_run.assert_any_call(["nmcli", "connection", "delete", "TestNet"], check=False)
         mock_run.assert_any_call(
-            ["nmcli", "device", "wifi", "connect", "TestNet", "password", "testpass"],
+            [
+                "nmcli", "connection", "add",
+                "type", "wifi",
+                "con-name", "TestNet",
+                "ssid", "TestNet",
+                "wifi-sec.key-mgmt", "wpa-psk",
+                "wifi-sec.psk", "testpass",
+            ],
             check=True,
         )
+        mock_run.assert_any_call(["nmcli", "connection", "up", "TestNet"], check=True)

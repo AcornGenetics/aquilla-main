@@ -111,6 +111,8 @@ def _start_chromium() -> tuple[bool, str]:
         "--enable-gpu-rasterization",
         "--use-angle=gles",
         "--ozone-platform=x11",
+        "--user-data-dir=/tmp/chromium-kiosk",
+        "--disk-cache-size=0",
         "--start-maximized",
         KIOSK_URL,
     ]
@@ -176,17 +178,79 @@ def _wifi_scan() -> list:
     return networks
 
 
+def _delete_profiles_for_ssid(ssid: str) -> None:
+    """Delete all saved wireless profiles whose 802-11-wireless.ssid matches ssid.
+
+    Using nmcli device wifi connect can auto-create a profile missing
+    wifi-sec.key-mgmt, which causes 'key-mgmt property is missing' on the
+    second connection attempt. We purge all stale profiles before creating a
+    clean one.  Profile name != SSID is common with iPhone hotspots (the OS
+    appends a number each time), so we match by the actual SSID field.
+    """
+    _, out, _ = _nmcli("-f", "NAME,TYPE", "connection", "show")
+    for line in out.splitlines():
+        parts = line.split(":")
+        if len(parts) < 2 or "wireless" not in parts[1]:
+            continue
+        name = parts[0].strip()
+        if not name:
+            continue
+        _, ssid_out, _ = _nmcli("-g", "802-11-wireless.ssid", "connection", "show", name)
+        if ssid_out.strip() == ssid:
+            _nmcli("connection", "delete", name)
+
+
 def _wifi_connect(ssid: str, password: str) -> dict:
+    _delete_profiles_for_ssid(ssid)
     if password:
-        code, out, err = _nmcli("device", "wifi", "connect", ssid, "password", password)
+        code, _, err = _nmcli(
+            "connection", "add",
+            "type", "wifi",
+            "con-name", ssid,
+            "ssid", ssid,
+            "wifi-sec.key-mgmt", "wpa-psk",
+            "wifi-sec.psk", password,
+            "wifi-sec.psk-flags", "0",
+            "connection.permissions", "",
+            "802-11-wireless.bssid", "",
+        )
+        if code != 0:
+            return {"ok": False, "error": err}
+        code, _, err = _nmcli("connection", "up", ssid)
     else:
-        code, out, err = _nmcli("device", "wifi", "connect", ssid)
+        code, _, err = _nmcli(
+            "connection", "add",
+            "type", "wifi",
+            "con-name", ssid,
+            "ssid", ssid,
+            "802-11-wireless.bssid", "",
+            "connection.permissions", "",
+        )
+        if code != 0:
+            return {"ok": False, "error": err}
+        code, _, err = _nmcli("connection", "up", ssid)
+    if code == 0:
+        _nmcli("connection", "modify", ssid, "802-11-wireless.bssid", "")
     return {"ok": code == 0, "error": err if code != 0 else None}
 
 
 def _wifi_forget(ssid: str) -> dict:
-    code, out, err = _nmcli("connection", "delete", ssid)
-    return {"ok": code == 0, "error": err if code != 0 else None}
+    _delete_profiles_for_ssid(ssid)
+    return {"ok": True, "error": None}
+
+
+def _wifi_saved() -> list:
+    _, out, _ = _nmcli("-f", "NAME,TYPE", "connection", "show")
+    profiles = []
+    for line in out.splitlines():
+        parts = line.split(":")
+        if len(parts) < 2:
+            continue
+        name, conn_type = parts[0].strip(), parts[1].strip()
+        if not name or "wireless" not in conn_type:
+            continue
+        profiles.append({"ssid": name})
+    return profiles
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +292,8 @@ class KioskHandler(BaseHTTPRequestHandler):
         elif self.path == "/wifi/scan":
             networks = _wifi_scan()
             self._respond(200, {"networks": networks})
+        elif self.path == "/wifi/saved":
+            self._respond(200, {"profiles": _wifi_saved()})
         else:
             self._respond(404, {"error": "not found"})
 

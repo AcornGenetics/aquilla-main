@@ -45,11 +45,40 @@ def _networkmanager_available():
 
 
 def _apply_nmcli(ssid, psk):
-    subprocess.run(["nmcli", "connection", "delete", ssid], check=False)
+    # Delete all profiles whose SSID matches before creating a clean one.
+    # nmcli device wifi connect can create an auto-profile missing
+    # wifi-sec.key-mgmt, which breaks reconnection (iPhone hotspots especially).
+    result = subprocess.run(
+        ["nmcli", "--terse", "--colors", "no", "-f", "NAME,TYPE", "connection", "show"],
+        capture_output=True, text=True, check=False,
+    )
+    for line in result.stdout.splitlines():
+        parts = line.split(":")
+        if len(parts) < 2 or "wireless" not in parts[1]:
+            continue
+        name = parts[0].strip()
+        if not name:
+            continue
+        ssid_result = subprocess.run(
+            ["nmcli", "--terse", "--colors", "no", "-g", "802-11-wireless.ssid",
+             "connection", "show", name],
+            capture_output=True, text=True, check=False,
+        )
+        if ssid_result.stdout.strip() == ssid:
+            subprocess.run(["nmcli", "connection", "delete", name], check=False)
+
     subprocess.run(
-        ["nmcli", "device", "wifi", "connect", ssid, "password", psk],
+        [
+            "nmcli", "connection", "add",
+            "type", "wifi",
+            "con-name", ssid,
+            "ssid", ssid,
+            "wifi-sec.key-mgmt", "wpa-psk",
+            "wifi-sec.psk", psk,
+        ],
         check=True,
     )
+    subprocess.run(["nmcli", "connection", "up", ssid], check=True)
 
 
 def _strip_network_block(lines, ssid):

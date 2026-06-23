@@ -1,10 +1,12 @@
 import json
 import os
 import RPi.GPIO as GPIO
+import threading
 import time
 import logging
 import logging.config
 from aq_lib.utils import LID_HEATER_LOGGING_CONFIG
+from aq_lib import lid_worker_metrics as lwm
 
 from .lid_temperature import ADS1115
 
@@ -42,50 +44,63 @@ def _load_lid_heater_config(config_path = None):
 
 def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bound = None ):
 
-    logger.info("Starting lid heater worker")
-    adc.start_continuous(channel=0, pga_fs_v=4.096, sps=64)
+    # --- issue #157 instrumentation: register this worker so leaks are visible ---
+    tid = threading.get_ident()
+    live = lwm.enter(tid)
+    logger.info("LID WORKER START tid=%s live=%d", tid, live)
 
-    if quiet_event is None or not hasattr(quiet_event, "is_set"):
-        from threading import Event
-        if setpoint is None and quiet_event is not None:
-            setpoint = quiet_event
-        quiet_event = Event()
-        quiet_event.clear()
+    try:
+        logger.info("Starting lid heater worker")
+        adc.start_continuous(channel=0, pga_fs_v=4.096, sps=64)
 
-    config = _load_lid_heater_config()
-    if lower_bound is None:
-        lower_bound = config["lower_bound"]
-    if setpoint is None:
-        setpoint = config["upper_bound"]
+        if quiet_event is None or not hasattr(quiet_event, "is_set"):
+            from threading import Event
+            if setpoint is None and quiet_event is not None:
+                setpoint = quiet_event
+            quiet_event = Event()
+            quiet_event.clear()
 
-    if lower_bound >= setpoint:
-        logger.warning("Lid heater lower bound %.3f >= upper bound %.3f", lower_bound, setpoint)
-    else:
-        logger.info("Lid heater bounds: lower=%.3f upper=%.3f", lower_bound, setpoint)
+        config = _load_lid_heater_config()
+        if lower_bound is None:
+            lower_bound = config["lower_bound"]
+        if setpoint is None:
+            setpoint = config["upper_bound"]
 
-    while not stop_event.is_set():
-        for i in range ( 10 ):
-            try:
-                v = adc.read_continuous(pga_fs_v=4.096)
-                logger.info("lid AIN0: %.4f V", v)
-                break
-            except Exception as e:
-                logger.warning("Hickup in lid heater ADC")
-                if i==9:
-                    raise e
-            time.sleep ( 0.4 )
-        if not quiet_event.is_set():
-            if lower_bound < v < setpoint:
-                GPIO.output( pin_number, GPIO.HIGH )
-                #pwm.ChangeDutyCycle(50)
+        if lower_bound >= setpoint:
+            logger.warning("Lid heater lower bound %.3f >= upper bound %.3f", lower_bound, setpoint)
+        else:
+            logger.info("Lid heater bounds: lower=%.3f upper=%.3f", lower_bound, setpoint)
 
-        time.sleep(0.90)
+        while not stop_event.is_set():
+            for i in range ( 10 ):
+                try:
+                    # Time the I2C read: a read > 5s is what lets the teardown
+                    # join time out and the thread leak (issue #157, spec H1).
+                    t0 = time.monotonic()
+                    v = adc.read_continuous(pga_fs_v=4.096)
+                    dt = time.monotonic() - t0
+                    logger.info("lid AIN0: %.4f V (read %.3fs) tid=%s", v, dt, tid)
+                    break
+                except Exception as e:
+                    logger.warning("Hickup in lid heater ADC")
+                    if i==9:
+                        raise e
+                time.sleep ( 0.4 )
+            if not quiet_event.is_set():
+                if lower_bound < v < setpoint:
+                    GPIO.output( pin_number, GPIO.HIGH )
+                    logger.debug("GPIO21 HIGH tid=%s v=%.4f", tid, v)
+                    #pwm.ChangeDutyCycle(50)
+
+            time.sleep(0.90)
+            GPIO.output( pin_number, GPIO.LOW )
+            time.sleep(0.10)
+
+        logger.info("Turning off lid heater")
+    finally:
         GPIO.output( pin_number, GPIO.LOW )
-        time.sleep(0.10)
-
-    logger.info("Turning off lid heater")
-    GPIO.output( pin_number, GPIO.LOW )
-    logger.info("Lid heater worker exiting")
+        live = lwm.exit(tid)
+        logger.info("LID WORKER EXIT tid=%s live=%d", tid, live)
 
 def main():
 

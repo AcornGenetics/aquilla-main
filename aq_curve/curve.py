@@ -236,43 +236,35 @@ class Curve:
             return round(float(cq), 2)
 
         _ROX_UNAVAILABLE = "ROX Unavailable"
+        _WELLS = [1, 2, 3, 4]
+
+        fam_status = {w: resolve_status(0, "fam", w) for w in _WELLS}
+        fam_cq = {w: resolve_cq("fam", w) for w in _WELLS}
+
+        if rox_unavailable:
+            rox_status = {w: _ROX_UNAVAILABLE for w in _WELLS}
+            rox_cq = {w: None for w in _WELLS}
+        else:
+            rox_status = {w: resolve_status(1, "rox", w) for w in _WELLS}
+            rox_cq = {w: resolve_cq("rox", w) for w in _WELLS}
+
+            # FAM undetected + late ROX Cq → suppress ROX.
+            # A late-rising ROX with no FAM signal is non-specific; treat as undetected.
+            late_cq_threshold = config.get_int("PCR_LATE_CQ_THRESHOLD")
+            for w in _WELLS:
+                if (fam_status[w] == "Not Detected"
+                        and rox_cq[w] is not None
+                        and rox_cq[w] >= late_cq_threshold):
+                    rox_status[w] = "Not Detected"
+                    rox_cq[w] = None
 
         result = {
-            "1": {
-                "1": resolve_status(0, "fam", 1),
-                "2": resolve_status(0, "fam", 2),
-                "3": resolve_status(0, "fam", 3),
-                "4": resolve_status(0, "fam", 4),
+            "1": {str(w): fam_status[w] for w in _WELLS},
+            "2": {str(w): rox_status[w] for w in _WELLS},
+            "cq": {
+                "1": {str(w): fam_cq[w] for w in _WELLS},
+                "2": {str(w): rox_cq[w] for w in _WELLS},
             },
-            "2": (
-                {str(w): _ROX_UNAVAILABLE for w in [1, 2, 3, 4]}
-                if rox_unavailable
-                else {
-                    "1": resolve_status(1, "rox", 1),
-                    "2": resolve_status(1, "rox", 2),
-                    "3": resolve_status(1, "rox", 3),
-                    "4": resolve_status(1, "rox", 4),
-                }
-            ),
-        }
-
-        result["cq"] = {
-            "1": {
-                "1": resolve_cq("fam", 1),
-                "2": resolve_cq("fam", 2),
-                "3": resolve_cq("fam", 3),
-                "4": resolve_cq("fam", 4),
-            },
-            "2": (
-                {str(w): None for w in [1, 2, 3, 4]}
-                if rox_unavailable
-                else {
-                    "1": resolve_cq("rox", 1),
-                    "2": resolve_cq("rox", 2),
-                    "3": resolve_cq("rox", 3),
-                    "4": resolve_cq("rox", 4),
-                }
-            ),
         }
 
         base_dir = Path(self.src_basedir).resolve()
