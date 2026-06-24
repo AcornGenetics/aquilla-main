@@ -35,7 +35,7 @@
         "description": "37C for 1 minutes"
     },
     {
-        "setpoint": 60.5,
+        "setpoint": 60,
         "duration": 60,
         "description": "60C for 1 minutes"
     },
@@ -50,12 +50,12 @@
     {
         "repeat": [
             {
-                "setpoint": 95,
-                "duration": 12,
+                "setpoint": 96.5,
+                "duration": 11,
                 "description": "Melt"
             },
 	    {
-                "setpoint": 60,
+                "setpoint": 60.5,
                 "duration": 20,
                 "description": "Annealing"
             },
@@ -63,12 +63,12 @@
 		"optics":""
 	    },
 	    {
-                "setpoint": 60,
+                "setpoint": 60.5,
                 "duration": 18,
                 "description": "Annealing"
             }
         ],
-        "cycles": 5
+        "cycles": 8
     },
     {
         "ramp_rate": 1.6

@@ -198,6 +198,11 @@
         <div class="wifi-network-list" id="network-list">
           <div class="wifi-empty" id="network-empty">Press Scan to find networks</div>
         </div>
+
+        <p class="wifi-section-title">Saved Connections</p>
+        <div class="wifi-network-list" id="saved-list">
+          <div class="wifi-empty">Loading...</div>
+        </div>
       </div>
     </main>
   </div>
@@ -389,6 +394,61 @@
       }
     }
 
+    async function loadSaved() {
+      const list = document.getElementById("saved-list");
+      try {
+        const r = await fetch("/wifi/saved");
+        const d = await r.json();
+        if (!d.profiles || d.profiles.length === 0) {
+          list.innerHTML = '<div class="wifi-empty">No saved connections</div>';
+          return;
+        }
+        list.innerHTML = "";
+        d.profiles.forEach((p, index) => {
+          const safeId = `saved-net-${index}`;
+          const row = document.createElement("div");
+          row.className = "wifi-network-row";
+          row.style.cursor = "default";
+          row.innerHTML = `<span class="wifi-network-name">${escHtml(p.ssid)}</span>`;
+          const btn = document.createElement("button");
+          btn.className = "wifi-forget-btn";
+          btn.style.cssText = "width:auto;padding:6px 14px;margin:0 0 0 auto;flex-shrink:0";
+          btn.textContent = "Forget";
+          btn.addEventListener("click", () => forgetSaved(p.ssid, btn, list));
+          row.appendChild(btn);
+          list.appendChild(row);
+        });
+      } catch (e) {
+        list.innerHTML = '<div class="wifi-empty">Could not load saved connections</div>';
+      }
+    }
+
+    async function forgetSaved(ssid, btn, list) {
+      if (!window.confirm(`Forget "${ssid}"?`)) return;
+      btn.disabled = true;
+      btn.textContent = "Forgetting...";
+      try {
+        const r = await fetch("/wifi/forget", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ssid }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          await loadSaved();
+          await loadStatus();
+        } else {
+          btn.disabled = false;
+          btn.textContent = "Forget";
+          alert(d.error || "Failed to forget network");
+        }
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "Forget";
+        alert("Request failed — try again");
+      }
+    }
+
     function escHtml(str) {
       return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
@@ -402,6 +462,7 @@
     }
 
     loadStatus();
+    loadSaved();
   </script>
   <script src="/static/keyboard.js?v=14"></script>
   <script src="/static/nav.js?v=1"></script>

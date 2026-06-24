@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# wifi_recovery.sh — runs on boot via systemd, cleans broken WiFi profiles and reconnects.
+# Installed by deployment2.sh to /opt/aquila/wifi_recovery.sh
+
+set -uo pipefail
+
+log() { echo "[wifi-recovery] $*" | systemd-cat -t wifi-recovery 2>/dev/null || echo "[wifi-recovery] $*"; }
+
+check_internet() {
+    curl -s --max-time 5 --head https://dns.google > /dev/null 2>&1
+}
+
+_wifi_profile_names() {
+    nmcli -t -f NAME,TYPE connection show 2>/dev/null \
+        | awk -F: '$2 == "802-11-wireless" {print $1}'
+}
+
+delete_broken_wifi_profiles() {
+    local names
+    names=$(_wifi_profile_names)
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        # Profile has a security section but no key-mgmt — NM can't authenticate.
+        local security_section
+        security_section=$(nmcli -g 802-11-wireless-security connection show "$name" 2>/dev/null || true)
+        local key_mgmt
+        key_mgmt=$(nmcli -g 802-11-wireless-security.key-mgmt connection show "$name" 2>/dev/null || true)
+        if [[ -n "$security_section" && -z "$key_mgmt" ]]; then
+            log "Deleting broken profile (missing key-mgmt): $name"
+            nmcli connection delete "$name" 2>/dev/null || true
+        fi
+    done <<< "$names"
+}
+
+clear_pinned_bssids() {
+    # iPhone hotspots and other mobile hotspots rotate their BSSID (hardware MAC)
+    # when the hotspot is toggled or iOS MAC randomization fires.  NM skips a
+    # profile whose 802-11-wireless.bssid doesn't match the visible AP even when
+    # the SSID and password are correct.  We patch the BSSID to empty so NM
+    # will connect to any AP broadcasting the right SSID.
+    local names
+    names=$(_wifi_profile_names)
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        local bssid
+        bssid=$(nmcli -g 802-11-wireless.bssid connection show "$name" 2>/dev/null || true)
+        # Empty string and the all-zeros sentinel both mean "not pinned".
+        if [[ -n "$bssid" && "$bssid" != "00:00:00:00:00:00" ]]; then
+            log "Clearing pinned BSSID ($bssid) from profile: $name"
+            nmcli connection modify "$name" 802-11-wireless.bssid "" 2>/dev/null || true
+        fi
+    done <<< "$names"
+}
+
+reconnect() {
+    # Rescan for available networks
+    nmcli device wifi rescan 2>/dev/null || true
+    sleep 4
+
+    local available
+    available=$(nmcli -t -f SSID device wifi list 2>/dev/null | sort -u)
+
+    # Try each saved wifi profile that is currently in range
+    local saved
+    saved=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
+        | awk -F: '$2 == "802-11-wireless" {print $1}')
+
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        local ssid
+        ssid=$(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null || echo "$name")
+        if echo "$available" | grep -qF "$ssid"; then
+            log "Trying: $name"
+            nmcli connection up "$name" 2>/dev/null || true
+            sleep 3
+            if check_internet; then
+                log "Connected via: $name"
+                return 0
+            fi
+        fi
+    done <<< "$saved"
+
+    log "No working network found"
+    return 1
+}
+
+# Give NetworkManager time to settle after boot
+sleep 10
+
+if check_internet; then
+    log "Internet available — nothing to do"
+    exit 0
+fi
+
+log "No internet on boot — cleaning broken profiles and reconnecting"
+delete_broken_wifi_profiles
+clear_pinned_bssids
+reconnect || true

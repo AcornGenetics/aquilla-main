@@ -1,5 +1,8 @@
 @import url("icon-colors.css?v=1");
 
+/* Hide cursor in kiosk mode */
+* { cursor: none !important; }
+
 html,
 body {
   height: 100%;
@@ -556,6 +559,78 @@ a:active {
 .run-profile-select:focus {
   border-color: #d1d5db;
   background: #f8fafc;
+}
+
+.profile-combo {
+  position: relative;
+  width: 100%;
+}
+
+#profile-combo-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.profile-combo-chevron {
+  font-size: 16px;
+  color: #6b7280;
+  transition: transform 0.15s ease;
+}
+
+#profile-combo-button[aria-expanded="true"] .profile-combo-chevron {
+  transform: rotate(180deg);
+}
+
+.combo-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  z-index: 50;
+  max-height: 320px;
+  overflow-y: auto;
+  display: none;
+}
+
+.combo-list.is-open {
+  display: block;
+}
+
+.combo-list [role="option"] {
+  padding: 12px 14px;
+  font-size: 18px;
+  color: #111827;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.combo-list [role="option"]:hover,
+.combo-list [role="option"].is-active {
+  background: #f8fafc;
+}
+
+.optics-combo {
+  position: relative;
+  display: inline-block;
+}
+
+.optics-suggestions {
+  min-width: 220px;
+}
+
+.optics-suggestions [role="option"] {
+  font-size: 14px;
+  padding: 8px 10px;
 }
 
 .run-meta-divider {
@@ -1376,6 +1451,13 @@ a:active {
 
 .results-dot__half.is-unavailable {
   background-color: #d1d5db;
+}
+
+.profile-lock-icon {
+  font-size: 16px;
+  line-height: 1;
+  display: inline-block;
+  opacity: 0.6;
 }
 
 .results-summary-row {

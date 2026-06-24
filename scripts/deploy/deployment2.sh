@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # deployment2.sh — Aquila device deployment
 # Usage: sudo bash deployment2.sh
-# All values can be pre-set as env vars to skip prompts:
-#   DEVICE_HOSTNAME=sn04 IMAGE_TAG=prod GHCR_USER=... GHCR_TOKEN=... sudo bash deployment2.sh
+# All values can be pre-set as env vars to skip prompts. Put them AFTER sudo so they
+# survive into the root shell (sudo strips the caller's environment by default):
+#   sudo DEVICE_HOSTNAME=sn04 IMAGE_TAG=prod GHCR_USER=... GHCR_TOKEN=... bash deployment2.sh
 set -euo pipefail
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
@@ -149,6 +150,33 @@ run_test "pi in docker group"       "groups pi | grep -q docker"
 phase_pass "Docker installed and running, pi in docker group"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3b — NetworkManager: disable BSSID pinning
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "3b" "NetworkManager BSSID policy"
+
+# Hotspots rotate their BSSID when toggled off/on. A dispatcher script that
+# clears the pinned BSSID from every profile on each 'up' event ensures NM
+# never refuses to reconnect because the AP's MAC address changed.
+cat > /etc/NetworkManager/dispatcher.d/99-no-bssid <<'EOF'
+#!/usr/bin/env bash
+# Clear pinned BSSID from all WiFi profiles on every connection-up event so
+# that hotspot BSSID rotation never prevents reconnection.
+INTERFACE="$1"
+EVENT="$2"
+[[ "$EVENT" != "up" ]] && exit 0
+nmcli -t -f NAME,TYPE connection show \
+    | awk -F: '/wireless/{print $1}' \
+    | while read -r name; do
+        nmcli connection modify "$name" 802-11-wireless.bssid "" 2>/dev/null || true
+      done
+EOF
+chmod +x /etc/NetworkManager/dispatcher.d/99-no-bssid
+
+run_test "NM dispatcher installed" "test -x /etc/NetworkManager/dispatcher.d/99-no-bssid"
+
+phase_pass "NetworkManager BSSID dispatcher installed"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 4 — Autologin (X11/Openbox)
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 4 "Autologin (X11/Openbox)"
@@ -168,6 +196,10 @@ cat > /etc/lightdm/lightdm.conf <<'EOF'
 autologin-user=pi
 autologin-session=openbox
 user-session=openbox
+# Start X with no cursor — touchscreen kiosk, the pointer must never render.
+# Disabling the cursor at the X server level means it is never drawn at boot and
+# never reappears on pointer/touch events.
+xserver-command=X -nocursor
 EOF
 
 mkdir -p /etc/lightdm/lightdm.conf.d
@@ -175,6 +207,7 @@ cat > /etc/lightdm/lightdm.conf.d/autologin.conf <<'EOF'
 [Seat:*]
 autologin-user=pi
 autologin-session=openbox
+xserver-command=X -nocursor
 EOF
 
 # Fix double-load of modesetting driver (dixRegisterPrivateKey crash on Pi):
@@ -203,6 +236,7 @@ run_test "autologin.conf exists"           "test -f /etc/lightdm/lightdm.conf.d/
 run_test "autologin-user=pi"               "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-session=openbox"       "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "main lightdm.conf not rpd-labwc" "! grep -q 'autologin-session=rpd-labwc' /etc/lightdm/lightdm.conf"
+run_test "cursor disabled (-nocursor)"     "grep -q 'X -nocursor' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "lightdm enabled"                 "systemctl is-enabled lightdm | grep -q enabled"
 run_test "xorg.conf has AutoAddGPU off"    "grep -q 'AutoAddGPU' /etc/X11/xorg.conf"
 run_test "fbdev not installed"            "! dpkg -l xserver-xorg-video-fbdev 2>/dev/null | grep -q '^ii'"
@@ -210,92 +244,11 @@ run_test "fbdev not installed"            "! dpkg -l xserver-xorg-video-fbdev 2>
 phase_pass "LightDM configured for X11/Openbox autologin (Wayland compositor disabled)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phase 5 — Chromium Kiosk (Openbox autostart)
-# ═══════════════════════════════════════════════════════════════════════════════
-phase_start 5 "Chromium Kiosk (Openbox autostart)"
-
-# Remove stale Wayland/desktop launcher paths so only one launch path exists
-rm -f "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
-rm -f "${PI_HOME}/.config/labwc/autostart"
-
-# Install boot splash page
-curl -fsSL \
-    "${RAW_REPO_URL}/aquila_web/static/splash.html" \
-    -o /opt/aquila/splash.html
-
-mkdir -p "${PI_HOME}/.config/openbox"
-
-cat > "${PI_HOME}/.config/openbox/autostart" <<'EOF'
-# Disable screen blanking and power management
-xset s off
-xset s noblank
-xset -dpms
-
-# Auto-detect connected HDMI output (handles HDMI-2, HDMI-A-2, etc.)
-HDMI_OUT=$(xrandr --query | grep -E "^HDMI.* connected" | head -1 | awk '{print $1}')
-if [ -n "$HDMI_OUT" ]; then
-    xrandr --output "$HDMI_OUT" --mode 1024x768 --rate 60 --rotate right
-fi
-
-xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
-  "Coordinate Transformation Matrix" \
-  0 1 0 -1 0 1 0 0 1
-
-# Hide cursor immediately on touch — -root covers the whole screen, -noevents prevents re-show on touch
-unclutter -idle 0 -root -noevents &
-
-# Allow display and compositor to settle before launching Chromium
-sleep 3
-
-# If kiosk_disabled flag exists, show desktop instead of kiosk.
-# Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
-if [ ! -f /tmp/kiosk_disabled ]; then
-  chromium \
-    --kiosk file:///opt/aquila/splash.html \
-    --incognito \
-    --noerrdialogs \
-    --disable-infobars \
-    --disable-session-crashed-bubble \
-    --check-for-update-interval=31536000 \
-    --disable-pinch \
-    --overscroll-history-navigation=0 \
-    --disable-features=TranslateUI \
-    --touch-events=enabled \
-    --enable-touch-drag-drop \
-    --enable-gpu-rasterization \
-    --use-angle=gles \
-    --ozone-platform=x11 \
-    --disable-web-security \
-    --allow-file-access-from-files \
-    --user-data-dir=/tmp/chromium-kiosk \
-    --start-maximized \
-    &
-fi
-EOF
-
-chown -R pi:pi "${PI_HOME}/.config/openbox"
-
-AUTOSTART="${PI_HOME}/.config/openbox/autostart"
-run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
-run_test "splash page installed"       "test -f /opt/aquila/splash.html"
-run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
-run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
-run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
-run_test "user-data-dir flag present"  "grep -q 'user-data-dir' ${AUTOSTART}"
-run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
-run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
-run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
-run_test "no stale Wayland .desktop"   "test ! -f ${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
-run_test "correct file ownership"      "stat -c '%U' ${AUTOSTART} | grep -q pi"
-
-phase_pass "Openbox autostart configured — X11 kiosk with rotation and touch mapping"
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 6 — Display and Touch (verified via autostart)
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 6 "Display and Touch configuration"
 
-# xrandr and xinput are called at runtime from Openbox autostart (Phase 5).
+# xrandr and xinput are called at runtime from Openbox autostart (Phase 9b).
 # This phase verifies the required tools are present on the host.
 run_test "xrandr binary present"  "which xrandr"
 run_test "xinput binary present"  "which xinput"
@@ -317,6 +270,8 @@ phase_start 7 "Persistent Directory Structure"
 
 mkdir -p /opt/aquila/config
 mkdir -p /opt/aquila/profiles
+mkdir -p /opt/aquila/profiles/bundled
+mkdir -p /opt/aquila/profiles/local
 mkdir -p /opt/aquila/results
 mkdir -p /opt/aquila/logs/results
 mkdir -p /opt/aquila/logs/plots
@@ -328,6 +283,8 @@ mkdir -p /opt/fleet
 
 run_test "/opt/aquila/config"           "test -d /opt/aquila/config"
 run_test "/opt/aquila/profiles"         "test -d /opt/aquila/profiles"
+run_test "/opt/aquila/profiles/bundled" "test -d /opt/aquila/profiles/bundled"
+run_test "/opt/aquila/profiles/local"   "test -d /opt/aquila/profiles/local"
 run_test "/opt/aquila/results"          "test -d /opt/aquila/results"
 run_test "/opt/aquila/logs/results"     "test -d /opt/aquila/logs/results"
 run_test "/opt/aquila/logs/plots"       "test -d /opt/aquila/logs/plots"
@@ -348,9 +305,15 @@ prompt_if_unset DEVICE_HOSTNAME "Enter device hostname (e.g. sn04)"
 prompt_if_unset IMAGE_TAG       "Enter IMAGE_TAG (dev/pilot/prod)"
 prompt_if_unset GHCR_USER       "Enter GHCR username"
 prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token"
+# Optional: second token for zero-downtime rotation (leave blank to skip)
+if [[ -z "${GHCR_TOKEN_2:-}" ]]; then
+    read -r -p "  Enter GHCR_TOKEN_2 for rotation (leave blank to skip): " GHCR_TOKEN_2 </dev/tty || true
+fi
 prompt_if_unset LID_HEATER_UPPER_BOUND "Enter lid heater upper bound voltage (e.g. 0.34)"
 prompt_if_unset LID_HEATER_LOWER_BOUND "Enter lid heater lower bound voltage (e.g. 0.20)"
 prompt_if_unset DRAWER_READ_STEPS      "Enter drawer read_steps for this device (e.g. 160)"
+prompt_if_unset AQ_SYNC_ENDPOINT  "Enter AQ_SYNC_ENDPOINT (AWS ingest URL, leave blank to skip)"
+prompt_if_unset AQ_SYNC_API_KEY   "Enter AQ_SYNC_API_KEY (fleet API key, leave blank to skip)"
 
 WATCHTOWER_TOKEN="${WATCHTOWER_TOKEN:-$(openssl rand -hex 32)}"
 
@@ -364,7 +327,10 @@ RUN_MODE=prod
 WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN}
 GHCR_USERNAME=${GHCR_USER}
 GHCR_TOKEN=${GHCR_TOKEN}
+GHCR_TOKEN_2=${GHCR_TOKEN_2:-}
 AQ_SRC_BASEDIR=/opt/aquila
+AQ_SYNC_ENDPOINT=${AQ_SYNC_ENDPOINT}
+AQ_SYNC_API_KEY=${AQ_SYNC_API_KEY}
 EOF
 chown root:root /opt/aquila/config/device.env
 chmod 600 /opt/aquila/config/device.env
@@ -534,6 +500,16 @@ phase_pass "device.env, fleet .env, host_config.json, and state_config.json writ
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 9 "GHCR Login, Download Compose File, and Pull Images"
 
+# Resolve active token: validate primary, fall back to GHCR_TOKEN_2 if set
+if [[ -n "${GHCR_TOKEN_2:-}" ]]; then
+    if ! curl -fsSL -o /dev/null \
+            -H "Authorization: token ${GHCR_TOKEN}" \
+            "https://api.github.com/repos/${GHCR_REPO}" 2>/dev/null; then
+        echo "  Primary GHCR_TOKEN failed — switching to GHCR_TOKEN_2"
+        GHCR_TOKEN="${GHCR_TOKEN_2}"
+    fi
+fi
+
 echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
 run_test "GHCR login succeeded" "grep -q 'ghcr.io' /root/.docker/config.json"
 
@@ -611,6 +587,94 @@ run_test "ui image pulled"                 "docker images | grep -q 'aquilla-mai
 run_test "update.sh exists and executable" "test -x /opt/fleet/update.sh"
 
 phase_pass "docker-compose.yml downloaded, all images pulled"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 9b — Chromium Kiosk (Openbox autostart)
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "9b" "Chromium Kiosk (Openbox autostart)"
+
+# Remove stale Wayland/desktop launcher paths so only one launch path exists
+rm -f "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
+rm -f "${PI_HOME}/.config/labwc/autostart"
+
+# Install boot splash page
+curl -fsSL \
+    -H "Authorization: token ${GHCR_TOKEN}" \
+    "${RAW_REPO_URL}/aquila_web/static/splash.html" \
+    -o /opt/aquila/splash.html
+
+mkdir -p "${PI_HOME}/.config/openbox"
+
+cat > "${PI_HOME}/.config/openbox/autostart" <<'EOF'
+# Disable screen blanking and power management
+xset s off
+xset s noblank
+xset -dpms
+
+# Auto-detect connected HDMI output (handles HDMI-2, HDMI-A-2, etc.)
+HDMI_OUT=$(xrandr --query | grep -E "^HDMI.* connected" | head -1 | awk '{print $1}')
+if [ -n "$HDMI_OUT" ]; then
+    xrandr --output "$HDMI_OUT" --mode 1024x768 --rate 60 --rotate right
+fi
+
+xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
+  "Coordinate Transformation Matrix" \
+  0 1 0 -1 0 1 0 0 1
+
+# Clear the root-window cursor (covers terminal and behind Chromium).
+# X is already started with `-nocursor` (see LightDM autologin.conf) so the pointer
+# is never rendered. We deliberately do NOT run unclutter: it only hides on an idle
+# timer and re-shows the cursor on pointer/touch events, causing a startup flash and
+# a lingering cursor over dropdowns on every tap.
+xsetroot -cursor_name none
+
+# Allow display and compositor to settle before launching Chromium
+sleep 3
+
+# If kiosk_disabled flag exists, show desktop instead of kiosk.
+# Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
+if [ ! -f /tmp/kiosk_disabled ]; then
+  chromium \
+    --kiosk file:///opt/aquila/splash.html \
+    --incognito \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --check-for-update-interval=31536000 \
+    --disable-pinch \
+    --overscroll-history-navigation=0 \
+    --disable-features=TranslateUI \
+    --touch-events=enabled \
+    --enable-touch-drag-drop \
+    --enable-gpu-rasterization \
+    --use-angle=gles \
+    --ozone-platform=x11 \
+    --disable-web-security \
+    --allow-file-access-from-files \
+    --user-data-dir=/tmp/chromium-kiosk \
+    --disk-cache-size=0 \
+    --start-maximized \
+    --hide-scrollbars \
+    >/dev/null 2>&1 &
+fi
+EOF
+
+chown -R pi:pi "${PI_HOME}/.config/openbox"
+
+AUTOSTART="${PI_HOME}/.config/openbox/autostart"
+run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
+run_test "splash page installed"       "test -f /opt/aquila/splash.html"
+run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
+run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
+run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
+run_test "user-data-dir flag present"  "grep -q 'user-data-dir' ${AUTOSTART}"
+run_test "touch-events flag"           "grep -q 'touch-events=enabled' ${AUTOSTART}"
+run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
+run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
+run_test "no stale Wayland .desktop"   "test ! -f ${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
+run_test "correct file ownership"      "stat -c '%U' ${AUTOSTART} | grep -q pi"
+
+phase_pass "Openbox autostart configured — X11 kiosk with rotation and touch mapping"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 10 — Register systemd Service
@@ -722,11 +786,33 @@ phase_pass "fleet config set, containers running, backend reachable on :8090, wa
 phase_start "11b" "Kiosk Control Service"
 
 KIOSK_RAW="${RAW_REPO_URL}/scripts/kiosk-control"
-curl -fsSL "${KIOSK_RAW}/kiosk_control.py" -o /usr/local/bin/kiosk_control.py
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" "${KIOSK_RAW}/kiosk_control.py" -o /usr/local/bin/kiosk_control.py
 chmod +x /usr/local/bin/kiosk_control.py
-curl -fsSL "${KIOSK_RAW}/kiosk-control.service" -o /etc/systemd/system/kiosk-control.service
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" "${KIOSK_RAW}/kiosk-control.service" -o /etc/systemd/system/kiosk-control.service
 systemctl daemon-reload
 systemctl enable --now kiosk-control
+
+# Install wifi-recovery startup service — cleans broken profiles and reconnects on boot
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" "${RAW_REPO_URL}/scripts/setup/wifi_recovery.sh" -o /opt/aquila/wifi_recovery.sh
+chmod +x /opt/aquila/wifi_recovery.sh
+cat > /etc/systemd/system/wifi-recovery.service <<'EOF'
+[Unit]
+Description=WiFi recovery — clean broken profiles and reconnect on boot
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/aquila/wifi_recovery.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable wifi-recovery.service
 
 # Create lxpanel-pi config for desktop WiFi panel (used when kiosk exits)
 mkdir -p "${PI_HOME}/.config/lxpanel-pi/panels"
@@ -837,10 +923,96 @@ if grep -q "console=tty1" "${CMDLINE_FILE}"; then
     sed -i 's/console=tty1/console=tty3/' "${CMDLINE_FILE}"
 fi
 
-run_test "tty3 in cmdline"     "grep -q 'console=tty3' ${CMDLINE_FILE}"
-run_test "tty1 not in cmdline" "! grep -q 'console=tty1' ${CMDLINE_FILE}"
+if ! grep -q "vt.global_cursor_default=0" "${CMDLINE_FILE}"; then
+    sed -i 's/$/ vt.global_cursor_default=0/' "${CMDLINE_FILE}"
+fi
 
-phase_pass "quiet boot configured (tty3)"
+run_test "tty3 in cmdline"          "grep -q 'console=tty3' ${CMDLINE_FILE}"
+run_test "tty1 not in cmdline"      "! grep -q 'console=tty1' ${CMDLINE_FILE}"
+run_test "cursor hidden in cmdline" "grep -q 'vt.global_cursor_default=0' ${CMDLINE_FILE}"
+
+phase_pass "quiet boot configured (tty3, cursor hidden)"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 14b — Plymouth Acorn Boot Theme
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "14b" "Plymouth Acorn Boot Theme"
+
+PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/acorn"
+PLYMOUTH_INITRAMFS_HOOK="${PLYMOUTH_INITRAMFS_HOOK:-/usr/share/initramfs-tools/hooks/plymouth}"
+# Fallback: some distros put it in /etc/initramfs-tools/hooks/ instead
+[[ -f "/etc/initramfs-tools/hooks/plymouth" ]] && PLYMOUTH_INITRAMFS_HOOK="/etc/initramfs-tools/hooks/plymouth"
+ACORN_LOGO_SVG="/opt/aquila/acorn_logo.svg"
+ACORN_LOGO_PNG="${PLYMOUTH_THEME_DIR}/acorn_logo.png"
+
+# Ensure Plymouth and theme packages are installed (idempotent)
+apt-get install -y --no-install-recommends plymouth plymouth-themes librsvg2-bin imagemagick 2>/dev/null
+
+# Reinstall plymouth if initramfs hook is still missing (ensures early-boot coverage)
+if [[ ! -f "${PLYMOUTH_INITRAMFS_HOOK}" ]]; then
+    echo "  Plymouth initramfs hook missing — reinstalling plymouth..."
+    apt-get install --reinstall -y plymouth 2>/dev/null
+fi
+
+# Download acornlogo SVG from repo if not already on device
+if [[ ! -f "${ACORN_LOGO_SVG}" ]]; then
+    curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+        "${RAW_REPO_URL}/aquila_web/static/acornlogo.svg" \
+        -o "${ACORN_LOGO_SVG}" 2>/dev/null || true
+fi
+
+# Create theme directory and convert SVG → PNG (256×256, white on transparent → white on black)
+mkdir -p "${PLYMOUTH_THEME_DIR}"
+
+if [[ -f "${ACORN_LOGO_SVG}" ]]; then
+    # 192×192 px. Pre-rotate 270° (= 90° CCW) to compensate for display_hdmi_rotate=1.
+    # Plymouth renders to the raw framebuffer; hardware rotation applies after,
+    # so the image must be pre-rotated to appear upright on the physical screen.
+    rsvg-convert -w 192 -h 192 --background-color white "${ACORN_LOGO_SVG}" \
+        -o /tmp/acorn_logo_tmp.png 2>/dev/null
+    if command -v convert &>/dev/null; then
+        convert /tmp/acorn_logo_tmp.png -rotate 90 "${ACORN_LOGO_PNG}" 2>/dev/null \
+            || cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
+    elif python3 -c "from PIL import Image" &>/dev/null 2>&1; then
+        python3 -c "
+from PIL import Image
+img = Image.open('/tmp/acorn_logo_tmp.png')
+img.rotate(-90, expand=True).save('${ACORN_LOGO_PNG}')
+" 2>/dev/null || cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
+    else
+        cp /tmp/acorn_logo_tmp.png "${ACORN_LOGO_PNG}"
+        echo "  ⚠ No rotation tool found (install imagemagick) — logo may appear sideways"
+    fi
+else
+    echo "  ✗ acornlogo.svg not found — skipping logo conversion"
+fi
+
+# Install theme files from repo
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+    "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.plymouth" \
+    -o "${PLYMOUTH_THEME_DIR}/acorn.plymouth" 2>/dev/null
+curl -fsSL -H "Authorization: token ${GHCR_TOKEN}" \
+    "${RAW_REPO_URL}/scripts/setup/plymouth/acorn.script" \
+    -o "${PLYMOUTH_THEME_DIR}/acorn.script" 2>/dev/null
+
+# Set Acorn as default theme and rebuild initramfs
+if [[ -f "${PLYMOUTH_THEME_DIR}/acorn.plymouth" ]]; then
+    plymouth-set-default-theme acorn
+    update-initramfs -u -k all 2>/dev/null
+    echo "  ✓ Acorn Plymouth theme set and initramfs updated"
+else
+    echo "  ✗ acorn.plymouth not installed — theme not set"
+fi
+
+run_test "plymouth installed"           "command -v plymouth-set-default-theme"
+run_test "plymouth initramfs hook"      "test -f ${PLYMOUTH_INITRAMFS_HOOK}"
+run_test "acorn theme dir exists"       "test -d ${PLYMOUTH_THEME_DIR}"
+run_test "acorn.plymouth file exists"   "test -f ${PLYMOUTH_THEME_DIR}/acorn.plymouth"
+run_test "acorn.script file exists"     "test -f ${PLYMOUTH_THEME_DIR}/acorn.script"
+run_test "acorn logo png exists"        "test -f ${ACORN_LOGO_PNG}"
+run_test "acorn theme is default"       "plymouth-set-default-theme | grep -q acorn"
+
+phase_pass "Plymouth Acorn theme installed (takes effect on next reboot)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 15 — Download Security Script
@@ -864,9 +1036,6 @@ phase_pass "security.sh saved to /opt/aquila/security.sh — run it manually whe
 echo ""
 echo "=================================================="
 echo " Deployment complete for device: ${DEVICE_HOSTNAME}"
-echo ""
-echo " IMPORTANT: On first boot, physically push the"
-echo " drawer back to the home sensor before powering on."
 echo ""
 echo " MANUAL STEP REQUIRED after reboot:"
 echo " If the login screen appears instead of the kiosk,"

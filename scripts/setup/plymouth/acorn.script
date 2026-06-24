@@ -1,0 +1,13 @@
+// Acorn boot splash — white background, centered logo
+// Display is portrait (720x1020). Plymouth may see pre-rotation framebuffer
+// so we center using whichever axis is appropriate.
+
+Window.SetBackgroundTopColor(1.0, 1.0, 1.0);
+Window.SetBackgroundBottomColor(1.0, 1.0, 1.0);
+
+logo_image = Image("acorn_logo.png");
+
+logo_sprite = Sprite(logo_image);
+logo_sprite.SetX(Window.GetWidth()  / 2 - logo_image.GetWidth()  / 2);
+logo_sprite.SetY(Window.GetHeight() / 2 - logo_image.GetHeight() / 2);
+logo_sprite.SetOpacity(1);
