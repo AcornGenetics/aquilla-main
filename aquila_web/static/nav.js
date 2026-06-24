@@ -14,9 +14,9 @@ document.addEventListener("click", (event) => {
   link.blur();
 });
 
-// Show a red "1" badge on the ? help icon when an OTA update is available
+// Show a red "1" badge on the Settings nav item when an OTA update is available
 (function checkUpdateBadge() {
-  const links = document.querySelectorAll("a.help-link");
+  const links = document.querySelectorAll("a.settings-link");
   if (!links.length) return;
   fetch("/update/status")
     .then(r => r.ok ? r.json() : null)

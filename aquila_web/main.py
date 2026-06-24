@@ -35,6 +35,11 @@ DEV_OPTICS_PATH = os.getenv("AQ_DEV_OPTICS_PATH")
 dev_optics_path = DEV_OPTICS_PATH
 DEV_DRAWER_OPEN_SECONDS = float(os.getenv("AQ_DEV_DRAWER_OPEN_SECONDS", "3"))
 DEV_DRAWER_CLOSE_SECONDS = float(os.getenv("AQ_DEV_DRAWER_CLOSE_SECONDS", "3"))
+# Dev-simulation overrides — force UI states that normally require real hardware
+# or external services, so they can be exercised locally. To add another, follow
+# this same pattern (AQ_DEV_<THING> -> module flag) and honour it at the seam
+# that produces the state. See get_update_status() for AQ_DEV_UPDATE_AVAILABLE.
+DEV_UPDATE_AVAILABLE = os.getenv("AQ_DEV_UPDATE_AVAILABLE", "0") == "1"
 run_in_progress = False
 MODULE_BASE_DIR = Path(__file__).resolve().parents[1]
 if str(MODULE_BASE_DIR) not in sys.path:
@@ -733,16 +738,55 @@ async def delete_history(payload: dict):
     _save_history(remaining)
     return {"ok": True, "remaining": len(remaining)}
 
+OPTICS_PATHS_PATH = BASE_DIR / "logs" / "optics_paths.json"
+OPTICS_PATHS_LIMIT = 20
+
+
+def _merge_optics_history(history, path):
+    """Pure: return new most-recent-first history with ``path`` merged in.
+
+    Blank/whitespace/None ``path`` is a no-op and returns the history unchanged.
+    Otherwise the (stripped) path is deduped and prepended, capped at the limit.
+    """
+    cleaned = (path or "").strip()
+    if not cleaned:
+        return list(history)
+    deduped = [p for p in history if p != cleaned]
+    return [cleaned, *deduped][:OPTICS_PATHS_LIMIT]
+
+
+def _load_optics_history() -> list:
+    if not OPTICS_PATHS_PATH.exists():
+        return []
+    try:
+        with OPTICS_PATHS_PATH.open() as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        return []
+    return []
+
+
+def _save_optics_history(history) -> None:
+    OPTICS_PATHS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with OPTICS_PATHS_PATH.open("w") as f:
+        json.dump(history, f, indent=2)
+
+
 @app.get("/dev/optics_path")
 async def get_dev_optics_path():
-    return {"path": dev_optics_path}
+    return {"path": dev_optics_path, "history": _load_optics_history()}
 
 @app.post("/dev/optics_path")
 async def set_dev_optics_path(payload: dict):
     global dev_optics_path
     path = payload.get("path") if isinstance(payload, dict) else None
-    dev_optics_path = path.strip() if path else None
-    return {"path": dev_optics_path}
+    cleaned = path.strip() if path else None
+    dev_optics_path = cleaned or None
+    history = _merge_optics_history(_load_optics_history(), cleaned)
+    _save_optics_history(history)
+    return {"path": dev_optics_path, "history": history}
 
 @app.get("/run/name")
 async def get_run_name():
@@ -837,6 +881,10 @@ async def history_run_page():
 @app.get("/help")
 async def help_page():
     return FileResponse(static_dir / "help.html")
+
+@app.get("/settings")
+async def settings_page():
+    return FileResponse(static_dir / "settings.html")
 
 @app.post("/button/open")
 async def button_open():
@@ -1444,8 +1492,9 @@ async def _kiosk_post(path: str, body: dict) -> dict:
 
 @app.get("/wifi")
 async def wifi_page():
-    return FileResponse(static_dir / "wifi.html",
-                        headers={"Cache-Control": "no-store"})
+    # Wi-Fi UI now lives under Settings (ADR-012). Keep /wifi working for any
+    # old bookmark/deep link by redirecting to the consolidated page.
+    return RedirectResponse(url="/settings")
 
 @app.get("/wifi/status")
 async def wifi_status():
@@ -1601,10 +1650,19 @@ async def _do_check_update() -> None:
 
 @app.get("/update/status")
 async def get_update_status():
+    available = _update_available
+    status = _update_status
+    # Dev simulation (AQ_DEV_UPDATE_AVAILABLE): force an available update so the
+    # nav badge, the Updates sub-tab dot, and the apply-flow can be exercised
+    # locally without real registry credentials. Honours dismissal, and
+    # /update/reset clears the dismissal — so the full lifecycle stays testable.
+    if DEV_UPDATE_AVAILABLE and not _update_dismissed:
+        available = True
+        status = "available"
     return {
-        "available": _update_available,
+        "available": available,
         "dismissed": _update_dismissed,
-        "status": _update_status,
+        "status": status,
         "error": _update_error,
         "last_checked": _update_last_checked,
     }

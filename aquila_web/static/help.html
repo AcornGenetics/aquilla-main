@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
     <title>Help</title>
-    <link rel="stylesheet" href="/static/styles.css?v=211" />
+    <link rel="stylesheet" href="/static/styles.css?v=218" />
     <link rel="stylesheet" href="/static/icon-colors.css?v=1" />
     <style>
       .help-sub {
@@ -370,109 +370,35 @@
                 </ul>
               </div>
 
-              <!-- Wi-Fi & System -->
-              <div class="help-section" id="tab-wifi">
-                <!-- Status bar -->
-                <div
-                  style="
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    padding: 12px 16px;
-                    background: #f0f4f8;
-                    border: 1px solid #d1d9e0;
-                    border-radius: 10px;
-                    margin-bottom: 14px;
-                  "
-                >
-                  <div
-                    id="wifi-dot-inline"
-                    style="
-                      width: 11px;
-                      height: 11px;
-                      border-radius: 50%;
-                      background: #9ca3af;
-                      flex-shrink: 0;
-                    "
-                  ></div>
-                  <span
-                    id="wifi-label-inline"
-                    style="font-weight: 600; color: #1f2937; font-size: 15px"
-                    >Checking…</span
-                  >
-                  <span
-                    id="wifi-ssid-inline"
-                    style="color: #4b5563; font-size: 15px"
-                  ></span>
-                </div>
-
-                <!-- Scan button -->
-                <button
-                  id="wifi-rescan-btn-inline"
-                  onclick="wifiDoScan()"
-                  style="
-                    padding: 9px 16px;
-                    border-radius: 8px;
-                    border: 1px solid #d1d9e0;
-                    background: #fff;
-                    font-size: 15px;
-                    font-weight: 500;
-                    cursor: pointer;
-                    color: #374151;
-                    margin-bottom: 10px;
-                  "
-                >
-                  &#x21BA; Scan for networks
-                </button>
-
-                <p
-                  style="
-                    font-size: 12px;
-                    font-weight: 600;
-                    color: #6b7280;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                    margin: 0 0 8px;
-                  "
-                >
-                  Available Networks
-                </p>
-
-                <!-- Network list -->
-                <div
-                  id="wifi-network-list-inline"
-                  style="
-                    border: 1px solid #d1d9e0;
-                    border-radius: 10px;
-                    overflow: hidden;
-                    margin-bottom: 4px;
-                  "
-                >
-                  <div
-                    style="
-                      padding: 20px;
-                      text-align: center;
-                      color: #9ca3af;
-                      font-size: 15px;
-                    "
-                  >
-                    Press Scan to find networks
-                  </div>
-                </div>
+              <!-- Wi-Fi Setup (how-to) -->
+              <div class="help-section" id="tab-wifi-howto">
+                <h2>Wi-Fi Setup</h2>
+                <p>Connect the instrument to a network from the <strong>Settings</strong> screen.</p>
+                <h3>Connecting to a Network</h3>
+                <ol>
+                  <li>Tap <strong>Settings</strong> in the top navigation, then open the <strong>Wi-Fi &amp; System</strong> tab.</li>
+                  <li>Tap <strong>Scan for networks</strong> and wait a few seconds for the list to appear.</li>
+                  <li>Tap your network. If it is secured, enter the <strong>password</strong> (use <strong>Show</strong> to check it).</li>
+                  <li>Tap <strong>Connect</strong>. A green status dot confirms the instrument is online.</li>
+                </ol>
+                <h3>Managing Saved Networks</h3>
+                <p>Previously joined networks appear under <strong>Saved Connections</strong>. Tap <strong>Forget</strong> to remove a network you no longer use.</p>
               </div>
 
-              <!-- Updates -->
-              <div class="help-section" id="tab-updates">
+              <!-- Updates (how-to) -->
+              <div class="help-section" id="tab-updates-howto">
                 <h2>Software Updates</h2>
                 <p>
                   Updates are applied only when you choose to. Nothing is
                   downloaded or restarted automatically.
                 </p>
-                <div id="update-status-area" style="margin-top: 16px">
-                  <p style="color: #6b7280; font-size: 15px">
-                    Open this tab to check for updates.
-                  </p>
-                </div>
+                <h3>Checking for Updates</h3>
+                <p>When an update is available, a badge appears on the <strong>Settings</strong> button. Open <strong>Settings</strong> and select the <strong>Updates</strong> tab to see the current status.</p>
+                <h3>Applying an Update</h3>
+                <ol>
+                  <li>In <strong>Settings &rarr; Updates</strong>, tap <strong>Update Now</strong> to apply an available update, or <strong>Later</strong> to dismiss the reminder.</li>
+                  <li>While the update runs, leave the device powered on — do not power it off until it reports <strong>Update complete</strong>.</li>
+                </ol>
               </div>
             </div>
             <!-- /.help-card -->
@@ -504,8 +430,6 @@
           document
             .getElementById(tab.dataset.target)
             .classList.add("is-active");
-          if (tab.dataset.target === "tab-wifi") loadWifiStatus();
-          if (tab.dataset.target === "tab-updates") openUpdateTab();
         });
       });
 
