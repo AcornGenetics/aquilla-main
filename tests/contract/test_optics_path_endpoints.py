@@ -35,3 +35,22 @@ def test_blank_path_clears_selection_but_keeps_history(client):
 
     assert resp["path"] is None
     assert "/tmp/scope.log" in resp["history"]
+
+
+def test_run_page_hides_optics_tab_by_default(client):
+    """
+    The optics path field is dev-only and is revealed by JS after the async
+    /button_status fetch resolves. If the served markup ships it visible, the
+    field flashes on every non-dev load before JS hides it. Guard against that
+    regression: the optics tab must be hidden in the static HTML by default.
+    """
+    import re
+
+    html = client.get("/run").text
+
+    match = re.search(r'<div class="([^"]*)" id="run-optics-tab"', html)
+    assert match is not None, "run-optics-tab div not found in served /run HTML"
+    assert "is-hidden" in match.group(1).split(), (
+        "optics tab must ship hidden by default to avoid a non-dev flash; "
+        f'got class="{match.group(1)}"'
+    )
