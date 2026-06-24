@@ -61,35 +61,57 @@ const formatResultSummary = (perTube, tubeNames) => {
   return parts.join(" · ");
 };
 
+// Channel Calls in Well-Verdict precedence order: Detected > Inconclusive > Not Detected.
+const CALL_PRECEDENCE = ["Detected", "Inconclusive", "Not Detected"];
+const normalizeCall = (value) => (CALL_PRECEDENCE.includes(value) ? value : "Not Detected");
+
 const summarizeResults = (resultsData, labels = {}, tubeNames = DEFAULT_TUBE_NAMES.slice()) => {
   const perTube = tubeNames.map(() => "not-detected");
-  const perTubeDetectedLabels = tubeNames.map(() => []);
+  const perTubeLabel = tubeNames.map(() => "");
   if (!resultsData || typeof resultsData !== "object") {
-    return { perTube, detectedCount: 0, inconclusiveCount: 0, perTubeDetectedLabels };
+    return { perTube, perTubeLabel, detectedCount: 0, inconclusiveCount: 0, anyChannelInconclusive: false };
   }
 
   const famLabel = labels.fam || "FAM";
   const roxLabel = labels.rox || "ROX";
+  let anyChannelInconclusive = false;
 
   for (let tube = 1; tube <= 4; tube += 1) {
     const fam = resultsData?.["1"]?.[String(tube)];
     const rox = resultsData?.["2"]?.[String(tube)];
-    if (fam === "Inconclusive" || rox === "Inconclusive") {
-      perTube[tube - 1] = "inconclusive";
-    } else if (fam === "Detected" || rox === "Detected") {
+
+    // Channels in FAM-then-ROX order. A "ROX Unavailable" Call is excluded
+    // entirely (it is not a result); the remaining Calls are normalized.
+    const channels = [
+      { name: famLabel, call: fam },
+      { name: roxLabel, call: rox },
+    ]
+      .filter((c) => c.call !== "ROX Unavailable")
+      .map((c) => ({ name: c.name, call: normalizeCall(c.call) }));
+
+    // QC is channel-sensitive: an Inconclusive Channel flags the run even when
+    // the Well Verdict is Detected (Detected-wins must not mask it).
+    if (channels.some((c) => c.call === "Inconclusive")) {
+      anyChannelInconclusive = true;
+    }
+
+    // Verdict: highest-precedence Call present across the Well's Channels.
+    if (channels.some((c) => c.call === "Detected")) {
       perTube[tube - 1] = "detected";
+    } else if (channels.some((c) => c.call === "Inconclusive")) {
+      perTube[tube - 1] = "inconclusive";
     }
-    if (fam === "Detected") {
-      perTubeDetectedLabels[tube - 1].push(famLabel);
-    }
-    if (rox === "Detected") {
-      perTubeDetectedLabels[tube - 1].push(roxLabel);
-    }
+
+    // Label: group Channels by Call in precedence order, FAM before ROX within a group.
+    perTubeLabel[tube - 1] = CALL_PRECEDENCE.flatMap((status) => {
+      const names = channels.filter((c) => c.call === status).map((c) => c.name);
+      return names.length ? [`${status} (${names.join(" + ")})`] : [];
+    }).join(" ");
   }
 
   const detectedCount = perTube.filter((value) => value === "detected").length;
   const inconclusiveCount = perTube.filter((value) => value === "inconclusive").length;
-  return { perTube, detectedCount, inconclusiveCount, perTubeDetectedLabels };
+  return { perTube, perTubeLabel, detectedCount, inconclusiveCount, anyChannelInconclusive };
 };
 
 const loadResultsData = async (entry) => {
@@ -146,7 +168,7 @@ async function loadRunDetail() {
 
     const resultsData = await loadResultsData(entry);
     const summary = summarizeResults(resultsData, entry.labels || {}, tubeNames);
-    const qcStatus = summary.inconclusiveCount > 0 ? "Review" : "Pass";
+    const qcStatus = summary.anyChannelInconclusive ? "Review" : "Pass";
     const resultText = resultsData
       ? formatResultSummary(summary.perTube, tubeNames)
       : formatResultLabels(entry.result || "--", tubeNames);
@@ -193,14 +215,7 @@ async function loadRunDetail() {
         <div class="run-detail-pills">
           ${summary.perTube
             .map((status, index) => {
-              const detectedLabels = summary.perTubeDetectedLabels[index];
-              let labelDetail = "Not detected";
-              if (status === "detected") {
-                labelDetail = detectedLabels.length ? `Detected (${detectedLabels.join(" + ")})` : "Detected";
-              } else if (status === "inconclusive") {
-                labelDetail = "Inconclusive";
-              }
-              const label = `${tubeNames[index]}: ${labelDetail}`;
+              const label = `${tubeNames[index]}: ${summary.perTubeLabel[index]}`;
               return `<span class="run-detail-pill run-detail-pill--${status}">${esc(label)}</span>`;
             })
             .join("")}
@@ -236,6 +251,14 @@ async function loadRunDetail() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  loadRunDetail();
-});
+if (typeof document !== "undefined") {
+  document.addEventListener("DOMContentLoaded", () => {
+    loadRunDetail();
+  });
+}
+
+// Enable unit testing under Node (node:test) without affecting the browser,
+// where `module` is undefined. Not a build step — a guarded CommonJS export.
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { summarizeResults };
+}
