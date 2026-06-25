@@ -236,6 +236,10 @@ class ProfileSave(BaseModel):
     rox_label: Optional[str] = None
     # Optional estimated completion time, in minutes. None clears any existing estimate.
     estimated_minutes: Optional[int] = None
+    # Structured-editor source of truth (issue #197 contract). When present, the
+    # profile is a Structured Profile; assembly/validation of these stages into
+    # `steps` is handled separately (A1/A2/A3). Persisted verbatim here.
+    stages: Optional[dict] = None
 
 class ProfileDelete(BaseModel):
     profiles: list[str]
@@ -914,6 +918,15 @@ async def profiles_edit_form_page():
         headers={"Cache-Control": "no-store"}
     )
 
+@app.get("/profiles/builder")
+async def profiles_builder_page():
+    # Structured profile editor (issue #197). Serves the shell; the Stage UI,
+    # validation, and save wiring are layered on in the frontend route (B1/B2/B3).
+    return FileResponse(
+        static_dir / "profiles/builder.html",
+        headers={"Cache-Control": "no-store"}
+    )
+
 @app.get("/history")
 async def history_page():
     return FileResponse(static_dir / "history.html")
@@ -1369,6 +1382,10 @@ async def save_profile(payload: ProfileSave):
     base_profile["post_in_gui"] = "True"
     if payload.steps is not None:
         base_profile["steps"] = payload.steps
+    # Persist the structured `stages` source of truth verbatim when provided
+    # (issue #197). Its presence marks a Structured Profile.
+    if payload.stages is not None:
+        base_profile["stages"] = payload.stages
     labels = {}
     if isinstance(base_profile.get("labels"), dict):
         labels.update(base_profile.get("labels", {}))
@@ -1503,7 +1520,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
         }
 
-    return {
+    details = {
         "id": profile_path.name,
         "title": data.get("title", profile_path.stem),
         "labels": data.get("labels", {}),
@@ -1512,6 +1529,11 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         "estimated_completion_seconds": data.get("estimated_completion_seconds"),
         "steps": data.get("steps", [])
     }
+    # Structured Profiles carry the `stages` source of truth; Legacy Profiles
+    # omit it entirely so the editor can branch on its presence (issue #197).
+    if data.get("stages") is not None:
+        details["stages"] = data["stages"]
+    return details
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

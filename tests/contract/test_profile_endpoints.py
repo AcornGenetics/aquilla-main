@@ -365,3 +365,74 @@ def test_saved_file_always_carries_both_fields_after_anchor(client):
         assert keys[keys.index("time_unavailable") + 1] == "estimated_completion_seconds"
     finally:
         _delete_profile(client, pid)
+
+
+# ---------------------------------------------------------------------------
+# Structured profiles — `stages` contract foundation (issue #197)
+# ---------------------------------------------------------------------------
+
+# The canonical structured-profile payload both routes build and test against.
+SAMPLE_STAGES = {
+    "incubation": {"enabled": True, "temp": 37, "time": 600},
+    "denaturation": {"enabled": True, "temp": 95, "time": 120},
+    "amplification": {
+        "cycles": 40,
+        "subStages": [
+            {"name": "Denaturation", "temp": 95, "time": 11},
+            {"name": "Annealing & Extension", "temp": 60.5, "time": 38},
+        ],
+    },
+    "finalHold": {"enabled": False, "temp": 25, "time": 60},
+}
+
+
+@pytest.mark.contract
+def test_post_profile_persists_and_returns_stages(client):
+    """A `stages` payload is accepted, persisted, and read back unchanged.
+
+    #197 only carries the contract surface — it does not assemble steps or
+    validate ranges (those are A1/A2/A3). It must, however, round-trip the
+    structured object so both routes can build against a real contract.
+    """
+    resp = client.post(
+        "/profiles",
+        json={"name": "Contract Stages Profile", "stages": SAMPLE_STAGES},
+    )
+    assert resp.status_code == 200, resp.text
+    pid = resp.json()["id"]
+    try:
+        details = client.get(f"/profiles/details?id={pid}")
+        assert details.status_code == 200
+        assert details.json()["stages"] == SAMPLE_STAGES
+    finally:
+        _delete_profile(client, pid)
+
+
+@pytest.mark.contract
+def test_profiles_builder_route_serves_html(client):
+    """GET /profiles/builder serves the structured-editor HTML shell (issue #197)."""
+    resp = client.get("/profiles/builder")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+
+
+@pytest.mark.contract
+def test_sample_stages_fixture_matches_contract():
+    """The committed sample fixture is the canonical `stages` shape (issue #197).
+
+    Both routes build against this file, so it must match the agreed contract:
+    incubation/denaturation/finalHold carry enabled+temp+time; amplification is
+    always present (no `enabled`) with cycles and 2-3 sub-stages.
+    """
+    fixture = Path(__file__).parent.parent / "fixtures" / "sample_stages.json"
+    data = json.loads(fixture.read_text())
+    assert data == SAMPLE_STAGES
+
+    for key in ("incubation", "denaturation", "finalHold"):
+        assert set(data[key]) == {"enabled", "temp", "time"}, key
+    amp = data["amplification"]
+    assert "enabled" not in amp
+    assert "cycles" in amp
+    assert 2 <= len(amp["subStages"]) <= 3
+    for sub in amp["subStages"]:
+        assert set(sub) == {"name", "temp", "time"}
