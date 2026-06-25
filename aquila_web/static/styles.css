@@ -2682,6 +2682,47 @@ a:active {
   gap: 24px;
 }
 
+/* Structured builder Stages (issue #200). */
+.stage__header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.stage__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.stage__toggle input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+}
+
+.stage__title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.amp-substage {
+  margin-top: 12px;
+}
+
+.amp-substage__name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* An unchecked Stage greys out. Its inputs are also set [disabled] in JS, which
+   keeps their typed values so re-checking the Stage restores them. */
+.stage--disabled {
+  opacity: 0.5;
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

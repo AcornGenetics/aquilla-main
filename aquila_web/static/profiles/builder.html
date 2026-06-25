@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Create Profile</title>
-  <link rel="stylesheet" href="/static/styles.css?v=219" />
+  <link rel="stylesheet" href="/static/styles.css?v=220" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -26,11 +26,140 @@
         </nav>
       </header>
       <div class="run-divider"></div>
-      <!-- Structured profile editor shell (issue #197). The Stage/Sub-stage UI,
-           validation, and save wiring are built in B1/B2/B3. -->
-      <div class="profile-form" id="profile-builder-root"></div>
+      <!-- Structured profile editor (issues #197 shell, #200 builder). Field
+           validation is B3; Amplification Sub-stage add/remove is B2. -->
+      <div class="profile-form" id="profile-builder-root">
+        <section class="card" id="builder-details">
+          <div class="field-grid">
+            <div class="field">
+              <label for="profile-name">Profile name</label>
+              <input id="profile-name" type="text" value="" />
+            </div>
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label for="profile-fam-label">FAM Label</label>
+              <input id="profile-fam-label" type="text" value="FAM" />
+            </div>
+            <div class="field">
+              <label for="profile-rox-label">ROX Label</label>
+              <input id="profile-rox-label" type="text" value="ROX" />
+            </div>
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label for="profile-estimated-minutes">Est. Time (Min)</label>
+              <input id="profile-estimated-minutes" type="number" inputmode="numeric" min="1" step="1" value="" placeholder="(Optional)" />
+            </div>
+          </div>
+        </section>
+
+        <section class="card stage" id="stage-incubation">
+          <header class="stage__header">
+            <label class="stage__toggle">
+              <input type="checkbox" id="stage-incubation-enabled" checked />
+              <span class="stage__title">Incubation</span>
+            </label>
+          </header>
+          <div class="field-grid">
+            <div class="field">
+              <label for="stage-incubation-temp">Temp (&deg;C)</label>
+              <input id="stage-incubation-temp" type="number" inputmode="numeric" value="" />
+            </div>
+            <div class="field">
+              <label for="stage-incubation-time">Time (s)</label>
+              <input id="stage-incubation-time" type="number" inputmode="numeric" value="" />
+            </div>
+          </div>
+        </section>
+
+        <section class="card stage" id="stage-denaturation">
+          <header class="stage__header">
+            <label class="stage__toggle">
+              <input type="checkbox" id="stage-denaturation-enabled" checked />
+              <span class="stage__title">Initial Denaturation</span>
+            </label>
+          </header>
+          <div class="field-grid">
+            <div class="field">
+              <label for="stage-denaturation-temp">Temp (&deg;C)</label>
+              <input id="stage-denaturation-temp" type="number" inputmode="numeric" value="" />
+            </div>
+            <div class="field">
+              <label for="stage-denaturation-time">Time (s)</label>
+              <input id="stage-denaturation-time" type="number" inputmode="numeric" value="" />
+            </div>
+          </div>
+        </section>
+
+        <section class="card stage" id="stage-amplification">
+          <header class="stage__header">
+            <span class="stage__title">Amplification</span>
+          </header>
+          <div class="field-grid">
+            <div class="field">
+              <label for="stage-amp-cycles">Cycles</label>
+              <input id="stage-amp-cycles" type="number" inputmode="numeric" value="" />
+            </div>
+          </div>
+          <div class="amp-substages">
+            <div class="amp-substage" data-sub="0">
+              <span class="amp-substage__name" id="stage-amp-sub-0-name">Denaturation</span>
+              <div class="field-grid">
+                <div class="field">
+                  <label for="stage-amp-sub-0-temp">Temp (&deg;C)</label>
+                  <input id="stage-amp-sub-0-temp" type="number" inputmode="numeric" value="" />
+                </div>
+                <div class="field">
+                  <label for="stage-amp-sub-0-time">Time (s)</label>
+                  <input id="stage-amp-sub-0-time" type="number" inputmode="numeric" value="" />
+                </div>
+              </div>
+            </div>
+            <div class="amp-substage" data-sub="1">
+              <span class="amp-substage__name" id="stage-amp-sub-1-name">Annealing &amp; Extension</span>
+              <div class="field-grid">
+                <div class="field">
+                  <label for="stage-amp-sub-1-temp">Temp (&deg;C)</label>
+                  <input id="stage-amp-sub-1-temp" type="number" inputmode="numeric" value="" />
+                </div>
+                <div class="field">
+                  <label for="stage-amp-sub-1-time">Time (s)</label>
+                  <input id="stage-amp-sub-1-time" type="number" inputmode="numeric" value="" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card stage" id="stage-finalhold">
+          <header class="stage__header">
+            <label class="stage__toggle">
+              <input type="checkbox" id="stage-finalhold-enabled" checked />
+              <span class="stage__title">Final Temp Hold</span>
+            </label>
+          </header>
+          <div class="field-grid">
+            <div class="field">
+              <label for="stage-finalhold-temp">Temp (&deg;C)</label>
+              <input id="stage-finalhold-temp" type="number" inputmode="numeric" value="" />
+            </div>
+            <div class="field">
+              <label for="stage-finalhold-time">Time (s)</label>
+              <input id="stage-finalhold-time" type="number" inputmode="numeric" value="" />
+            </div>
+          </div>
+        </section>
+
+        <div class="button-row" id="builder-actions">
+          <button id="save-profile-button" class="form-action-btn form-action-btn--primary" type="button">Save profile</button>
+          <a class="form-action-btn" href="/profiles-page">Cancel</a>
+        </div>
+        <p id="save-status" class="page-header"></p>
+      </div>
     </main>
   </div>
   <script src="/static/nav.js?v=1"></script>
+  <script src="/static/profiles/builder.js?v=1"></script>
 </body>
 </html>
