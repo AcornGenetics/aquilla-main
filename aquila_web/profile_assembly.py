@@ -49,8 +49,12 @@ def validate_stages(stages: dict) -> list[str]:
 
     for key in ("incubation", "denaturation", "finalHold"):
         stage = stages.get(key)
-        # A missing or malformed optional stage can't be "enabled"; skip it.
-        if not isinstance(stage, dict) or not stage.get("enabled"):
+        # assemble_steps subscripts stage["enabled"], so the key must be present
+        # and boolean (even for disabled stages). A missing/non-dict stage is an error.
+        if not isinstance(stage, dict) or not isinstance(stage.get("enabled"), bool):
+            errors.append(f"{key}: Invalid Value")
+            continue
+        if not stage["enabled"]:
             continue
         check_temp(stage.get("temp"), key)
         check_time(stage.get("time"), key)
@@ -74,6 +78,10 @@ def validate_stages(stages: dict) -> list[str]:
         if not isinstance(sub, dict):
             errors.append(f"{field}: Invalid Value")
             continue
+        # assemble_steps uses sub["name"] as the step description, so require it.
+        name = sub.get("name")
+        if not (isinstance(name, str) and name.strip()):
+            errors.append(f"{field}.name: Invalid Value")
         check_temp(sub.get("temp"), field)
         is_extension = index == len(sub_stages) - 1
         check_time(sub.get("time"), field, EXTENSION_TIME_MIN if is_extension else TIME_MIN)

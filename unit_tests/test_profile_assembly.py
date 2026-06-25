@@ -239,12 +239,54 @@ def test_missing_amplification_returns_error_not_exception():
     assert any("amplification" in e for e in errors)
 
 
-def test_missing_optional_stage_key_does_not_raise():
-    """A stages object missing an optional stage key is tolerated (no crash)."""
+def test_missing_optional_stage_key_is_error():
+    """A missing optional stage key is flagged (assemble_steps subscripts it directly)."""
     stages = _stages()
     del stages["incubation"]
     errors = validate_stages(stages)  # must not raise
-    assert isinstance(errors, list)
+    assert any("incubation" in e for e in errors)
+
+
+# --- Finding #1: a validate-clean payload must be safe to assemble ---
+
+
+def test_substage_missing_name_is_error():
+    """A sub-stage without a name is flagged (assemble_steps reads sub['name'])."""
+    subs = [
+        {"temp": 95, "time": 11},  # no name
+        {"name": "Annealing & Extension", "temp": 60, "time": 38},
+    ]
+    errors = validate_stages(_stages(sub_stages=subs))
+    assert any("subStages[0].name" in e for e in errors)
+
+
+def test_optional_stage_missing_enabled_is_error():
+    """An optional stage without an `enabled` flag is flagged (assemble reads stage['enabled'])."""
+    stages = _stages()
+    stages["incubation"] = {"temp": 37, "time": 600}  # no enabled
+    errors = validate_stages(stages)
+    assert any("incubation" in e for e in errors)
+
+
+def test_non_dict_optional_stage_is_error():
+    """A present-but-non-dict optional stage is flagged, not silently skipped."""
+    stages = _stages()
+    stages["incubation"] = "garbage"
+    errors = validate_stages(stages)
+    assert any("incubation" in e for e in errors)
+
+
+def test_validate_clean_implies_assemble_does_not_raise():
+    """The trust-boundary guarantee: any payload validate_stages calls clean ([])
+    must assemble without raising. Spot-checks the finding-1 shapes."""
+    candidates = [
+        _stages(sub_stages=[{"temp": 95, "time": 11}, {"temp": 60, "time": 38}]),  # no names
+        {**_stages(), "incubation": {"temp": 37, "time": 600}},                     # no enabled
+        {**_stages(), "incubation": "garbage"},                                     # non-dict
+    ]
+    for stages in candidates:
+        if validate_stages(stages) == []:
+            assemble_steps(stages)  # must not raise when validation passed
 
 
 def test_full_profile_ordering_all_stages_enabled():
