@@ -215,6 +215,38 @@ def test_non_numeric_value_is_error():
     assert any("incubation.temp" in e for e in errors)
 
 
+def test_malformed_substages_returns_error_not_exception():
+    """A non-list subStages is reported as an error, never raised (trust boundary)."""
+    stages = _stages()
+    stages["amplification"]["subStages"] = None
+    errors = validate_stages(stages)  # must not raise
+    assert any("subStages" in e for e in errors)
+
+
+def test_substages_with_non_dict_elements_returns_error_not_exception():
+    """Non-dict sub-stage elements are reported, never raised."""
+    stages = _stages()
+    stages["amplification"]["subStages"] = [1, 2]
+    errors = validate_stages(stages)  # must not raise
+    assert errors
+
+
+def test_missing_amplification_returns_error_not_exception():
+    """A stages object missing the amplification key is reported, never raised."""
+    stages = _stages()
+    del stages["amplification"]
+    errors = validate_stages(stages)  # must not raise
+    assert any("amplification" in e for e in errors)
+
+
+def test_missing_optional_stage_key_does_not_raise():
+    """A stages object missing an optional stage key is tolerated (no crash)."""
+    stages = _stages()
+    del stages["incubation"]
+    errors = validate_stages(stages)  # must not raise
+    assert isinstance(errors, list)
+
+
 def test_full_profile_ordering_all_stages_enabled():
     """End-to-end: head -> incubation -> denaturation -> amplification -> final hold -> tail."""
     steps = assemble_steps(_stages(

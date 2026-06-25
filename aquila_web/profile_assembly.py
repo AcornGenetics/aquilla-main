@@ -22,12 +22,20 @@ def _is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+def _is_int(value) -> bool:
+    """True for a real integer value (rejects bools, floats, strings, None)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def validate_stages(stages: dict) -> list[str]:
     """Check a structured `stages` object against the instrument's valid ranges.
 
     Returns a list of human-readable error strings (each naming the offending
     field); an empty list means valid. Disabled optional Stages are skipped.
-    Pure check only — enforcement on POST is A3 (#201).
+
+    This is a trust boundary (A3 #201 calls it on the untrusted POST body), so it
+    reports malformed structure as errors and never raises on a dict input.
+    Pure check only — enforcement on POST is A3.
     """
     errors = []
 
@@ -40,22 +48,32 @@ def validate_stages(stages: dict) -> list[str]:
             errors.append(f"{field}.time: Invalid Value")
 
     for key in ("incubation", "denaturation", "finalHold"):
-        stage = stages[key]
-        if not stage.get("enabled"):
+        stage = stages.get(key)
+        # A missing or malformed optional stage can't be "enabled"; skip it.
+        if not isinstance(stage, dict) or not stage.get("enabled"):
             continue
         check_temp(stage.get("temp"), key)
         check_time(stage.get("time"), key)
 
-    cycles = stages["amplification"].get("cycles")
-    if not (isinstance(cycles, int) and not isinstance(cycles, bool) and CYCLES_MIN <= cycles <= CYCLES_MAX):
+    amplification = stages.get("amplification")
+    if not isinstance(amplification, dict):
+        errors.append("amplification: Invalid Value")
+        return errors
+
+    cycles = amplification.get("cycles")
+    if not (_is_int(cycles) and CYCLES_MIN <= cycles <= CYCLES_MAX):
         errors.append("amplification.cycles: Invalid Value")
 
-    sub_stages = stages["amplification"]["subStages"]
+    sub_stages = amplification.get("subStages")
     if not (isinstance(sub_stages, list) and 2 <= len(sub_stages) <= 3):
         errors.append("amplification.subStages: Invalid Value")
+        return errors
 
     for index, sub in enumerate(sub_stages):
         field = f"amplification.subStages[{index}]"
+        if not isinstance(sub, dict):
+            errors.append(f"{field}: Invalid Value")
+            continue
         check_temp(sub.get("temp"), field)
         is_extension = index == len(sub_stages) - 1
         check_time(sub.get("time"), field, EXTENSION_TIME_MIN if is_extension else TIME_MIN)
