@@ -40,7 +40,7 @@ Replace the generic builder — for new and structured Profiles — with a guide
 24. As an operator, I want a time outside 1–600 s to be rejected with an "Invalid Value" error highlighted in red, so that I can't save an out-of-range duration.
 25. As an operator, I want the extension-bearing Sub-stage to require at least 11 s, so that the automatic optics split is always valid.
 26. As an operator, I want a non-numeric entry in any field to be rejected with an "Invalid Value" error, so that garbage values never reach a run.
-27. As an operator, I want a cycle count outside 1–99 to be rejected with an "Invalid Value" error, so that the cycle count stays valid.
+27. As an operator, I want a cycle count outside 1–50 to be rejected with an "Invalid Value" error, so that the cycle count stays valid.
 28. As an operator, I want validation errors to appear only when I try to save (not while the form is still blank on first load), so that a fresh form doesn't look broken.
 29. As an operator, I want every offending field flagged red simultaneously on a failed save, so that I can see all the problems at once.
 30. As an operator, I want save blocked until every enabled field is valid, so that I can't persist an invalid Profile.
@@ -87,7 +87,7 @@ stages: {
 - Unchecked Stages emit no steps.
 - Top-level keys preserved: `output_dir` ("pcr_data"), `post_in_gui` ("True"), `title`, `labels` {fam, rox}.
 
-**Backend validation.** A pure validation function re-checks the submitted `stages`: temp 25–100 °C; time 1–600 s; extension-bearing Sub-stage time 11–600 s; cycles integer 1–99; Sub-stage count 2 or 3. Disabled Stages are skipped. Invalid input returns an error response (existing 4xx convention on `POST /profiles`), not a written file.
+**Backend validation.** A pure validation function re-checks the submitted `stages`: temp 25–100 °C; time 1–600 s; extension-bearing Sub-stage time 11–600 s; cycles integer 1–50; Sub-stage count 2 or 3. Disabled Stages are skipped. Invalid input returns an error response (existing 4xx convention on `POST /profiles`), not a written file.
 
 **List & detail endpoints.** `GET /profiles` returns a `structured` boolean per Profile (true iff its JSON has `stages`) so the list can route rows. `GET /profiles/details` returns the `stages` object when present so the editor can repopulate.
 
@@ -103,7 +103,7 @@ stages: {
 
 Good tests assert external behavior at the highest available seam — the shape of the written Profile JSON, the HTTP response, and observable DOM behavior — not internal function structure. Three seams, matching the split:
 
-**Seam 1 — Backend assembly (unit).** New `unit_tests/test_profile_assembly.py` exercising the pure `stages → steps` assembly and the validation function directly: head/tail constants and ordering; mid ramp 1.75 before the `repeat`; optics split `(time−10) / 10` on the correct Sub-stage for both 2- and 3-Sub-stage cases; unchecked Stages omitted; Sub-stage names in descriptions; cycles wrapping; Final Temp Hold placement; every validation boundary (25/100 °C, 1/600 s, extension 11 s, cycles 1/99, Sub-stage count). Prior art: `unit_tests/test_estimated_completion.py` (stubs hardware deps, imports `aquila_web.main`, marked `unit`).
+**Seam 1 — Backend assembly (unit).** New `unit_tests/test_profile_assembly.py` exercising the pure `stages → steps` assembly and the validation function directly: head/tail constants and ordering; mid ramp 1.75 before the `repeat`; optics split `(time−10) / 10` on the correct Sub-stage for both 2- and 3-Sub-stage cases; unchecked Stages omitted; Sub-stage names in descriptions; cycles wrapping; Final Temp Hold placement; every validation boundary (25/100 °C, 1/600 s, extension 11 s, cycles 1/50, Sub-stage count). Prior art: `unit_tests/test_estimated_completion.py` (stubs hardware deps, imports `aquila_web.main`, marked `unit`).
 
 **Seam 2 — Backend HTTP contract (contract).** Extend `tests/contract/test_profile_endpoints.py` (FastAPI TestClient, marked `contract`): POST a `stages` payload → 200, written JSON has correct `steps` and a round-trippable `stages`; out-of-range / blank / wrong Sub-stage count → error, nothing written; `GET /profiles` returns `structured` true for a structured Profile and false for a legacy one; `GET /profiles/details` returns `stages` for a structured Profile and omits it for a legacy one. Prior art: existing `test_profile_endpoints.py`, `test_bundled_profiles.py`.
 
