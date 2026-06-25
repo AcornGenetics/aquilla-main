@@ -3,6 +3,8 @@
 "post_in_gui": "True",
 "title": "STEC and EPEC",
 "rox_unavailable": true,
+"time_unavailable": false,
+"estimated_completion_seconds": 3900,
 "steps": [
     {
         "disable": 0,

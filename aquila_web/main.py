@@ -183,8 +183,50 @@ class Item(BaseModel):
 class TimerControl(BaseModel):
     action: str
 
+def estimated_minutes_to_seconds(minutes) -> Optional[int]:
+    """Convert an optional estimated-completion time (minutes) to whole seconds.
+
+    Returns None for missing / blank / non-positive / invalid input, which the
+    caller treats as "no estimate" (Run screen falls back to the stopwatch).
+    """
+    if isinstance(minutes, bool):
+        return None
+    if not isinstance(minutes, (int, float)):
+        return None
+    if minutes != minutes:  # NaN
+        return None
+    if minutes in (float("inf"), float("-inf")):
+        return None
+    if minutes <= 0:
+        return None
+    return int(round(minutes)) * 60
+
+
+def _order_time_fields(profile: dict) -> dict:
+    """Return a copy of *profile* with ``time_unavailable`` and
+    ``estimated_completion_seconds`` placed immediately after ``rox_unavailable``
+    (or after ``title`` when ``rox_unavailable`` is absent)."""
+    time_unavailable = profile.get("time_unavailable", True)
+    estimated = profile.get("estimated_completion_seconds")
+    anchor = "rox_unavailable" if "rox_unavailable" in profile else "title"
+    ordered: dict = {}
+    inserted = False
+    for key, value in profile.items():
+        if key in ("time_unavailable", "estimated_completion_seconds"):
+            continue
+        ordered[key] = value
+        if key == anchor:
+            ordered["time_unavailable"] = time_unavailable
+            ordered["estimated_completion_seconds"] = estimated
+            inserted = True
+    if not inserted:
+        ordered["time_unavailable"] = time_unavailable
+        ordered["estimated_completion_seconds"] = estimated
+    return ordered
+
+
 class ProfileSelect(BaseModel):
-    profile: str 
+    profile: str
 
 class ProfileSave(BaseModel):
     name: str
@@ -192,6 +234,8 @@ class ProfileSave(BaseModel):
     steps: Optional[list] = None
     fam_label: Optional[str] = None
     rox_label: Optional[str] = None
+    # Optional estimated completion time, in minutes. None clears any existing estimate.
+    estimated_minutes: Optional[int] = None
 
 class ProfileDelete(BaseModel):
     profiles: list[str]
@@ -1335,6 +1379,25 @@ async def save_profile(payload: ProfileSave):
     if labels:
         base_profile["labels"] = labels
 
+    # Estimated completion time. The JSON always carries both (time_unavailable
+    # mirrors the rox_unavailable convention — True means no estimate is set):
+    #   time_unavailable              -> bool, True when NO estimate is set
+    #   estimated_completion_seconds  -> int seconds when set, else None
+    # When the caller sends the field we use it; when omitted we keep whatever the
+    # existing profile already had. Either way both keys are always written.
+    fields_set = getattr(payload, "model_fields_set", None) or getattr(payload, "__fields_set__", set())
+    if "estimated_minutes" in fields_set:
+        estimate_seconds = estimated_minutes_to_seconds(payload.estimated_minutes)
+    else:
+        existing = base_profile.get("estimated_completion_seconds")
+        estimate_seconds = existing if (
+            isinstance(existing, (int, float))
+            and not isinstance(existing, bool)
+            and existing > 0
+        ) else None
+    base_profile["time_unavailable"] = estimate_seconds is None
+    base_profile["estimated_completion_seconds"] = estimate_seconds
+
     if not profile_path:
         local_dir = profile_dir / "local"
         local_dir.mkdir(parents=True, exist_ok=True)
@@ -1349,6 +1412,8 @@ async def save_profile(payload: ProfileSave):
             if candidate_path.exists() and candidate_path != profile_path:
                 candidate_path = profile_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
             profile_path = candidate_path
+
+    base_profile = _order_time_fields(base_profile)
 
     try:
         with profile_path.open("w") as f:
@@ -1433,6 +1498,8 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
             "title": data.get("name"),
             "labels": data.get("labels", {}),
             "rox_unavailable": bool(data.get("rox_unavailable", False)),
+            "time_unavailable": bool(data.get("time_unavailable", data.get("estimated_completion_seconds") is None)),
+            "estimated_completion_seconds": data.get("estimated_completion_seconds"),
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
         }
 
@@ -1441,6 +1508,8 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         "title": data.get("title", profile_path.stem),
         "labels": data.get("labels", {}),
         "rox_unavailable": bool(data.get("rox_unavailable", False)),
+        "time_unavailable": bool(data.get("time_unavailable", data.get("estimated_completion_seconds") is None)),
+        "estimated_completion_seconds": data.get("estimated_completion_seconds"),
         "steps": data.get("steps", [])
     }
 

@@ -2,6 +2,8 @@
 "output_dir": "pcr_data",
 "post_in_gui": "True",
 "title": "Hygiena_ramp1.75",
+"time_unavailable": false,
+"estimated_completion_seconds": 4500,
 "steps": [
     {
         "disable": 0,

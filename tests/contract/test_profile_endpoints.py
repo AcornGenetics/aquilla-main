@@ -269,3 +269,99 @@ def test_create_profile_missing_steps_still_saves(client):
     assert resp.status_code != 500
     if resp.status_code == 200 and resp.json().get("ok"):
         _delete_profile(client, resp.json()["id"])
+
+
+# ---------------------------------------------------------------------------
+# Estimated completion time / countdown timer (time_unavailable + seconds)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+def test_create_with_estimate_persists_seconds_and_flag(client):
+    """estimated_minutes=45 stores 2700 seconds and time_unavailable=false."""
+    pid = _create_profile(client, name="Est Persist", estimated_minutes=45)
+    try:
+        data = client.get(f"/profiles/details?id={pid}").json()
+        assert data["estimated_completion_seconds"] == 45 * 60
+        assert data["time_unavailable"] is False
+    finally:
+        _delete_profile(client, pid)
+
+
+@pytest.mark.contract
+def test_create_without_estimate_is_time_unavailable(client):
+    """A profile saved with no estimate reports null seconds and time_unavailable=true."""
+    pid = _create_profile(client, name="No Est")
+    try:
+        data = client.get(f"/profiles/details?id={pid}").json()
+        assert data.get("estimated_completion_seconds") is None
+        assert data["time_unavailable"] is True
+    finally:
+        _delete_profile(client, pid)
+
+
+@pytest.mark.contract
+def test_edit_clears_estimate_when_minutes_null(client):
+    """Re-saving with estimated_minutes=null removes the estimate (back to unavailable)."""
+    pid = _create_profile(client, name="Clear Est", estimated_minutes=30)
+    try:
+        assert (
+            client.get(f"/profiles/details?id={pid}").json()["estimated_completion_seconds"]
+            == 30 * 60
+        )
+        resp = client.post(
+            "/profiles",
+            json={
+                "name": "Clear Est",
+                "profile_id": pid,
+                "steps": MINIMAL_PROFILE["steps"],
+                "estimated_minutes": None,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        pid = resp.json()["id"]
+        data = client.get(f"/profiles/details?id={pid}").json()
+        assert data.get("estimated_completion_seconds") is None
+        assert data["time_unavailable"] is True
+    finally:
+        _delete_profile(client, pid)
+
+
+@pytest.mark.contract
+def test_edit_omitting_estimate_preserves_existing(client):
+    """Saving without the estimated_minutes key must not wipe an existing estimate."""
+    pid = _create_profile(client, name="Preserve Est", estimated_minutes=20)
+    try:
+        resp = client.post(
+            "/profiles",
+            json={
+                "name": "Preserve Est",
+                "profile_id": pid,
+                "steps": MINIMAL_PROFILE["steps"],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        pid = resp.json()["id"]
+        data = client.get(f"/profiles/details?id={pid}").json()
+        assert data["estimated_completion_seconds"] == 20 * 60
+        assert data["time_unavailable"] is False
+    finally:
+        _delete_profile(client, pid)
+
+
+@pytest.mark.contract
+def test_saved_file_always_carries_both_fields_after_anchor(client):
+    """Spec lines 21-22: both keys are always present in the saved JSON, positioned
+    immediately after rox_unavailable (or after title when rox_unavailable is absent)."""
+    from aquila_web import main as web_main
+
+    pid = _create_profile(client, name="Shape Check", estimated_minutes=10)
+    try:
+        profile_path = web_main.resolve_profile_dir() / pid
+        keys = list(json.loads(profile_path.read_text()).keys())
+        assert "time_unavailable" in keys
+        assert "estimated_completion_seconds" in keys
+        anchor = "rox_unavailable" if "rox_unavailable" in keys else "title"
+        assert keys[keys.index(anchor) + 1] == "time_unavailable"
+        assert keys[keys.index("time_unavailable") + 1] == "estimated_completion_seconds"
+    finally:
+        _delete_profile(client, pid)

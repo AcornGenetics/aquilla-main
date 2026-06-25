@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Run</title>
-  <link rel="stylesheet" href="static/styles.css?v=218" />
+  <link rel="stylesheet" href="static/styles.css?v=223" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -85,7 +85,7 @@
       <p class="run-warning is-hidden" id="drawer-warning"></p>
       <section class="run-section run-status-section is-hidden" id="running-section">
         <div class="run-timer">
-          <span class="run-timer__label">Elapsed Time</span>
+          <span class="run-timer__label" id="run-timer-label">Elapsed Time</span>
           <span class="run-timer__value" id="timer">00:00</span>
         </div>
         <button class="run-stop-btn is-hidden" id="stop-run-button" type="button">Stop Run</button>
@@ -156,10 +156,15 @@
           <p>Stopping Run…</p>
         </div>
       </div>
+      <div class="run-modal is-hidden" id="run-finishing-modal" role="alertdialog" aria-live="assertive">
+        <div class="run-modal__card">
+          <p>Finishing Run, Please Wait…</p>
+        </div>
+      </div>
     </main>
   </div>
   <script src="static/nav.js?v=1"></script>
-  <script src="static/script.js?v=67"></script>
+  <script src="static/script.js?v=68"></script>
   <script src="static/keyboard.js?v=14"></script>
 </body>
 </html>

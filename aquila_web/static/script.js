@@ -27,6 +27,10 @@ const stopRunButton = document.getElementById("stop-run-button");
 const runStoppingModal = document.getElementById("run-stopping-modal");
 const runStoppingText = runStoppingModal ? runStoppingModal.querySelector("p") : null;
 let stoppingDotsTimer = null;
+const runFinishingModal = document.getElementById("run-finishing-modal");
+const runFinishingText = runFinishingModal ? runFinishingModal.querySelector("p") : null;
+const runTimerLabel = document.getElementById("run-timer-label");
+let finishingDotsTimer = null;
 
 let seconds = 0;
 let currentScreen = null;
@@ -46,6 +50,13 @@ let stopWarningTimer = null;
 let lastElapsedSeconds = null;
 let isStoppingRun = false;
 const STOPPING_MESSAGE = "Stopping…";
+// Countdown timer (profile estimated completion time).
+// cachedEstimateSeconds: estimate for the currently selected profile (null = none).
+// countdownSeconds: estimate locked in for the active run (null = stopwatch mode).
+let cachedEstimateSeconds = null;
+let countdownSeconds = null;
+const TIMER_LABEL_ELAPSED = "Elapsed Time";
+const TIMER_LABEL_REMAINING = "Time Remaining";
 
 const loadTubeNames = () => {
   try {
@@ -127,21 +138,30 @@ const applyDyeLabels = (labels = {}, isRoxUnavailable = false) => {
   }
 };
 
+const setCachedEstimate = (value) => {
+  cachedEstimateSeconds =
+    typeof value === "number" && isFinite(value) && value > 0 ? value : null;
+};
+
 const loadProfileLabels = async (profileId) => {
   if (!profileId) {
     applyDyeLabels();
+    setCachedEstimate(null);
     return;
   }
   try {
     const response = await fetch(`/profiles/details?id=${encodeURIComponent(profileId)}`);
     if (!response.ok) {
       applyDyeLabels();
+      setCachedEstimate(null);
       return;
     }
     const data = await response.json();
     applyDyeLabels(data.labels || {}, Boolean(data.rox_unavailable));
+    setCachedEstimate(data.estimated_completion_seconds);
   } catch (error) {
     applyDyeLabels();
+    setCachedEstimate(null);
   }
 };
 
@@ -159,7 +179,7 @@ function showPanel(panel) {
 }
 
 function formatElapsed(seconds) {
-  
+
   if( typeof seconds !== "number" || isNaN(seconds)) {
     return;
   }
@@ -172,6 +192,60 @@ function formatElapsed(seconds) {
   //timerEl.textContent = `${mins}:${secs}`;
   if (timerEl){
    timerEl.textContent = formatted;
+  }
+}
+
+// Render a non-negative remaining time (countdown mode). Clamped at 00:00 by caller.
+function formatRemaining(seconds) {
+  if (typeof seconds !== "number" || isNaN(seconds)) {
+    return;
+  }
+  lastElapsedSeconds = seconds;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  const formatted = `${mins}:${secs.toString().padStart(2, "0")}`;
+  if (timerEl) {
+    timerEl.textContent = formatted;
+  }
+}
+
+function setTimerLabel(text) {
+  if (runTimerLabel) {
+    runTimerLabel.textContent = text;
+  }
+}
+
+// Decide countdown vs. stopwatch for the active run and update the timer label.
+// Called when the running screen is entered; locks in the selected profile's estimate.
+function beginTimerMode() {
+  countdownSeconds =
+    typeof cachedEstimateSeconds === "number" && cachedEstimateSeconds > 0
+      ? cachedEstimateSeconds
+      : null;
+  setTimerLabel(countdownSeconds != null ? TIMER_LABEL_REMAINING : TIMER_LABEL_ELAPSED);
+}
+
+// Reset timer to default stopwatch mode (run ended / stopped).
+function resetTimerMode() {
+  countdownSeconds = null;
+  setTimerLabel(TIMER_LABEL_ELAPSED);
+}
+
+// Render the timer for a WebSocket tick, honoring countdown vs. stopwatch mode.
+function renderTimer(elapsed, screen) {
+  if (typeof elapsed !== "number" || isNaN(elapsed)) {
+    return;
+  }
+  if (countdownSeconds != null) {
+    const remaining = countdownSeconds - elapsed;
+    formatRemaining(Math.max(0, remaining));
+    if (remaining <= 0 && screen === "running") {
+      showRunFinishingModal();
+    } else {
+      hideRunFinishingModal();
+    }
+  } else {
+    formatElapsed(elapsed);
   }
 }
 
@@ -432,6 +506,39 @@ function hideRunStoppingModal() {
   }
 }
 
+function showRunFinishingModal() {
+  if (!runFinishingModal) {
+    return;
+  }
+  if (!runFinishingModal.classList.contains("is-hidden")) {
+    return;
+  }
+  runFinishingModal.classList.remove("is-hidden");
+  if (!runFinishingText) {
+    return;
+  }
+  let dots = 1;
+  runFinishingText.textContent = "Finishing Run, Please Wait.";
+  if (finishingDotsTimer) {
+    clearInterval(finishingDotsTimer);
+  }
+  finishingDotsTimer = setInterval(() => {
+    dots = (dots % 3) + 1;
+    runFinishingText.textContent = "Finishing Run, Please Wait" + ".".repeat(dots);
+  }, 500);
+}
+
+function hideRunFinishingModal() {
+  if (!runFinishingModal) {
+    return;
+  }
+  runFinishingModal.classList.add("is-hidden");
+  if (finishingDotsTimer) {
+    clearInterval(finishingDotsTimer);
+    finishingDotsTimer = null;
+  }
+}
+
 function hideRunCompleteModal() {
   if (!runCompleteModal) {
     return;
@@ -493,12 +600,15 @@ function wsHandleMessage(event) {
     const panel = JSON.parse(event.data);
     console.log("Elapsed secs:", panel.elapsed);
     showPanel(panel);
+    // Lock in countdown vs. stopwatch mode on the transition into a run.
+    if (panel.screen === "running" && lastScreen !== "running") {
+      beginTimerMode();
+    }
     if("elapsed" in panel){
       if (!isStoppingRun) {
-        formatElapsed(panel.elapsed);
-      } else if (typeof lastElapsedSeconds === "number") {
-        formatElapsed(lastElapsedSeconds);
+        renderTimer(panel.elapsed, panel.screen);
       }
+      // While stopping, leave the timer frozen at its last value.
     }
     const shouldShowStop =
       panel.screen === "running" &&
@@ -509,6 +619,8 @@ function wsHandleMessage(event) {
       isStoppingRun = false;
       lastElapsedSeconds = null;
       hideRunStoppingModal();
+      hideRunFinishingModal();
+      resetTimerMode();
       if (isDashboard && runWarning && runWarning.textContent === STOPPING_MESSAGE) {
         setRunWarning("");
       }
@@ -700,6 +812,7 @@ async function notifyStopRun(){
       formatElapsed(lastElapsedSeconds);
     }
     setRunWarning(STOPPING_MESSAGE);
+    hideRunFinishingModal();
     showRunStoppingModal();
     try {
         const ret = await fetch("/button/stop", {

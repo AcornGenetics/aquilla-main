@@ -3,6 +3,8 @@
 "post_in_gui": "True",
 "title": "O157 and ESBL",
 "rox_unavailable": true,
+"time_unavailable": false,
+"estimated_completion_seconds": 7920,
 "steps": [
     {
         "disable": 0,
