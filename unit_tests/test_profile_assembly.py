@@ -7,7 +7,7 @@ Spec: specs/backend/spec_profile_step_assembly.md (issue #198).
 """
 import pytest
 
-from aquila_web.profile_assembly import assemble_steps
+from aquila_web.profile_assembly import assemble_steps, validate_stages
 
 pytestmark = pytest.mark.unit
 
@@ -145,6 +145,148 @@ def test_disabled_optional_stages_emit_nothing():
             {"setpoint": 60.5, "duration": 10, "description": "Annealing & Extension"},
         ], "cycles": 40},
     ] + TAIL
+
+
+# ---------------------------------------------------------------------------
+# validate_stages (A2 / #199)
+# ---------------------------------------------------------------------------
+
+
+def test_valid_stages_has_no_errors():
+    """A fully valid, all-stages-enabled profile produces no validation errors."""
+    stages = _stages(
+        incubation={"enabled": True, "temp": 37, "time": 600},
+        denaturation={"enabled": True, "temp": 95, "time": 120},
+        final_hold={"enabled": True, "temp": 25, "time": 60},
+        cycles=40,
+    )
+    assert validate_stages(stages) == []
+
+
+def test_temp_above_max_is_error():
+    """A temperature above 100 °C on an enabled stage is flagged."""
+    stages = _stages(incubation={"enabled": True, "temp": 150, "time": 600})
+    errors = validate_stages(stages)
+    assert any("incubation" in e for e in errors)
+
+
+def test_time_above_max_is_error():
+    """A duration above 600 s on an enabled stage is flagged."""
+    stages = _stages(incubation={"enabled": True, "temp": 37, "time": 999})
+    errors = validate_stages(stages)
+    assert any("incubation.time" in e for e in errors)
+
+
+def test_extension_substage_has_11s_floor_others_dont():
+    """The extension-bearing (last) sub-stage needs time >= 11 so the optics split
+    stays valid; a non-extension sub-stage may go as low as 1 s."""
+    subs = [
+        {"name": "Denaturation", "temp": 95, "time": 5},            # non-extension: 5 s OK
+        {"name": "Annealing & Extension", "temp": 60, "time": 8},   # extension: 8 < 11 -> error
+    ]
+    errors = validate_stages(_stages(sub_stages=subs))
+    assert any("subStages[1].time" in e for e in errors)
+    assert not any("subStages[0].time" in e for e in errors)
+
+
+def test_cycles_above_max_is_error():
+    """A cycle count above 50 is flagged."""
+    errors = validate_stages(_stages(cycles=51))
+    assert any("cycles" in e for e in errors)
+
+
+def test_substage_count_below_two_is_error():
+    """Amplification must have 2 or 3 sub-stages; 1 is flagged."""
+    one = [{"name": "Denaturation", "temp": 95, "time": 11}]
+    errors = validate_stages(_stages(sub_stages=one))
+    assert any("subStages: Invalid Value" in e for e in errors)
+
+
+def test_disabled_stage_with_bad_values_is_skipped():
+    """A disabled optional Stage is not validated even if its values are out of range."""
+    stages = _stages(incubation={"enabled": False, "temp": 999, "time": -5})
+    assert validate_stages(stages) == []
+
+
+def test_non_numeric_value_is_error():
+    """A blank/non-numeric value on an enabled field is flagged, not raised."""
+    stages = _stages(incubation={"enabled": True, "temp": "", "time": 600})
+    errors = validate_stages(stages)
+    assert any("incubation.temp" in e for e in errors)
+
+
+def test_malformed_substages_returns_error_not_exception():
+    """A non-list subStages is reported as an error, never raised (trust boundary)."""
+    stages = _stages()
+    stages["amplification"]["subStages"] = None
+    errors = validate_stages(stages)  # must not raise
+    assert any("subStages" in e for e in errors)
+
+
+def test_substages_with_non_dict_elements_returns_error_not_exception():
+    """Non-dict sub-stage elements are reported, never raised."""
+    stages = _stages()
+    stages["amplification"]["subStages"] = [1, 2]
+    errors = validate_stages(stages)  # must not raise
+    assert errors
+
+
+def test_missing_amplification_returns_error_not_exception():
+    """A stages object missing the amplification key is reported, never raised."""
+    stages = _stages()
+    del stages["amplification"]
+    errors = validate_stages(stages)  # must not raise
+    assert any("amplification" in e for e in errors)
+
+
+def test_missing_optional_stage_key_is_error():
+    """A missing optional stage key is flagged (assemble_steps subscripts it directly)."""
+    stages = _stages()
+    del stages["incubation"]
+    errors = validate_stages(stages)  # must not raise
+    assert any("incubation" in e for e in errors)
+
+
+# --- Finding #1: a validate-clean payload must be safe to assemble ---
+
+
+def test_substage_missing_name_is_error():
+    """A sub-stage without a name is flagged (assemble_steps reads sub['name'])."""
+    subs = [
+        {"temp": 95, "time": 11},  # no name
+        {"name": "Annealing & Extension", "temp": 60, "time": 38},
+    ]
+    errors = validate_stages(_stages(sub_stages=subs))
+    assert any("subStages[0].name" in e for e in errors)
+
+
+def test_optional_stage_missing_enabled_is_error():
+    """An optional stage without an `enabled` flag is flagged (assemble reads stage['enabled'])."""
+    stages = _stages()
+    stages["incubation"] = {"temp": 37, "time": 600}  # no enabled
+    errors = validate_stages(stages)
+    assert any("incubation" in e for e in errors)
+
+
+def test_non_dict_optional_stage_is_error():
+    """A present-but-non-dict optional stage is flagged, not silently skipped."""
+    stages = _stages()
+    stages["incubation"] = "garbage"
+    errors = validate_stages(stages)
+    assert any("incubation" in e for e in errors)
+
+
+def test_validate_clean_implies_assemble_does_not_raise():
+    """The trust-boundary guarantee: any payload validate_stages calls clean ([])
+    must assemble without raising. Spot-checks the finding-1 shapes."""
+    candidates = [
+        _stages(sub_stages=[{"temp": 95, "time": 11}, {"temp": 60, "time": 38}]),  # no names
+        {**_stages(), "incubation": {"temp": 37, "time": 600}},                     # no enabled
+        {**_stages(), "incubation": "garbage"},                                     # non-dict
+    ]
+    for stages in candidates:
+        if validate_stages(stages) == []:
+            assemble_steps(stages)  # must not raise when validation passed
 
 
 def test_full_profile_ordering_all_stages_enabled():

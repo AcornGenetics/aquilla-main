@@ -9,8 +9,87 @@ unit-testable in isolation. See specs/backend/spec_profile_step_assembly.md
 # extension-bearing sub-stage is split into (time - tail) -> optics -> tail (ADR-018).
 OPTICS_TAIL_SECONDS = 10
 
+TEMP_MIN, TEMP_MAX = 25, 100
+TIME_MIN, TIME_MAX = 1, 600
+# The extension-bearing sub-stage holds for (time - OPTICS_TAIL_SECONDS) before the
+# optics read, so its time must leave at least 1 s — hence a higher floor.
+EXTENSION_TIME_MIN = OPTICS_TAIL_SECONDS + 1
+CYCLES_MIN, CYCLES_MAX = 1, 50
 
-def assemble_steps(stages: dict) -> list:
+
+def _is_number(value) -> bool:
+    """True for a real numeric value (rejects bools, strings, None)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_int(value) -> bool:
+    """True for a real integer value (rejects bools, floats, strings, None)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def validate_stages(stages: dict) -> list[str]:
+    """Check a structured `stages` object against the instrument's valid ranges.
+
+    Returns a list of human-readable error strings (each naming the offending
+    field); an empty list means valid. Disabled optional Stages are skipped.
+
+    This is a trust boundary (A3 #201 calls it on the untrusted POST body), so it
+    reports malformed structure as errors and never raises on a dict input.
+    Pure check only — enforcement on POST is A3.
+    """
+    errors = []
+
+    def check_temp(value, field):
+        if not (_is_number(value) and TEMP_MIN <= value <= TEMP_MAX):
+            errors.append(f"{field}.temp: Invalid Value")
+
+    def check_time(value, field, minimum=TIME_MIN):
+        if not (_is_number(value) and minimum <= value <= TIME_MAX):
+            errors.append(f"{field}.time: Invalid Value")
+
+    for key in ("incubation", "denaturation", "finalHold"):
+        stage = stages.get(key)
+        # assemble_steps subscripts stage["enabled"], so the key must be present
+        # and boolean (even for disabled stages). A missing/non-dict stage is an error.
+        if not isinstance(stage, dict) or not isinstance(stage.get("enabled"), bool):
+            errors.append(f"{key}: Invalid Value")
+            continue
+        if not stage["enabled"]:
+            continue
+        check_temp(stage.get("temp"), key)
+        check_time(stage.get("time"), key)
+
+    amplification = stages.get("amplification")
+    if not isinstance(amplification, dict):
+        errors.append("amplification: Invalid Value")
+        return errors
+
+    cycles = amplification.get("cycles")
+    if not (_is_int(cycles) and CYCLES_MIN <= cycles <= CYCLES_MAX):
+        errors.append("amplification.cycles: Invalid Value")
+
+    sub_stages = amplification.get("subStages")
+    if not (isinstance(sub_stages, list) and 2 <= len(sub_stages) <= 3):
+        errors.append("amplification.subStages: Invalid Value")
+        return errors
+
+    for index, sub in enumerate(sub_stages):
+        field = f"amplification.subStages[{index}]"
+        if not isinstance(sub, dict):
+            errors.append(f"{field}: Invalid Value")
+            continue
+        # assemble_steps uses sub["name"] as the step description, so require it.
+        name = sub.get("name")
+        if not (isinstance(name, str) and name.strip()):
+            errors.append(f"{field}.name: Invalid Value")
+        check_temp(sub.get("temp"), field)
+        is_extension = index == len(sub_stages) - 1
+        check_time(sub.get("time"), field, EXTENSION_TIME_MIN if is_extension else TIME_MIN)
+
+    return errors
+
+
+def assemble_steps(stages: dict) -> list[dict]:
     """Expand a structured `stages` object into the full `steps` array.
 
     Weaves the fixed Boilerplate (head/tail, ramps, optics read) together with
