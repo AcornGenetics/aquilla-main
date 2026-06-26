@@ -5,14 +5,35 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      ring_tag:
-        description: Optional ring tag to publish (dev/pilot/prod)
+      action:
+        description: "What to do"
+        required: true
+        default: cut-version
+        type: choice
+        options:
+          - cut-version
+          - assign-ring
+      version:
+        description: "cut-version: exact version (blank = auto patch-bump). assign-ring: version to deploy."
         required: false
         type: string
+      ring:
+        description: "assign-ring only: target ring"
+        required: false
+        type: choice
+        options:
+          - dev
+          - pilot
+          - prod
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+
+# Serialize runs so two releases can't mint the same version concurrently.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   build-and-push:
@@ -20,19 +41,50 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: assign-ring is implemented in #231
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'assign-ring'
+        run: |
+          echo "::error::assign-ring is not available on this workflow yet (lands in #231). Use cut-version here."
+          exit 1
 
       - name: Set build vars
         run: |
           echo "REPO_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
+      - name: Compute version
+        id: ver
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'cut-version'
+        run: |
+          set -euo pipefail
+          latest=$(git tag --list 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
+          existing=$(git tag --list 'v*' | sed 's/^v//' | paste -sd, -)
+          if [ -z "$latest" ] && [ -z "${{ inputs.version }}" ]; then
+            echo "::error::No v* tags exist yet — run the backfill (#233) first, or provide an exact version."
+            exit 1
+          fi
+          next=$(python3 -m aq_lib.version_tool --latest "${latest:-0.0.0}" --custom "${{ inputs.version }}" --existing "$existing") \
+            || { echo "::error::version computation failed (duplicate or invalid version)"; exit 1; }
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Cut version \`v$next\`"
+            echo "- bump: ${{ inputs.version && 'custom' || 'auto patch' }}"
+            echo "- images tagged: \`$next\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Set up QEMU
+        if: github.event_name == 'push' || inputs.action == 'cut-version'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: github.event_name == 'push' || inputs.action == 'cut-version'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
+        if: github.event_name == 'push' || inputs.action == 'cut-version'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -40,6 +92,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push backend image
+        if: github.event_name == 'push' || inputs.action == 'cut-version'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -47,13 +100,14 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            AQ_APP_VERSION=${{ env.SHORT_SHA }}
+            AQ_APP_VERSION=${{ steps.ver.outputs.version || env.SHORT_SHA }}
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}-api:latest
             ghcr.io/${{ env.REPO_LOWER }}-api:${{ github.sha }}
-            ${{ inputs.ring_tag && format('ghcr.io/{0}-api:{1}', env.REPO_LOWER, inputs.ring_tag) || '' }}
+            ${{ steps.ver.outputs.version && format('ghcr.io/{0}-api:{1}', env.REPO_LOWER, steps.ver.outputs.version) || '' }}
 
       - name: Build and push UI image
+        if: github.event_name == 'push' || inputs.action == 'cut-version'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -63,4 +117,16 @@ jobs:
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}-ui:latest
             ghcr.io/${{ env.REPO_LOWER }}-ui:${{ github.sha }}
-            ${{ inputs.ring_tag && format('ghcr.io/{0}-ui:{1}', env.REPO_LOWER, inputs.ring_tag) || '' }}
+            ${{ steps.ver.outputs.version && format('ghcr.io/{0}-ui:{1}', env.REPO_LOWER, steps.ver.outputs.version) || '' }}
+
+      - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'cut-version'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          v="v${{ steps.ver.outputs.version }}"
+          gh release create "$v" \
+            --title "$v" \
+            --notes "Release $v — image tag \`${{ steps.ver.outputs.version }}\` (commit ${{ github.sha }})." \
+            --target "${{ github.sha }}"
