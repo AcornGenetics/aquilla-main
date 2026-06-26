@@ -52,10 +52,12 @@ docker compose --env-file /opt/aquila/config/device.env -f /opt/fleet/docker-com
 
 ## Ring Promotion
 
-Use the GitHub Actions workflows:
+Use the **build-and-push-images** workflow's `action` input:
 
-- `build-and-push-images`: optional `ring_tag` input to publish `dev/pilot/prod`
-- `promote-images`: retag `source_tag` to `target_tag`
+- `action=cut-version`: mint a version, build `:<version>` images, create a GitHub Release
+- `action=assign-ring`: retag a built `:<version>` onto `dev/pilot/prod` by digest (gated — refuses un-versioned images)
+
+See `docs/deployment/ring_rollout.md` for the full flow.
 
 ## Watchtower API Example
 

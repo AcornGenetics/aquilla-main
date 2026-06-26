@@ -44,12 +44,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: assign-ring is implemented in #231
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'assign-ring'
-        run: |
-          echo "::error::assign-ring is not available on this workflow yet (lands in #231). Use cut-version here."
-          exit 1
-
       - name: Set build vars
         run: |
           echo "REPO_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
@@ -66,7 +60,7 @@ jobs:
             echo "::error::No v* tags exist yet — run the backfill (#233) first, or provide an exact version."
             exit 1
           fi
-          next=$(python3 -m aq_lib.version_tool --latest "${latest:-0.0.0}" --custom "${{ inputs.version }}" --existing "$existing") \
+          next=$(python3 -m aq_lib.version_tool next --latest "${latest:-0.0.0}" --custom "${{ inputs.version }}" --existing "$existing") \
             || { echo "::error::version computation failed (duplicate or invalid version)"; exit 1; }
           echo "version=$next" >> "$GITHUB_OUTPUT"
           {
@@ -80,16 +74,41 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        if: github.event_name == 'push' || inputs.action == 'cut-version'
+        if: github.event_name == 'push' || inputs.action == 'cut-version' || inputs.action == 'assign-ring'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        if: github.event_name == 'push' || inputs.action == 'cut-version'
+        if: github.event_name == 'push' || inputs.action == 'cut-version' || inputs.action == 'assign-ring'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assign version to ring
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'assign-ring'
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          ring="${{ inputs.ring }}"
+          if [ -z "$version" ] || [ -z "$ring" ]; then
+            echo "::error::assign-ring requires both 'version' and 'ring'."
+            exit 1
+          fi
+          api="ghcr.io/${REPO_LOWER}-api"
+          ui="ghcr.io/${REPO_LOWER}-ui"
+          # image-exists gate: probe the registry for the :<version> image
+          if docker buildx imagetools inspect "${api}:${version}" >/dev/null 2>&1; then
+            existing="$version"
+          else
+            existing=""
+          fi
+          python3 -m aq_lib.version_tool assign --version "$version" --ring "$ring" --existing "$existing" \
+            || { echo "::error::ring assignment refused (no image for that version, or invalid ring)"; exit 1; }
+          # retag both images by digest — no rebuild, baked AQ_APP_VERSION preserved
+          docker buildx imagetools create --tag "${api}:${ring}" "${api}:${version}"
+          docker buildx imagetools create --tag "${ui}:${ring}" "${ui}:${version}"
+          echo "## Assigned \`$version\` -> \`$ring\` (api + ui)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build and push backend image
         if: github.event_name == 'push' || inputs.action == 'cut-version'
