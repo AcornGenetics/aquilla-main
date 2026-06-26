@@ -226,6 +226,37 @@ def _order_time_fields(profile: dict) -> dict:
     return ordered
 
 
+# Canonical top-level key order for structured profiles (issue #213 / A4):
+# metadata first, then the human-authored stages, then the derived steps last.
+CANONICAL_PROFILE_KEY_ORDER = (
+    "output_dir",
+    "post_in_gui",
+    "title",
+    "rox_unavailable",
+    "time_unavailable",
+    "estimated_completion_seconds",
+    "labels",
+    "stages",
+    "steps",
+)
+
+
+def _order_profile_keys(profile: dict) -> dict:
+    """Return a copy of *profile* with top-level keys in CANONICAL_PROFILE_KEY_ORDER.
+
+    Only keys that are present are emitted (no injection). Any keys not in the
+    canonical list are preserved and appended in their original relative order
+    (never dropped). See spec_profile_key_order.md."""
+    ordered: dict = {}
+    for key in CANONICAL_PROFILE_KEY_ORDER:
+        if key in profile:
+            ordered[key] = profile[key]
+    for key, value in profile.items():
+        if key not in ordered:
+            ordered[key] = value
+    return ordered
+
+
 class ProfileSelect(BaseModel):
     profile: str
 
@@ -1438,7 +1469,12 @@ async def save_profile(payload: ProfileSave):
                 candidate_path = profile_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
             profile_path = candidate_path
 
-    base_profile = _order_time_fields(base_profile)
+    # Structured profiles (issue #213) get the full canonical key order; legacy
+    # steps-based saves keep the narrower time-field ordering unchanged.
+    if "stages" in base_profile:
+        base_profile = _order_profile_keys(base_profile)
+    else:
+        base_profile = _order_time_fields(base_profile)
 
     try:
         with profile_path.open("w") as f:
