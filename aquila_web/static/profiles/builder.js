@@ -8,6 +8,12 @@
   // Stages with an enable checkbox. Amplification is always present (no toggle).
   var OPTIONAL_STAGES = ["incubation", "denaturation", "finalhold"];
 
+  // When the URL carries ?id= (or ?profile=) the builder is editing an existing
+  // structured Profile: it repopulates from `stages` and saves in place (#203).
+  var editId =
+    new URLSearchParams(window.location.search).get("id") ||
+    new URLSearchParams(window.location.search).get("profile");
+
   function valueInputs(card) {
     // Every editable value field in the card (temp/time) — never the checkbox.
     return card.querySelectorAll("input:not([type=checkbox])");
@@ -81,9 +87,10 @@
   }
 
   // Build the POST body. All four stage keys are always present; an unchecked
-  // Stage rides along as enabled:false with its preserved values.
+  // Stage rides along as enabled:false with its preserved values. In edit mode
+  // profile_id is included so the backend updates that profile in place.
   function buildPayload() {
-    return {
+    var payload = {
       name: text("profile-name"),
       fam_label: text("profile-fam-label"),
       rox_label: text("profile-rox-label"),
@@ -98,10 +105,105 @@
         finalHold: optionalStage("finalhold"),
       },
     };
+    if (editId) payload.profile_id = editId;
+    return payload;
+  }
+
+  // ---- Validation (issue #203) ----------------------------------------------
+  // Ranges mirror aquila_web/profile_assembly.py::validate_stages so a
+  // client-valid form never trips the server's 400 (which stays the safety net).
+  var TEMP_MIN = 25, TEMP_MAX = 100;
+  var TIME_MIN = 1, TIME_MAX = 600, EXTENSION_TIME_MIN = 11;
+  var CYCLES_MIN = 1, CYCLES_MAX = 50;
+
+  function validTemp(v) {
+    return typeof v === "number" && v >= TEMP_MIN && v <= TEMP_MAX;
+  }
+  function validTime(v, min) {
+    return typeof v === "number" && v >= min && v <= TIME_MAX;
+  }
+  function validCycles(v) {
+    return Number.isInteger(v) && v >= CYCLES_MIN && v <= CYCLES_MAX;
+  }
+
+  // Ensure a hidden "Invalid Value" message exists right after the input.
+  function errorEl(input) {
+    var next = input.nextElementSibling;
+    if (next && next.classList.contains("field-error")) return next;
+    var p = document.createElement("p");
+    p.className = "field-error is-hidden";
+    p.textContent = "Invalid Value";
+    input.insertAdjacentElement("afterend", p);
+    return p;
+  }
+
+  function setFieldValid(id, ok) {
+    var input = document.getElementById(id);
+    if (!input) return ok;
+    input.classList.toggle("is-invalid", !ok);
+    errorEl(input).classList.toggle("is-hidden", ok);
+    return ok;
+  }
+
+  // Est. Time (Min) — optional; blank is fine, otherwise a positive integer.
+  // Mirrors the legacy editor's check (edit.js) so the field behaves the same.
+  function validEstimated() {
+    var el = document.getElementById("profile-estimated-minutes");
+    if (!el) return true;
+    var raw = el.value.trim();
+    if (raw === "") return true;
+    var parsed = Math.round(Number(raw));
+    return Number.isFinite(parsed) && parsed > 0;
+  }
+
+  function setEstimatedValid(ok) {
+    var input = document.getElementById("profile-estimated-minutes");
+    var err = document.getElementById("profile-estimated-error");
+    if (input) input.classList.toggle("is-invalid", !ok);
+    if (err) err.classList.toggle("is-hidden", ok);
+    return ok;
+  }
+
+  // Validate every enabled-Stage field; flag all offenders at once. Disabled
+  // Stages are skipped (and any stale error on them cleared). Returns validity.
+  function validateForm() {
+    var valid = setEstimatedValid(validEstimated());
+
+    OPTIONAL_STAGES.forEach(function (key) {
+      var box = document.getElementById("stage-" + key + "-enabled");
+      var enabled = !box || box.checked;
+      if (!enabled) {
+        setFieldValid("stage-" + key + "-temp", true);
+        setFieldValid("stage-" + key + "-time", true);
+        return;
+      }
+      valid = setFieldValid("stage-" + key + "-temp", validTemp(num("stage-" + key + "-temp"))) && valid;
+      valid = setFieldValid("stage-" + key + "-time", validTime(num("stage-" + key + "-time"), TIME_MIN)) && valid;
+    });
+
+    valid = setFieldValid("stage-amp-cycles", validCycles(num("stage-amp-cycles"))) && valid;
+
+    var rows = document.querySelectorAll(".amp-substage");
+    for (var i = 0; i < rows.length; i++) {
+      var idx = rows[i].getAttribute("data-sub");
+      var isLast = i === rows.length - 1; // extension-bearing Sub-stage
+      var minTime = isLast ? EXTENSION_TIME_MIN : TIME_MIN;
+      valid = setFieldValid("stage-amp-sub-" + idx + "-temp", validTemp(num("stage-amp-sub-" + idx + "-temp"))) && valid;
+      valid = setFieldValid("stage-amp-sub-" + idx + "-time", validTime(num("stage-amp-sub-" + idx + "-time"), minTime)) && valid;
+    }
+
+    return valid;
   }
 
   async function saveProfile() {
     var status = document.getElementById("save-status");
+    // Validate on save only (never on load); block + flag every offender.
+    if (!validateForm()) {
+      var firstBad = document.querySelector(".is-invalid");
+      if (firstBad) firstBad.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (status) status.textContent = "";
+      return;
+    }
     if (status) status.textContent = "Saving...";
     try {
       var response = await fetch("/profiles", {
@@ -198,6 +300,60 @@
     showAddTab(true);
   }
 
+  // ---- Edit round-trip (issue #203) -----------------------------------------
+
+  function setVal(id, value) {
+    var el = document.getElementById(id);
+    if (el && value !== undefined && value !== null) el.value = value;
+  }
+
+  function populateOptionalStage(key, stage) {
+    if (!stage) return;
+    var box = document.getElementById("stage-" + key + "-enabled");
+    if (box) box.checked = !!stage.enabled;
+    setVal("stage-" + key + "-temp", stage.temp);
+    setVal("stage-" + key + "-time", stage.time);
+    syncStage(key); // grey/disable when restored as unchecked
+  }
+
+  // Repopulate the builder from an existing structured Profile's `stages`.
+  async function loadForEdit(id) {
+    try {
+      var resp = await fetch("/profiles/details?id=" + encodeURIComponent(id));
+      if (!resp.ok) return;
+      var data = await resp.json();
+      var stages = data.stages;
+      if (!stages) return; // not a Structured Profile — leave blank defaults
+
+      var titleText = document.getElementById("builder-title-text");
+      if (titleText) titleText.textContent = "Edit Profile";
+
+      setVal("profile-name", data.title);
+      var labels = data.labels || {};
+      setVal("profile-fam-label", labels.fam);
+      setVal("profile-rox-label", labels.rox);
+      var secs = data.estimated_completion_seconds;
+      if (typeof secs === "number" && secs > 0) {
+        setVal("profile-estimated-minutes", Math.round(secs / 60));
+      }
+
+      populateOptionalStage("incubation", stages.incubation);
+      populateOptionalStage("denaturation", stages.denaturation);
+      populateOptionalStage("finalhold", stages.finalHold);
+
+      var amp = stages.amplification || {};
+      setVal("stage-amp-cycles", amp.cycles);
+      var subs = amp.subStages || [];
+      if (subs.length === 3) addSubstage(); // build + name the third row
+      for (var i = 0; i < subs.length; i++) {
+        setVal("stage-amp-sub-" + i + "-temp", subs[i].temp);
+        setVal("stage-amp-sub-" + i + "-time", subs[i].time);
+      }
+    } catch (e) {
+      console.error("Failed to load profile for edit", e);
+    }
+  }
+
   // ---- Boot -----------------------------------------------------------------
 
   function init() {
@@ -216,6 +372,8 @@
 
     var saveButton = document.getElementById("save-profile-button");
     if (saveButton) saveButton.addEventListener("click", saveProfile);
+
+    if (editId) loadForEdit(editId);
   }
 
   if (document.readyState === "loading") {

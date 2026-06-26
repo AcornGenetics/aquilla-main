@@ -2784,6 +2784,14 @@ a:active {
   opacity: 0.5;
 }
 
+/* A field that failed save-time validation (issue #203). Red border pairs with
+   the "Invalid Value" .field-error text — colour is never the only signal. The
+   `.field input` qualifier beats the base `.field input` border specificity. */
+.field input.is-invalid,
+.is-invalid {
+  border: 2px solid #dc2626;
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -2821,10 +2829,12 @@ a:active {
   color: #64748b;
 }
 
+/* `.card .field-error` qualifier beats `.card p`'s grey, so the message is red. */
+.card .field-error,
 .field-error {
   margin: 0;
   font-size: 12px;
-  color: #b91c1c;
+  color: #dc2626;
 }
 
 .profile-steps {
