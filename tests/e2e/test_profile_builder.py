@@ -27,7 +27,8 @@ def _goto_builder(page, base_url):
     except Exception as exc:
         pytest.skip(f"Backend not reachable at {base_url}: {exc}")
     page.wait_for_load_state("domcontentloaded")
-    # The builder renders its Stages from JS; wait for the first card to attach.
+    # The Stage cards are static HTML in builder.html (builder.js only wires
+    # behavior); wait for the shell to attach before driving it.
     page.wait_for_selector("#stage-incubation", state="attached", timeout=5_000)
 
 
@@ -157,3 +158,125 @@ def test_valid_save_posts_stages_and_redirects(page, base_url):
     stale = [p["id"] for p in listing if "B1_Happy_Path" in p.get("id", "")]
     if stale:
         page.request.post(f"{base_url}/profiles/delete", data={"profiles": stale})
+
+
+# ---------------------------------------------------------------------------
+# Amplification Sub-stages — add/remove + rename + cycles (issue #202, B2)
+# ---------------------------------------------------------------------------
+
+TWO_STEP_NAMES = ["Denaturation", "Annealing & Extension"]
+THREE_STEP_NAMES = ["Denaturation", "Annealing", "Extension"]
+
+
+def _substage_names(page):
+    return page.locator(".amp-substage .amp-substage__name").all_inner_texts()
+
+
+def test_amplification_starts_two_step_with_add_tab(page, base_url):
+    """A fresh builder shows two Sub-stages and the add tab, with no remove X."""
+    _goto_builder(page, base_url)
+
+    assert page.locator(".amp-substage").count() == 2
+    assert _substage_names(page) == TWO_STEP_NAMES
+
+    # The add tab is shown; there is no remove control until a third exists.
+    assert page.locator("#amp-add-substage").is_visible(), "add tab should show at two"
+    assert page.locator("#amp-remove-substage").count() == 0, "no X at two Sub-stages"
+
+
+def test_adding_third_substage_renames_appends_and_hides_add_tab(page, base_url):
+    """Adding a third Sub-stage renames the 2nd to 'Annealing', appends a blank
+    'Extension' carrying its X, and hides the add tab."""
+    _goto_builder(page, base_url)
+
+    page.locator("#amp-add-substage").click()
+
+    assert page.locator(".amp-substage").count() == 3
+    assert _substage_names(page) == THREE_STEP_NAMES
+
+    # The appended Extension Sub-stage starts blank.
+    assert page.locator("#stage-amp-sub-2-temp").input_value() == ""
+    assert page.locator("#stage-amp-sub-2-time").input_value() == ""
+
+    # At three: the add tab is hidden and the Extension row carries the X.
+    assert not page.locator("#amp-add-substage").is_visible(), "add tab hidden at three"
+    assert page.locator("#amp-remove-substage").is_visible(), "Extension X should show"
+
+
+def test_removing_third_substage_via_x_reverts_to_two_step(page, base_url):
+    """The Extension row's X removes the third Sub-stage, reverts the 2nd's name,
+    and brings the add tab back."""
+    _goto_builder(page, base_url)
+
+    page.locator("#amp-add-substage").click()      # 2 -> 3
+    assert page.locator(".amp-substage").count() == 3
+
+    page.locator("#amp-remove-substage").click()   # X on the Extension row, 3 -> 2
+
+    assert page.locator(".amp-substage").count() == 2
+    assert page.locator("#stage-amp-sub-2-name").count() == 0, "third row should be gone"
+    assert _substage_names(page) == TWO_STEP_NAMES
+
+    # Back at two: the add tab returns and the X is gone.
+    assert page.locator("#amp-add-substage").is_visible(), "add tab should return"
+    assert page.locator("#amp-remove-substage").count() == 0, "X should be gone at two"
+
+
+def test_three_step_save_posts_three_substages(page, base_url):
+    """With a third Sub-stage added, Save POSTs all three in order with their
+    three-step names and the cycle count."""
+    _goto_builder(page, base_url)
+
+    page.locator("#profile-name").fill("B2 Three Step")
+    page.locator("#stage-amp-cycles").fill("35")
+    page.locator("#amp-add-substage").click()  # -> three Sub-stages
+
+    page.locator("#stage-amp-sub-0-temp").fill("95")
+    page.locator("#stage-amp-sub-0-time").fill("10")
+    page.locator("#stage-amp-sub-1-temp").fill("60")
+    page.locator("#stage-amp-sub-1-time").fill("30")
+    page.locator("#stage-amp-sub-2-temp").fill("72")
+    page.locator("#stage-amp-sub-2-time").fill("20")
+
+    def is_save_post(req):
+        return req.url.rstrip("/").endswith("/profiles") and req.method == "POST"
+
+    with page.expect_request(is_save_post) as req_info, \
+            page.expect_response(lambda r: is_save_post(r.request)) as resp_info:
+        page.locator("#save-profile-button").click()
+
+    amp = req_info.value.post_data_json["stages"]["amplification"]
+    assert amp["cycles"] == 35
+    assert [s["name"] for s in amp["subStages"]] == THREE_STEP_NAMES
+    assert amp["subStages"][0] == {"name": "Denaturation", "temp": 95, "time": 10}
+    assert amp["subStages"][1] == {"name": "Annealing", "temp": 60, "time": 30}
+    assert amp["subStages"][2] == {"name": "Extension", "temp": 72, "time": 20}
+
+    assert resp_info.value.status == 200
+    page.wait_for_url("**/profiles-page", timeout=5_000)
+
+    listing = page.request.get(f"{base_url}/profiles").json()
+    stale = [p["id"] for p in listing if "B2_Three_Step" in p.get("id", "")]
+    if stale:
+        page.request.post(f"{base_url}/profiles/delete", data={"profiles": stale})
+
+
+def test_touch_targets_meet_kiosk_minimum(page, base_url):
+    """The add tab and each Stage enable toggle meet the >=44x44px kiosk
+    touch-target rule (spec §6).
+
+    The Extension row's X is intentionally exempt: it is kept compact so the
+    Sub-stage spacing stays uniform (issue #202 follow-up), accepting a smaller
+    hit area for that one rarely-used control.
+    """
+    _goto_builder(page, base_url)
+    MIN = 44
+
+    add_box = page.locator("#amp-add-substage").bounding_box()
+    assert add_box["width"] >= MIN and add_box["height"] >= MIN, f"add tab small: {add_box}"
+
+    toggles = page.locator(".stage__toggle")
+    assert toggles.count() == 3
+    for i in range(toggles.count()):
+        box = toggles.nth(i).bounding_box()
+        assert box["height"] >= MIN, f"stage toggle {i} too short: {box['height']}px"
