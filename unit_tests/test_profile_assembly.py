@@ -7,7 +7,7 @@ Spec: specs/backend/spec_profile_step_assembly.md (issue #198).
 """
 import pytest
 
-from aquila_web.profile_assembly import assemble_steps, validate_stages
+from aquila_web.profile_assembly import assemble_steps, validate_stages, _is_number
 
 pytestmark = pytest.mark.unit
 
@@ -150,6 +150,16 @@ def test_disabled_optional_stages_emit_nothing():
 # ---------------------------------------------------------------------------
 # validate_stages (A2 / #199)
 # ---------------------------------------------------------------------------
+
+
+def test_is_number_rejects_non_finite():
+    """NaN/Infinity are floats but not usable numeric values — reject them so they
+    can't slip through validation (defense-in-depth for the non-finite blocker)."""
+    assert _is_number(float("nan")) is False
+    assert _is_number(float("inf")) is False
+    assert _is_number(float("-inf")) is False
+    assert _is_number(95) is True
+    assert _is_number(60.5) is True
 
 
 def test_valid_stages_has_no_errors():

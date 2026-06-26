@@ -503,6 +503,37 @@ def test_list_profiles_includes_structured_flag(client):
 
 
 @pytest.mark.contract
+def test_nonfinite_in_disabled_stage_rejected_not_persisted(client):
+    """A non-finite value (NaN/Infinity) anywhere — even in a DISABLED stage that
+    validation skips — must be rejected with 400 and never written to disk.
+
+    Regression for the trust-boundary blocker: such a value used to pass
+    validation, persist as literal NaN/Infinity, and 500 every later read.
+    """
+    from aquila_web import main as web_main
+
+    bad = json.loads(json.dumps(SAMPLE_STAGES))  # deep copy
+    bad["incubation"] = {"enabled": False, "temp": "__NAN__", "time": "__INF__"}
+    # Build a raw body with literal NaN/Infinity tokens — a crafted client can send
+    # these (Starlette's json.loads accepts them); httpx's json= encoder cannot.
+    body = json.dumps({"name": "NonFinite Poison", "fam_label": "FAM",
+                       "rox_label": "ROX", "stages": bad})
+    body = body.replace('"__NAN__"', "NaN").replace('"__INF__"', "Infinity")
+    resp = client.post("/profiles", content=body,
+                       headers={"Content-Type": "application/json"})
+    try:
+        assert resp.status_code == 400, f"expected 400, got {resp.status_code}"
+        # nothing written: the poison profile must not appear in the listing
+        ids = [p["id"] for p in client.get("/profiles").json()]
+        assert not any("NonFinite_Poison" in i for i in ids)
+    finally:
+        # defensive: remove any poison file a failing (pre-fix) run may have written,
+        # since it would 500 every subsequent read of the listing/details
+        for p in (web_main.resolve_profile_dir() / "local").glob("NonFinite_Poison*.json"):
+            p.unlink(missing_ok=True)
+
+
+@pytest.mark.contract
 def test_structured_profile_keys_in_canonical_order(client):
     """A saved structured profile writes its top-level keys in canonical order:
     output_dir, post_in_gui, title, countdown fields, labels, stages, steps."""

@@ -1476,9 +1476,21 @@ async def save_profile(payload: ProfileSave):
     else:
         base_profile = _order_time_fields(base_profile)
 
+    # Serialize first with allow_nan=False so a non-finite value (NaN/Infinity)
+    # anywhere — including a disabled stage that validation skips — fails loudly
+    # with a 400 instead of writing invalid JSON that 500s on every later read.
+    # Serializing before opening the file also prevents truncating an existing
+    # profile when re-saving an edit that turns out to be invalid.
+    try:
+        profile_text = json.dumps(base_profile, indent=2, allow_nan=False)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail={"errors": ["Profile contains non-finite numeric values (NaN/Infinity)."]},
+        )
     try:
         with profile_path.open("w") as f:
-            json.dump(base_profile, f, indent=2)
+            f.write(profile_text)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to save profile")
 

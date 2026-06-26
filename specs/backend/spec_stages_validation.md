@@ -38,6 +38,8 @@ Validated only for **enabled** Stages (Amplification is always enabled). Disable
 
 Constants per ADR-018. Non-numeric or missing values for enabled fields are errors (not exceptions).
 
+**Non-finite guard (#219):** `_is_number` rejects `NaN`/`Infinity`, and `save_profile` serializes with `allow_nan=False` *before* writing — so a non-finite value anywhere (including a disabled stage that validation skips) fails as a 400 with nothing written, rather than persisting literal `NaN`/`Infinity` that 500s on every later read.
+
 ---
 
 ## 8. Unit Tests
