@@ -2470,9 +2470,23 @@ a:active {
   gap: 10px;
 }
 
+/* Pre-paint read-only gating for the Legacy viewer (issue #211): hide the
+   editable sections + the Edit View toggle and reveal the summary before edit.js
+   runs, so the editable editor never flashes on a ?view=1 load. */
+html.view-only .profile-edit,
+html.view-only #toggle-read-view {
+  display: none;
+}
+
+html.view-only #profile-summary {
+  display: block;
+}
+
 .profile-summary-step {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  /* Fixed column tracks so every step row aligns regardless of field count —
+     no field-count zig-zag (issue #211). 5 = the max fields any step type has. */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   padding: 10px 12px;
   border-radius: 10px;
