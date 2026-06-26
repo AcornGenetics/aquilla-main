@@ -145,11 +145,11 @@ class Drawer ( Motor ):
 
     def open( self ):
         self.home()
-        ret = self.move_abs_wo_home_flag ( self.open_steps, 0.0005 ) #Changed to 0.0005 from 0.002 - Ryan 04/22/26
+        ret = self.move_abs_wo_home_flag ( self.open_steps, 0.0003 ) #Changed to 0.0005 from 0.002 - Ryan 04/22/26
 
     def read( self ):
         self.home()
-        ret = self.move_wo_home_flag ( self.read_steps, 0.001 )
+        ret = self.move_wo_home_flag ( self.read_steps, 0.0005 )
 
 class Axis ( Motor ):
 
