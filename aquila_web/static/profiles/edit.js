@@ -407,8 +407,10 @@ const applyViewMode = () => {
     summarySection.classList.toggle("is-hidden", !isReadView);
   }
   if (toggleReadViewButton) {
-    // Read-only Legacy view has no escape hatch back to editing (issue #211).
-    toggleReadViewButton.classList.toggle("is-hidden", isReadView);
+    // Hide the toggle only for URL-driven read-only entry (?view=1) — a Legacy
+    // Profile has no escape hatch back to editing (issue #211). In normal edit
+    // mode the in-page Read View / Edit View round-trip is preserved.
+    toggleReadViewButton.classList.toggle("is-hidden", viewMode);
     toggleReadViewButton.textContent = isReadView ? "Edit View" : "Read View";
   }
   if (pageTitle) {
