@@ -28,14 +28,15 @@ def _seed_event(local_db, tmp_path):
     local_db.enqueue_event("run_complete", {"run_name": "Run 1", "profile": "p.json", "result": "ok"})
 
 
-class TestApiKeyHeader:
-    """AQ_SYNC_API_KEY is sent as x-api-key header."""
+class TestClientCertificate:
+    """Sync authenticates with the Device Certificate (mTLS), not x-api-key."""
 
-    def test_api_key_sent_as_header_when_set(self, db_client, tmp_path, monkeypatch):
+    def test_presents_client_cert_and_sends_no_api_key(self, db_client, tmp_path, monkeypatch):
         client, local_db = db_client
         _seed_event(local_db, tmp_path)
         monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
-        monkeypatch.setenv("AQ_SYNC_API_KEY", "test-fleet-key-abc")
+        monkeypatch.setenv("AQ_SYNC_CLIENT_CERT", "/opt/aquila/config/device.crt")
+        monkeypatch.setenv("AQ_SYNC_CLIENT_KEY", "/opt/aquila/config/device.key")
 
         captured = {}
 
@@ -44,18 +45,27 @@ class TestApiKeyHeader:
             def raise_for_status(self): pass
 
         def _capture(*a, **kw):
-            captured["headers"] = kw.get("headers", {})
+            captured.update(kw)
             return _OK()
 
         monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
         client.post("/sync/flush")
-        assert captured["headers"].get("x-api-key") == "test-fleet-key-abc"
 
-    def test_no_api_key_header_when_env_var_not_set(self, db_client, tmp_path, monkeypatch):
+        # The client certificate tuple is presented for the mTLS handshake...
+        assert captured["cert"] == (
+            "/opt/aquila/config/device.crt",
+            "/opt/aquila/config/device.key",
+        )
+        # ...and the retired Fleet API Key header is gone.
+        assert "x-api-key" not in captured.get("headers", {})
+
+    def test_lingering_api_key_env_var_is_ignored(self, db_client, tmp_path, monkeypatch):
+        # A stale AQ_SYNC_API_KEY left in the environment must never resurrect
+        # the retired header — the key model is gone, not merely defaulted off.
         client, local_db = db_client
         _seed_event(local_db, tmp_path)
         monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
-        monkeypatch.delenv("AQ_SYNC_API_KEY", raising=False)
+        monkeypatch.setenv("AQ_SYNC_API_KEY", "stale-fleet-key")
 
         captured = {}
 
@@ -64,11 +74,12 @@ class TestApiKeyHeader:
             def raise_for_status(self): pass
 
         def _capture(*a, **kw):
-            captured["headers"] = kw.get("headers", {})
+            captured.update(kw)
             return _OK()
 
         monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
         client.post("/sync/flush")
+
         assert "x-api-key" not in captured.get("headers", {})
 
 
