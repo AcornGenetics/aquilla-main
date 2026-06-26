@@ -5,6 +5,8 @@ unit-testable in isolation. See specs/backend/spec_profile_step_assembly.md
 (#198) and ADR-018 for the fixed Boilerplate constants and ordering.
 """
 
+import math
+
 # Seconds held at the extension temperature after the optics read fires; the
 # extension-bearing sub-stage is split into (time - tail) -> optics -> tail (ADR-018).
 OPTICS_TAIL_SECONDS = 10
@@ -18,8 +20,12 @@ CYCLES_MIN, CYCLES_MAX = 1, 50
 
 
 def _is_number(value) -> bool:
-    """True for a real numeric value (rejects bools, strings, None)."""
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """True for a real, finite numeric value (rejects bools, strings, None, NaN, Inf)."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
 
 
 def _is_int(value) -> bool:
