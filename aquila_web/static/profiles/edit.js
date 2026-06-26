@@ -230,7 +230,34 @@ const renderSteps = () => {
   renderSummary();
 };
 
+// Read-view header: profile name, FAM/ROX labels, and estimated minutes when set
+// (issue #211). Values come from the loaded form fields.
+const renderSummaryMeta = () => {
+  const meta = document.getElementById("profile-summary-meta");
+  if (!meta) return;
+  const items = [
+    { label: "Profile Name", value: nameInput ? nameInput.value : "" },
+    { label: "FAM Label", value: famLabelInput ? famLabelInput.value : "" },
+    { label: "ROX Label", value: roxLabelInput ? roxLabelInput.value : "" }
+  ];
+  const est = estimatedMinutesInput ? estimatedMinutesInput.value.trim() : "";
+  if (est !== "" && Number(est) > 0) {
+    items.push({ label: "Est. Time (Min)", value: est });
+  }
+  meta.innerHTML = items
+    .map(
+      (item) => `
+      <div>
+        <span class="profile-summary-label">${esc(item.label)}</span>
+        <span class="profile-summary-value">${esc(String(item.value))}</span>
+      </div>
+    `
+    )
+    .join("");
+};
+
 const renderSummary = () => {
+  renderSummaryMeta();
   if (!summaryList) return;
   summaryList.innerHTML = "";
   stages.forEach((stage, stageIndex) => {
@@ -380,6 +407,8 @@ const applyViewMode = () => {
     summarySection.classList.toggle("is-hidden", !isReadView);
   }
   if (toggleReadViewButton) {
+    // Read-only Legacy view has no escape hatch back to editing (issue #211).
+    toggleReadViewButton.classList.toggle("is-hidden", isReadView);
     toggleReadViewButton.textContent = isReadView ? "Edit View" : "Read View";
   }
   if (pageTitle) {
