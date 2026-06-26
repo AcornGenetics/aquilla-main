@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
 from aq_lib.device_id import inject_hw_serial_env
 from aquila_web.local_db import enqueue_event, init_local_db
+from aquila_web.profile_assembly import assemble_steps, validate_stages
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -1217,6 +1218,7 @@ async def list_profiles():
                 "name": data.get("name"),
                 "label": data.get("name"),
                 "bundled": is_bundled,
+                "structured": "stages" in data,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
                 "configuration": data.get("configuration", {})
@@ -1229,6 +1231,7 @@ async def list_profiles():
                 "name": data.get("title", path.stem),
                 "label": data.get("title", path.stem),
                 "bundled": is_bundled,
+                "structured": "stages" in data,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
                 "configuration": _convert_legacy_steps_to_run_config(
@@ -1382,10 +1385,15 @@ async def save_profile(payload: ProfileSave):
     base_profile["post_in_gui"] = "True"
     if payload.steps is not None:
         base_profile["steps"] = payload.steps
-    # Persist the structured `stages` source of truth verbatim when provided
-    # (issue #197). Its presence marks a Structured Profile.
+    # Structured Profile (issue #201): validate the stages, then regenerate steps
+    # from them (stages is the source of truth; any client-sent steps is ignored).
+    # validate_stages runs first so assemble_steps only ever sees valid input.
     if payload.stages is not None:
+        stage_errors = validate_stages(payload.stages)
+        if stage_errors:
+            raise HTTPException(status_code=400, detail={"errors": stage_errors})
         base_profile["stages"] = payload.stages
+        base_profile["steps"] = assemble_steps(payload.stages)
     labels = {}
     if isinstance(base_profile.get("labels"), dict):
         labels.update(base_profile.get("labels", {}))

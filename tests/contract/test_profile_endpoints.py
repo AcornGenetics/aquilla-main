@@ -436,3 +436,62 @@ def test_sample_stages_fixture_matches_contract():
     assert 2 <= len(amp["subStages"]) <= 3
     for sub in amp["subStages"]:
         assert set(sub) == {"name", "temp", "time"}
+
+
+# ---------------------------------------------------------------------------
+# Structured profiles — endpoint wiring (issue #201 / A3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_post_structured_profile_assembles_steps(client):
+    """A valid stages payload is validated, assembled into steps, and persisted."""
+    resp = client.post("/profiles", json={"name": "A3 Assembled", "stages": SAMPLE_STAGES})
+    assert resp.status_code == 200, resp.text
+    pid = resp.json()["id"]
+    try:
+        data = client.get(f"/profiles/details?id={pid}").json()
+        steps = data["steps"]
+        # head, amplification repeat, and tail are all present
+        assert steps[0] == {"disable": 0, "duration": 1, "description": "Record equilibration without power."}
+        assert any("repeat" in s for s in steps)
+        assert steps[-1] == {"pcr_fanoff": 0}
+        # source of truth round-trips too
+        assert data["stages"] == SAMPLE_STAGES
+    finally:
+        _delete_profile(client, pid)
+
+
+@pytest.mark.contract
+def test_post_invalid_stages_returns_400(client):
+    """An out-of-range stages payload is rejected with 400 (validated before assembly)."""
+    bad = json.loads(json.dumps(SAMPLE_STAGES))  # deep copy
+    bad["incubation"]["temp"] = 200  # above the 100 C max
+    resp = client.post("/profiles", json={"name": "A3 Invalid Temp", "stages": bad})
+    assert resp.status_code == 400
+
+
+@pytest.mark.contract
+def test_post_malformed_stages_returns_400_not_500(client):
+    """Malformed structure (missing sub-stage name) is rejected cleanly, never a 500
+    (validate guards before assemble — the trust-boundary payoff)."""
+    bad = json.loads(json.dumps(SAMPLE_STAGES))  # deep copy
+    del bad["amplification"]["subStages"][0]["name"]
+    resp = client.post("/profiles", json={"name": "A3 Malformed", "stages": bad})
+    assert resp.status_code == 400
+
+
+@pytest.mark.contract
+def test_list_profiles_includes_structured_flag(client):
+    """GET /profiles flags structured profiles (have `stages`) vs legacy ones."""
+    structured_id = client.post(
+        "/profiles", json={"name": "A3 Structured Flag", "stages": SAMPLE_STAGES}
+    ).json()["id"]
+    legacy_id = _create_profile(client, name="A3 Legacy Flag")  # steps-based, no stages
+    try:
+        by_id = {p["id"]: p for p in client.get("/profiles").json()}
+        assert by_id[structured_id]["structured"] is True
+        assert by_id[legacy_id]["structured"] is False
+    finally:
+        _delete_profile(client, structured_id)
+        _delete_profile(client, legacy_id)
