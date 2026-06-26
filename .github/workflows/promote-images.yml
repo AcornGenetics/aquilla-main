@@ -20,6 +20,9 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Set lowercase repo
         run: echo "REPO_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
@@ -32,6 +35,21 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Gate — source must be a built version, target a valid ring
+        run: |
+          set -euo pipefail
+          repo="ghcr.io/${{ env.REPO_LOWER }}"
+          version="${{ inputs.source_tag }}"
+          ring="${{ inputs.target_tag }}"
+          # image-exists gate: probe the registry for the :<version> image
+          if docker buildx imagetools inspect "${repo}-api:${version}" >/dev/null 2>&1; then
+            existing="$version"
+          else
+            existing=""
+          fi
+          python3 -m aq_lib.version_tool assign --version "$version" --ring "$ring" --existing "$existing" \
+            || { echo "::error::refused — source must be an existing version image (not a raw SHA/latest) and target must be dev/pilot/prod"; exit 1; }
 
       - name: Retag and push ring images
         run: |
