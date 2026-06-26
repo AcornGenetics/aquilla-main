@@ -4,7 +4,11 @@ release workflow. Pure logic only — no git / network I/O.
 """
 import pytest
 
-from aq_lib.version_tool import resolve_next, sorts_below
+from aq_lib.version_tool import (
+    resolve_next,
+    sorts_below,
+    validate_ring_assignment,
+)
 
 
 def test_blank_custom_bumps_last_segment():
@@ -41,3 +45,28 @@ def test_sorts_below_detects_a_lower_custom_version():
     (a likely typo) while accepting a higher one."""
     assert sorts_below("1.2.5.9", "1.2.6.6") is True
     assert sorts_below("1.2.6.7", "1.2.6.6") is False
+
+
+def test_ring_assignment_accepts_existing_version_and_valid_ring():
+    """A built version may be assigned to a valid ring."""
+    validate_ring_assignment("1.2.6.7", "prod", existing_versions={"1.2.6.7"})
+
+
+def test_ring_assignment_rejects_version_without_image():
+    """A version with no built image cannot be assigned to a ring."""
+    with pytest.raises(ValueError):
+        validate_ring_assignment("1.2.6.7", "prod", existing_versions=set())
+
+
+@pytest.mark.parametrize("unversioned", ["8b2ae45", "latest"])
+def test_ring_assignment_rejects_unversioned_input(unversioned):
+    """A raw SHA or 'latest' is not a version, so it can never be assigned —
+    the membership gate covers it (such inputs are never in existing_versions)."""
+    with pytest.raises(ValueError):
+        validate_ring_assignment(unversioned, "prod", existing_versions={"1.2.6.7"})
+
+
+def test_ring_assignment_rejects_unknown_ring():
+    """Only dev/pilot/prod are valid rings."""
+    with pytest.raises(ValueError):
+        validate_ring_assignment("1.2.6.7", "staging", existing_versions={"1.2.6.7"})

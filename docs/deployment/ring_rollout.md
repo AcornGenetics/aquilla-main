@@ -18,28 +18,29 @@ IMAGE_TAG=dev
 
 ## How Updates Flow
 
-1. Push to `main` → CI builds `:latest` + `:<sha>`
-2. Manually tag a ring (`dev`, `pilot`, or `prod`)
-3. Devices on that ring pull the new tag (Watchtower or manual `pull`)
+1. Merge to `main` → CI builds `:latest` + `:<sha>`
+2. **Cut a version** → run **build-and-push-images** with `action=cut-version` (builds the `:<version>` images + a GitHub Release)
+3. **Assign it to a ring** → run **build-and-push-images** with `action=assign-ring`, `version=<x.y.z>`, `ring=dev|pilot|prod`
+4. Devices on that ring pull the new tag (Watchtower or manual `pull`)
 
-## Build and Tag Images
+## Cut and Assign Versions
 
-### Option A: Build with a ring tag
+Both happen on the **build-and-push-images** "Run workflow" screen via the `action` input.
 
-Run the GitHub Action **build-and-push-images** and set `ring_tag`:
+### Cut a version (`action=cut-version`)
 
-- `ring_tag=dev` → publishes `:dev`
-- `ring_tag=pilot` → publishes `:pilot`
-- `ring_tag=prod` → publishes `:prod`
+Mints the next version (leave `version` blank to auto patch-bump, or type an exact one),
+builds the `:<version>` images with the version baked in, and creates a GitHub Release.
+Does **not** touch any ring.
 
-### Option B: Promote a tested SHA
+### Assign a version to a ring (`action=assign-ring`)
 
-Run **promote-images** with:
+Set `version=<x.y.z>` and `ring=dev|pilot|prod`. Retags that already-built version onto the
+ring **by digest** — no rebuild, so the tested bytes and the baked version are preserved.
+Refuses a version that has no built image (you must cut it first).
 
-- `source_tag=<sha>`
-- `target_tag=dev|pilot|prod`
-
-This retags the existing image without rebuilding.
+> The standalone `promote-images` workflow still exists, but `assign-ring` is the supported
+> path (it gates on the image existing, so an un-versioned build can't reach a ring).
 
 ## Device Configuration
 
