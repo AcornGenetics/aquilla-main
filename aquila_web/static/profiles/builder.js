@@ -116,6 +116,16 @@
   var TIME_MIN = 1, TIME_MAX = 600, EXTENSION_TIME_MIN = 11;
   var CYCLES_MIN = 1, CYCLES_MAX = 50;
 
+  // Standardized error message naming the valid range; derived from the constants
+  // above so the text can never drift out of sync with the actual bounds.
+  function rangeMsg(min, max) {
+    return "Range (" + min + " - " + max + ")";
+  }
+  var MSG_TEMP = rangeMsg(TEMP_MIN, TEMP_MAX);
+  var MSG_TIME = rangeMsg(TIME_MIN, TIME_MAX);
+  var MSG_EXT_TIME = rangeMsg(EXTENSION_TIME_MIN, TIME_MAX);
+  var MSG_CYCLES = rangeMsg(CYCLES_MIN, CYCLES_MAX);
+
   function validTemp(v) {
     return typeof v === "number" && v >= TEMP_MIN && v <= TEMP_MAX;
   }
@@ -126,22 +136,27 @@
     return Number.isInteger(v) && v >= CYCLES_MIN && v <= CYCLES_MAX;
   }
 
-  // Ensure a hidden "Invalid Value" message exists right after the input.
-  function errorEl(input) {
+  // Ensure a hidden range-message element exists right after the input, and keep
+  // its text in sync with the field's range (default for non-range fields).
+  function errorEl(input, message) {
+    var msg = message || "Invalid Value";
     var next = input.nextElementSibling;
-    if (next && next.classList.contains("field-error")) return next;
+    if (next && next.classList.contains("field-error")) {
+      next.textContent = msg;
+      return next;
+    }
     var p = document.createElement("p");
     p.className = "field-error is-hidden";
-    p.textContent = "Invalid Value";
+    p.textContent = msg;
     input.insertAdjacentElement("afterend", p);
     return p;
   }
 
-  function setFieldValid(id, ok) {
+  function setFieldValid(id, ok, message) {
     var input = document.getElementById(id);
     if (!input) return ok;
     input.classList.toggle("is-invalid", !ok);
-    errorEl(input).classList.toggle("is-hidden", ok);
+    errorEl(input, message).classList.toggle("is-hidden", ok);
     return ok;
   }
 
@@ -173,23 +188,24 @@
       var box = document.getElementById("stage-" + key + "-enabled");
       var enabled = !box || box.checked;
       if (!enabled) {
-        setFieldValid("stage-" + key + "-temp", true);
-        setFieldValid("stage-" + key + "-time", true);
+        setFieldValid("stage-" + key + "-temp", true, MSG_TEMP);
+        setFieldValid("stage-" + key + "-time", true, MSG_TIME);
         return;
       }
-      valid = setFieldValid("stage-" + key + "-temp", validTemp(num("stage-" + key + "-temp"))) && valid;
-      valid = setFieldValid("stage-" + key + "-time", validTime(num("stage-" + key + "-time"), TIME_MIN)) && valid;
+      valid = setFieldValid("stage-" + key + "-temp", validTemp(num("stage-" + key + "-temp")), MSG_TEMP) && valid;
+      valid = setFieldValid("stage-" + key + "-time", validTime(num("stage-" + key + "-time"), TIME_MIN), MSG_TIME) && valid;
     });
 
-    valid = setFieldValid("stage-amp-cycles", validCycles(num("stage-amp-cycles"))) && valid;
+    valid = setFieldValid("stage-amp-cycles", validCycles(num("stage-amp-cycles")), MSG_CYCLES) && valid;
 
     var rows = document.querySelectorAll(".amp-substage");
     for (var i = 0; i < rows.length; i++) {
       var idx = rows[i].getAttribute("data-sub");
       var isLast = i === rows.length - 1; // extension-bearing Sub-stage
       var minTime = isLast ? EXTENSION_TIME_MIN : TIME_MIN;
-      valid = setFieldValid("stage-amp-sub-" + idx + "-temp", validTemp(num("stage-amp-sub-" + idx + "-temp"))) && valid;
-      valid = setFieldValid("stage-amp-sub-" + idx + "-time", validTime(num("stage-amp-sub-" + idx + "-time"), minTime)) && valid;
+      var timeMsg = isLast ? MSG_EXT_TIME : MSG_TIME;
+      valid = setFieldValid("stage-amp-sub-" + idx + "-temp", validTemp(num("stage-amp-sub-" + idx + "-temp")), MSG_TEMP) && valid;
+      valid = setFieldValid("stage-amp-sub-" + idx + "-time", validTime(num("stage-amp-sub-" + idx + "-time"), minTime), timeMsg) && valid;
     }
 
     return valid;

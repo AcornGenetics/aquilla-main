@@ -313,8 +313,8 @@ def test_pristine_form_has_no_validation_errors(page, base_url):
 
 
 def test_blank_save_flags_every_enabled_field_and_blocks(page, base_url):
-    """Saving an all-blank form flags every enabled field red with 'Invalid
-    Value' and does not navigate away."""
+    """Saving an all-blank form flags every enabled field red with a range
+    message naming the valid bounds, and does not navigate away."""
     _goto_builder(page, base_url)
     page.locator("#profile-name").fill("B3 Blank")
 
@@ -324,7 +324,12 @@ def test_blank_save_flags_every_enabled_field_and_blocks(page, base_url):
         assert _is_invalid(page, sel), f"{sel} should be flagged invalid"
     errors = page.locator(".field-error:visible")
     assert errors.count() >= 1
-    assert "Invalid Value" in errors.first.inner_text()
+    texts = errors.all_inner_texts()
+    assert any("Range (25 - 100)" in t for t in texts), "temp range message"
+    assert any("Range (1 - 600)" in t for t in texts), "time range message"
+    assert any("Range (11 - 600)" in t for t in texts), "extension time range message"
+    assert any("Range (1 - 50)" in t for t in texts), "cycles range message"
+    assert not any("Invalid Value" in t for t in texts), "generic message replaced"
 
     # Blocked: still on the builder, no redirect to the Profiles list.
     assert page.url.rstrip("/").endswith("/profiles/builder")
@@ -573,7 +578,7 @@ def test_legacy_profile_opens_read_only(page, base_url):
 
 
 def test_invalid_value_message_is_red(page, base_url):
-    """The 'Invalid Value' message renders red, not the muted card-text grey."""
+    """The range error message renders red, not the muted card-text grey."""
     _goto_builder(page, base_url)
     page.locator("#save-profile-button").click()  # all-blank -> errors shown
     color = page.eval_on_selector(".field-error:visible", "el => getComputedStyle(el).color")
