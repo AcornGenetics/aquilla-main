@@ -495,3 +495,33 @@ def test_list_profiles_includes_structured_flag(client):
     finally:
         _delete_profile(client, structured_id)
         _delete_profile(client, legacy_id)
+
+
+# ---------------------------------------------------------------------------
+# Structured profiles — canonical JSON key order (issue #213 / A4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_structured_profile_keys_in_canonical_order(client):
+    """A saved structured profile writes its top-level keys in canonical order:
+    output_dir, post_in_gui, title, countdown fields, labels, stages, steps."""
+    from aquila_web import main as web_main
+
+    resp = client.post("/profiles", json={
+        "name": "A4 Key Order",
+        "fam_label": "FAM",
+        "rox_label": "ROX",
+        "stages": SAMPLE_STAGES,
+    })
+    assert resp.status_code == 200, resp.text
+    pid = resp.json()["id"]
+    try:
+        keys = list(json.loads((web_main.resolve_profile_dir() / pid).read_text()).keys())
+        assert keys == [
+            "output_dir", "post_in_gui", "title",
+            "time_unavailable", "estimated_completion_seconds",
+            "labels", "stages", "steps",
+        ]
+    finally:
+        _delete_profile(client, pid)
