@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Create Profile</title>
-  <link rel="stylesheet" href="/static/styles.css?v=228" />
+  <link rel="stylesheet" href="/static/styles.css?v=231" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -12,7 +12,7 @@
       <header class="run-header">
         <h1 class="run-header__title" id="builder-page-title">
           <a class="back-icon back-icon--inline" href="/profiles-page" aria-label="Back">&#x2039;</a>
-          Create Profile
+          <span id="builder-title-text">Create Profile</span>
         </h1>
         <nav class="run-header__nav">
           <a class="run-nav-link" href="/run">Run</a>
@@ -50,6 +50,7 @@
             <div class="field">
               <label for="profile-estimated-minutes">Est. Time (Min)</label>
               <input id="profile-estimated-minutes" type="number" inputmode="numeric" min="1" step="1" value="" placeholder="(Optional)" />
+              <p class="field-error is-hidden" id="profile-estimated-error">Invalid Estimated Time</p>
             </div>
           </div>
         </section>
@@ -163,6 +164,6 @@
     </main>
   </div>
   <script src="/static/nav.js?v=1"></script>
-  <script src="/static/profiles/builder.js?v=1"></script>
+  <script src="/static/profiles/builder.js?v=4"></script>
 </body>
 </html>

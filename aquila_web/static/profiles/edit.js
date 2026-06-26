@@ -33,10 +33,9 @@ const toggleReadViewButton = document.getElementById("toggle-read-view");
 const editSections = document.querySelectorAll(".profile-edit");
 const summarySection = document.getElementById("profile-summary");
 
+// Honour an explicit ?view=1 (or ?mode=view): Legacy Profiles route here to open
+// read-only (issue #203). Without the param the editor opens editable as before.
 let isReadView = viewMode;
-if (isReadView && toggleReadViewButton) {
-  isReadView = false;
-}
 const DEFAULT_DYE_LABELS = { fam: "FAM", rox: "ROX" };
 
 const parseDuration = (value) => {
