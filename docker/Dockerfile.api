@@ -17,6 +17,13 @@ COPY profiles/bundled/ /opt/aquila/profiles_bundled/
 COPY docker/entrypoint.sh /opt/aquila/entrypoint.sh
 RUN chmod +x /opt/aquila/entrypoint.sh
 
+# App version injected at build time by the release workflow
+# (--build-arg AQ_APP_VERSION=x.y.z). Served by /version and shown in the UI
+# footer. Defaults to "unknown"; non-release builds pass the short commit SHA.
+ARG AQ_APP_VERSION=unknown
+ENV AQ_APP_VERSION=${AQ_APP_VERSION}
+LABEL org.opencontainers.image.version=${AQ_APP_VERSION}
+
 ENV DATA_DIR=/opt/aquila \
     PROFILE_DIR=/opt/aquila/profiles \
     RESULTS_PATH=/opt/aquila/results/results.json
