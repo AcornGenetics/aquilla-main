@@ -2694,11 +2694,15 @@ a:active {
   align-items: center;
   gap: 10px;
   cursor: pointer;
+  /* Kiosk touch target: keep the tappable label >= 44px tall (issue #202). */
+  min-height: 44px;
 }
 
 .stage__toggle input[type="checkbox"] {
   width: 22px;
   height: 22px;
+  /* Checked fill matches the Save Profile button's green (issue #202 follow-up). */
+  accent-color: var(--icon-acorn-green);
 }
 
 .stage__title {
@@ -2706,8 +2710,13 @@ a:active {
   font-weight: 600;
 }
 
+/* Reserve a right gutter on every Sub-stage row so all temp/time inputs line up,
+   whether or not the row carries an X. The removable (Extension) row drops its X
+   into this gutter via absolute positioning, so it never shrinks the fields. */
 .amp-substage {
+  position: relative;
   margin-top: 12px;
+  padding-right: 39px;
 }
 
 .amp-substage__name {
@@ -2715,6 +2724,58 @@ a:active {
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
+}
+
+/* Two-/three-step Sub-stage controls (issue #202). */
+
+/* Red X in a square red-outlined box, sitting in the reserved gutter. `top` is
+   tuned so the box centres on the midpoint between the Annealing and Extension
+   time fields. Kept compact (below the 44px kiosk minimum) by design. */
+.amp-substage__remove {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: 2px solid #dc2626;
+  border-radius: 6px;
+  background: none;
+  color: #dc2626;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Full-width "+ Add sub-stage" tab; hidden via .is-hidden once a third exists.
+   Kiosk touch target: >= 44px tall. */
+.amp-add-tab {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+/* Override .amp-add-tab's display:block when hidden (same-specificity tie that
+   the later .amp-add-tab rule would otherwise win). */
+.amp-add-tab.is-hidden {
+  display: none;
+}
+
+/* Cycles is the last field in the Amplification card (issue #202). */
+#stage-amplification > .field-grid {
+  margin-top: 16px;
 }
 
 /* An unchecked Stage greys out. Its inputs are also set [disabled] in JS, which

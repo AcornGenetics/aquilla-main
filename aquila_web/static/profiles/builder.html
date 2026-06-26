@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Create Profile</title>
-  <link rel="stylesheet" href="/static/styles.css?v=220" />
+  <link rel="stylesheet" href="/static/styles.css?v=228" />
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -96,12 +96,6 @@
           <header class="stage__header">
             <span class="stage__title">Amplification</span>
           </header>
-          <div class="field-grid">
-            <div class="field">
-              <label for="stage-amp-cycles">Cycles</label>
-              <input id="stage-amp-cycles" type="number" inputmode="numeric" value="" />
-            </div>
-          </div>
           <div class="amp-substages">
             <div class="amp-substage" data-sub="0">
               <span class="amp-substage__name" id="stage-amp-sub-0-name">Denaturation</span>
@@ -128,6 +122,15 @@
                   <input id="stage-amp-sub-1-time" type="number" inputmode="numeric" value="" />
                 </div>
               </div>
+            </div>
+          </div>
+          <!-- Add the third (Extension) Sub-stage (issue #202). Hidden once a
+               third exists; the third row carries its own X remove control. -->
+          <button id="amp-add-substage" class="amp-add-tab" type="button">+ Add sub-stage</button>
+          <div class="field-grid">
+            <div class="field">
+              <label for="stage-amp-cycles">Cycles</label>
+              <input id="stage-amp-cycles" type="number" inputmode="numeric" value="" />
             </div>
           </div>
         </section>
