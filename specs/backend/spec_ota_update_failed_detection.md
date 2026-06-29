@@ -37,13 +37,15 @@ already introduces for `/reboot`.
 ## Flow
 
 ```
-1. /update/apply  → sentinel {state: "reboot_pending", ts, target_digest: <api digest we are installing>}
+1. /update/apply:
+     prev = GET kiosk-control /image-digest   (the image running RIGHT NOW, in the host's digest form)
+     sentinel {state: "reboot_pending", ts, target_digest: <installing>, prev_digest: prev}
 2. New/recovery container boots, sees reboot_pending:
-     running = GET kiosk-control /image-digest      (real digest of running aquila-backend)
-     classify(target_digest, running):
-       running == target          → "complete"  (update applied)
-       running known, != target   → "failed"    (old image still here)
-       target or running missing  → "unknown"   (cannot tell)
+     running = GET kiosk-control /image-digest   (list of every digest the running aquila-backend is known by)
+     classify(target_digest, prev_digest, running):
+       target ∈ running          → "complete"  (the new image booted)
+       prev   ∈ running          → "failed"    (provably still on the exact old image)
+       neither conclusively      → "unknown"   (host down, or digest formats differ)
      persist next state BEFORE rebooting (fire-once, no loop):
        complete | unknown → sentinel "show_complete"   (unknown stays optimistic: no regression vs today)
        failed             → sentinel "show_failed"
@@ -56,21 +58,26 @@ already introduces for `/reboot`.
        failed   → POST /update/ack-failed     (new) → clear sentinel, status → idle
 ```
 
-The `unknown → show_complete` fallback is deliberate: if kiosk-control is
-unreachable or predates the `/image-digest` endpoint (older device), we must not
-flip a genuinely-successful update into a scary false "Failed". The failed modal
-fires **only on a positively-confirmed mismatch**.
+**Fail-safe by construction.** "failed" is returned ONLY on a positive match to the
+recorded old image — never on a bare "differs from target". This makes a *false*
+"Update Failed" impossible even when the target and running digests are recorded in
+different manifest forms (e.g. GHCR index digest vs the host's platform digest): a
+format mismatch lands in `unknown → show_complete`, the safe direction. `prev_digest`
+is captured from the host at apply time, so it is in the *same* digest form the boot
+comparison uses — which is what makes real-failure detection reliable. Reporting
+*all* of the running image's `RepoDigests` (match-any) adds further resilience.
 
 ## Backend changes (`aquila_web/main.py`)
 
-- `/update/apply` — record the target API digest in the sentinel:
-  `write_sentinel(path, "reboot_pending", ts, target_digest=_latest_ghcr_digest)`.
-- `_fetch_running_digest()` — sync best-effort `GET {KIOSK_CONTROL_URL}/image-digest`,
-  returns the `api` digest string or `None` (mirrors `_trigger_host_reboot`'s error
+- `/update/apply` — record both the target digest and the **currently-running**
+  digest (captured from the host) in the sentinel:
+  `write_sentinel(path, "reboot_pending", ts, target_digest=_latest_ghcr_digest, prev_digest=<host running digest>)`.
+- `_fetch_running_digests()` — sync best-effort `GET {KIOSK_CONTROL_URL}/image-digest`,
+  returns the `api` digest **list** or `[]` (mirrors `_trigger_host_reboot`'s error
   swallowing; never crashes startup).
 - `_resolve_startup_update_state()` — on the `reboot_pending` branch, compute
-  `classify_update(target, running)` and persist `show_failed` vs `show_complete`
-  accordingly before rebooting. `show_failed` startup branch sets
+  `classify_update(target, prev, running_list)` and persist `show_failed` vs
+  `show_complete` accordingly before rebooting. `show_failed` startup branch sets
   `_update_status = "failed"`.
 - `POST /update/ack-failed` — clears the sentinel and resets `_update_status` to
   `idle` (mirror of `/update/ack-complete`).
@@ -79,20 +86,24 @@ fires **only on a positively-confirmed mismatch**.
 
 ## Pure logic (`aquila_web/update_sentinel.py`)
 
-- `write_sentinel(path, state, ts, target_digest=None)` — persist `target_digest`
-  when given (back-compatible; existing 3-arg callers unchanged).
-- `classify_update(target_digest, running_digest) -> "complete" | "failed" | "unknown"`
-  — pure comparison; `unknown` when either digest is missing/empty.
-- `next_startup_action(...)` — add `show_failed → "show_failed"`.
+- `write_sentinel(path, state, ts, target_digest=None, prev_digest=None)` — persist
+  the digests when given (back-compatible; existing callers unchanged).
+- `classify_update(target_digest, prev_digest, running_digests) -> "complete" | "failed" | "unknown"`
+  — `complete` when target ∈ running; `failed` ONLY when prev ∈ running (positive
+  proof of the old image); else `unknown`. Never failed on a bare difference.
+- `next_startup_action(...)` — add `show_failed → "show_failed"`. The TTL applies
+  **only** to `show_complete` (a stale-success guard); `reboot_pending` and
+  `show_failed` never expire, so a long power-off still surfaces on the next boot.
 
 ## Host changes (`scripts/kiosk-control/kiosk_control.py`)
 
-- **`GET /image-digest`** → `{"api": <sha256:…|null>, "ui": <sha256:…|null>}` by
+- **`GET /image-digest`** → `{"api": [<sha256:…>, …], "ui": [<sha256:…>, …]}` by
   inspecting the running containers `aquila-backend` / `aquila-ui`:
   resolve the container's image id (`docker inspect --format '{{.Image}}'`), then
-  read that image's `RepoDigests` and return the `@sha256:…` part. Inspecting the
-  **running container's** image (not the `:tag`) is what makes this honest even if
-  Watchtower pulled the new image but never recreated the container.
+  read **all** of that image's `RepoDigests` (`{{json .RepoDigests}}`) and return the
+  `@sha256:…` parts. Inspecting the **running container's** image (not the `:tag`) is
+  what makes this honest even if Watchtower pulled the new image but never recreated
+  the container; returning all digests lets the backend match-any.
 - Deployment note: like `/reboot`, this ships via the host-service path
   (`update_host_service.sh` / `deployment2.sh`), **not** Watchtower. On a device
   whose host service predates this endpoint, the call 404s → `unknown` → optimistic
@@ -112,25 +123,30 @@ fires **only on a positively-confirmed mismatch**.
 
 | Case | Behavior |
 |------|----------|
-| Power lost mid-pull, old image reboots | digest mismatch → `show_failed` → "Update Failed" modal. **(the bug being fixed)** |
-| Update applied cleanly | digest == target → `show_complete` → "Update Complete" (unchanged). |
-| kiosk-control unreachable / host not yet updated | `unknown` → optimistic `show_complete`; no false "Failed". |
-| `/image-digest` raises / docker error | treated as `None` → `unknown` → optimistic. |
+| Power lost mid-pull, old image reboots | `prev` ∈ running → `show_failed` → "Update Failed" modal. **(the bug being fixed)** |
+| Power-off lasts hours/days before re-power | `reboot_pending` never expires → still verified on the next boot. |
+| Update applied cleanly | `target` ∈ running → `show_complete` → "Update Complete" (unchanged). |
+| Target/running digests in different manifest forms | matches neither → `unknown` → optimistic `show_complete`; **never a false "Failed"**. |
+| kiosk-control unreachable / host not yet updated | `[]` running → `unknown` → optimistic `show_complete`. |
+| `/image-digest` raises / docker error | treated as `[]` → `unknown` → optimistic. |
 | Run active at reboot-trigger time | reboot skipped (existing guard); resolved on a later boot. |
-| Sentinel older than TTL | ignored & cleared (existing). |
+| Stale `show_complete` past TTL | ignored & cleared (the TTL guard, now scoped to success only). |
 
 ## Tests
 
-- **Unit (`tests/unit/test_update_sentinel.py`)** — `classify_update` complete/
-  failed/unknown; `write_sentinel` round-trips `target_digest`; `next_startup_action`
-  returns `show_failed`.
-- **Unit (`tests/unit/test_kiosk_image_digest.py`)** — `_image_digest` parses the
-  `@sha256:` out of `RepoDigests` with `docker` mocked; returns `None` on docker
-  failure. `@pytest.mark.hardware`-style note: the real docker call is host-only.
-- **Contract (`tests/contract/test_update_complete_flow.py`)** — a mismatch at
-  `reboot_pending` advances the sentinel to `show_failed`, the boot reports
-  `status == "failed"`, and `POST /update/ack-failed` clears it back to `idle`;
-  an unreachable digest falls back to `show_complete`.
+- **Unit (`tests/unit/test_update_sentinel.py`)** — `classify_update` complete (target
+  ∈ running) / failed (prev ∈ running) / unknown (neither, empty); `write_sentinel`
+  round-trips `target_digest` and `prev_digest`; `next_startup_action` returns
+  `show_failed`, and `reboot_pending`/`show_failed` do NOT expire while a stale
+  `show_complete` still does.
+- **Unit (`tests/unit/test_kiosk_image_digest.py`)** — `_image_digests` returns all
+  `RepoDigests` parsed from `{{json .RepoDigests}}` with `docker` mocked; returns `[]`
+  on docker failure. The real docker call is host-only.
+- **Contract (`tests/contract/test_update_complete_flow.py`)** — `apply` records
+  `prev_digest`; at `reboot_pending`, prev-running advances to `show_failed`,
+  target-running and unrecognized-digest both stay `show_complete` (no false fail);
+  the boot reports `status == "failed"` and `POST /update/ack-failed` clears it to
+  `idle`.
 - `pytest tests unit_tests -v` passes.
 
 ## Files touched

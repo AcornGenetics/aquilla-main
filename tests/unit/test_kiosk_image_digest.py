@@ -21,19 +21,25 @@ def _load_kiosk_control():
     return mod
 
 
-def test_image_digest_parses_sha_from_repodigests():
+def test_image_digests_returns_all_repodigests():
+    # An image can be known by more than one digest (e.g. index vs platform manifest);
+    # report them all so the backend can match the target against any.
     kc = _load_kiosk_control()
+    repodigests = (
+        '["ghcr.io/acorn/aquilla-main-api@sha256:index",'
+        '"ghcr.io/acorn/aquilla-main-api@sha256:platform"]'
+    )
     with mock.patch.object(kc.subprocess, "run") as run:
         run.side_effect = [
             mock.Mock(returncode=0, stdout="sha256:imageid\n"),  # {{.Image}}
-            mock.Mock(returncode=0, stdout="ghcr.io/acorn/aquilla-main-api@sha256:abc123\n"),
+            mock.Mock(returncode=0, stdout=repodigests + "\n"),  # {{json .RepoDigests}}
         ]
-        digest = kc._image_digest("aquila-backend")
-    assert digest == "sha256:abc123"
+        digests = kc._image_digests("aquila-backend")
+    assert digests == ["sha256:index", "sha256:platform"]
 
 
-def test_image_digest_returns_none_on_docker_error():
+def test_image_digests_returns_empty_on_docker_error():
     kc = _load_kiosk_control()
     with mock.patch.object(kc.subprocess, "run") as run:
         run.return_value = mock.Mock(returncode=1, stdout="")
-        assert kc._image_digest("aquila-backend") is None
+        assert kc._image_digests("aquila-backend") == []
