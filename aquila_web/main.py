@@ -1464,9 +1464,12 @@ async def save_profile(payload: ProfileSave):
     elif requested_title:
         sanitized_title = sanitize_name(requested_title)
         if sanitized_title and profile_path.stem != sanitized_title:
-            candidate_path = profile_dir / f"{sanitized_title}.json"
+            # Rename within the profile's own directory (e.g. local/) rather than
+            # the profiles root, so editing+renaming doesn't relocate the file (#218 review).
+            rename_dir = profile_path.parent
+            candidate_path = rename_dir / f"{sanitized_title}.json"
             if candidate_path.exists() and candidate_path != profile_path:
-                candidate_path = profile_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
+                candidate_path = rename_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
             profile_path = candidate_path
 
     # Structured profiles (issue #213) get the full canonical key order; legacy
