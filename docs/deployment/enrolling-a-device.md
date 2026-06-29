@@ -33,6 +33,8 @@ Pi (deployment2.sh)            Operator workstation (AWS creds)        acorn-ca
     --query "Items[?Name=='EnrollApi'].ApiEndpoint" --output text
   # → https://<id>.execute-api.us-east-2.amazonaws.com   (append /enroll)
   ```
+  Current **prod** value: `https://1x9561i626.execute-api.us-east-2.amazonaws.com/enroll`
+  (the dev CA has its own id — always confirm with the command above).
 - A local checkout of this repo with `botocore` + `cryptography` installed
   (`pip install -r requirements-test.txt` covers both).
 
