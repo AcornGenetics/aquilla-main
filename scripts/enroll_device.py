@@ -8,8 +8,14 @@ issued Device Certificate (``0600``) and updates ``device.env`` on the Pi over
 SSH. AWS credentials never touch the Pi.
 
     python scripts/enroll_device.py --pi sn04 \
-        --endpoint https://rf2f9a0wie.execute-api.us-east-2.amazonaws.com/enroll \
+        --endpoint https://1x9561i626.execute-api.us-east-2.amazonaws.com/enroll \
         --region us-east-2
+
+The ``--endpoint`` is the acorn-ca EnrollApi URL for the target environment (the
+example above is **prod**). Find the current one with:
+
+    aws apigatewayv2 get-apis \
+      --query "Items[?Name=='EnrollApi'].ApiEndpoint" --output text   # append /enroll
 
 The CSR is produced on the Pi during deployment (#239). The Sync client reads
 the installed cert/key paths from ``device.env`` (#241).
