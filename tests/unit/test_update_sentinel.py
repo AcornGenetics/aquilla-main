@@ -58,3 +58,32 @@ def test_clear_removes_the_sentinel(tmp_path):
     us.clear_sentinel(str(path))
     assert us.read_sentinel(str(path)) is None
     us.clear_sentinel(str(path))  # idempotent — no error when already gone
+
+
+# --- failed-update detection (spec_ota_update_failed_detection.md) -------------
+
+def test_classify_update_complete_when_running_matches_target():
+    assert us.classify_update("sha256:aaa", "sha256:aaa") == "complete"
+
+
+def test_classify_update_failed_when_running_differs_from_target():
+    assert us.classify_update("sha256:new", "sha256:old") == "failed"
+
+
+def test_classify_update_unknown_when_a_digest_is_missing():
+    # Host unreachable / no digest recorded -> can't tell -> caller stays optimistic.
+    assert us.classify_update("sha256:new", None) == "unknown"
+    assert us.classify_update(None, "sha256:old") == "unknown"
+    assert us.classify_update("sha256:x", "") == "unknown"
+
+
+def test_write_sentinel_round_trips_target_digest(tmp_path):
+    path = tmp_path / "last_update.json"
+    us.write_sentinel(str(path), "reboot_pending", _TS, target_digest="sha256:new")
+    assert us.read_sentinel(str(path))["target_digest"] == "sha256:new"
+
+
+def test_fresh_show_failed_resolves_to_show_failed():
+    rec = {"state": "show_failed", "ts": _TS}
+    now = _BASE + timedelta(seconds=30)
+    assert us.next_startup_action(rec, now, ttl_seconds=600) == "show_failed"

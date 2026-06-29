@@ -11,10 +11,32 @@ import os
 from datetime import datetime, timezone
 
 
-def write_sentinel(path: str, state: str, ts: str) -> None:
-    """Persist the sentinel record {state, ts} to ``path``."""
+def write_sentinel(path: str, state: str, ts: str, target_digest: str | None = None) -> None:
+    """Persist the sentinel record to ``path``.
+
+    ``target_digest`` (the image digest we are trying to install) is recorded when
+    given, so the post-update boot can verify what actually booted. Omitting it keeps
+    the legacy two-field record for callers that don't need verification.
+    """
+    record: dict = {"state": state, "ts": ts}
+    if target_digest:
+        record["target_digest"] = target_digest
     with open(path, "w") as f:
-        json.dump({"state": state, "ts": ts}, f)
+        json.dump(record, f)
+
+
+def classify_update(target_digest: str | None, running_digest: str | None) -> str:
+    """Pure verdict on whether an update applied, by image-digest comparison.
+
+    Returns:
+      "complete" — the running image matches the target (update applied).
+      "failed"   — both digests are known and differ (old image still running).
+      "unknown"  — either digest is missing; the caller cannot tell and must stay
+                   optimistic (treat as complete) rather than show a false failure.
+    """
+    if not target_digest or not running_digest:
+        return "unknown"
+    return "complete" if running_digest == target_digest else "failed"
 
 
 def read_sentinel(path: str) -> dict | None:
@@ -55,6 +77,8 @@ def next_startup_action(record: dict | None, now: datetime, ttl_seconds: int) ->
       "reboot"        — an update just applied; trigger the host reboot (caller first
                         advances the sentinel to ``show_complete`` so it fires once).
       "show_complete" — we are back up after the reboot; surface the completion modal.
+      "show_failed"   — we are back up after a verified-failed update; surface the
+                        failure modal.
       "none"          — no sentinel, unparseable, or older than the TTL (ignore/clear).
     """
     if not record:
@@ -67,4 +91,6 @@ def next_startup_action(record: dict | None, now: datetime, ttl_seconds: int) ->
         return "reboot"
     if state == "show_complete":
         return "show_complete"
+    if state == "show_failed":
+        return "show_failed"
     return "none"
