@@ -6,6 +6,8 @@ fastapi
 uvicorn[standard]
 pydantic
 requests
+botocore
+cryptography
 numpy
 pandas
 playwright

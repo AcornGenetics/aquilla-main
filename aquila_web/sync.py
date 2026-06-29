@@ -26,12 +26,18 @@ def sync_pending_events(
         "device_id": os.getenv("AQ_SYNC_DEVICE_ID") or os.getenv("DEVICE_ID"),
         "events": pending_events,
     }
-    headers = {}
-    api_key = os.getenv("AQ_SYNC_API_KEY")
-    if api_key:
-        headers["x-api-key"] = api_key
+    # The Sentri authenticates Sync with its Device Certificate (mTLS), not the
+    # retired Fleet API Key (ADR-013). Cert/key paths are installed into
+    # device.env at enrollment (#240); present them for the TLS handshake.
+    cert = None
+    client_cert = os.getenv("AQ_SYNC_CLIENT_CERT")
+    client_key = os.getenv("AQ_SYNC_CLIENT_KEY")
+    if client_cert and client_key:
+        cert = (client_cert, client_key)
     try:
-        response = requests.post(resolved_endpoint, json=payload, headers=headers, timeout=resolved_timeout)
+        response = requests.post(
+            resolved_endpoint, json=payload, cert=cert, timeout=resolved_timeout
+        )
         response.raise_for_status()
     except requests.exceptions.RequestException as exc:
         logger.warning("Sync failed (will retry next interval): %s", exc)

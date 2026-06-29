@@ -313,13 +313,24 @@ prompt_if_unset LID_HEATER_UPPER_BOUND "Enter lid heater upper bound voltage (e.
 prompt_if_unset LID_HEATER_LOWER_BOUND "Enter lid heater lower bound voltage (e.g. 0.20)"
 prompt_if_unset DRAWER_READ_STEPS      "Enter drawer read_steps for this device (e.g. 160)"
 prompt_if_unset AQ_SYNC_ENDPOINT  "Enter AQ_SYNC_ENDPOINT (AWS ingest URL, leave blank to skip)"
-prompt_if_unset AQ_SYNC_API_KEY   "Enter AQ_SYNC_API_KEY (fleet API key, leave blank to skip)"
+# The Fleet API Key is retired (ADR-013): the Sentri authenticates Sync with its
+# Device Certificate (mTLS), installed by scripts/enroll_device.py after deploy.
 
 WATCHTOWER_TOKEN="${WATCHTOWER_TOKEN:-$(openssl rand -hex 32)}"
 
+# Device ID is the Pi hardware serial (CONTEXT.md / ADR-014), NOT the hostname:
+# the Device Certificate's CN must equal what the platform treats as the Device
+# ID. Mirrors aq_lib/device_id.read_rpi_serial (the host has no app deps until
+# images are pulled in Phase 9). Fail loud rather than enrol under a mutable id.
+DEVICE_ID="$(awk -F': ' '/^Serial/ {print $2}' /proc/cpuinfo | tr -d '[:space:]')"
+if [[ -z "${DEVICE_ID}" || "${DEVICE_ID}" =~ ^0+$ ]]; then
+    echo "  ✗ No Raspberry Pi hardware serial in /proc/cpuinfo — cannot derive Device ID" >&2
+    exit 1
+fi
+
 # device.env
 cat > /opt/aquila/config/device.env <<EOF
-DEVICE_ID=${DEVICE_HOSTNAME}
+DEVICE_ID=${DEVICE_ID}
 DEVICE_HOSTNAME=${DEVICE_HOSTNAME}
 IMAGE_TAG=${IMAGE_TAG}
 GHCR_REPO=${GHCR_REPO}
@@ -330,7 +341,6 @@ GHCR_TOKEN=${GHCR_TOKEN}
 GHCR_TOKEN_2=${GHCR_TOKEN_2:-}
 AQ_SRC_BASEDIR=/opt/aquila
 AQ_SYNC_ENDPOINT=${AQ_SYNC_ENDPOINT}
-AQ_SYNC_API_KEY=${AQ_SYNC_API_KEY}
 EOF
 chown root:root /opt/aquila/config/device.env
 chmod 600 /opt/aquila/config/device.env
@@ -580,11 +590,24 @@ curl -fsSL \
     -o /opt/fleet/update.sh
 chmod +x /opt/fleet/update.sh
 
+# Generate the device keypair + CSR on-device (CN = Device ID = Pi serial). The
+# private key is written owner-only (0600) and never leaves the Pi; only the CSR
+# is later submitted to acorn-ca /enroll (#240). Runs in the app image, which
+# carries the crypto deps; the host does not. The container reads the same
+# /proc/cpuinfo serial, so its CN matches DEVICE_ID written above.
+docker run --rm \
+    -v /opt/aquila/config:/config \
+    -v /proc/cpuinfo:/proc/cpuinfo:ro \
+    "ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG}" \
+    python -m aq_lib.device_csr /config
+
 run_test "docker-compose.yml downloaded"   "test -f /opt/fleet/docker-compose.yml"
 run_test "compose file non-empty"          "test -s /opt/fleet/docker-compose.yml"
 run_test "backend image pulled"            "docker images | grep -q 'aquilla-main-api'"
 run_test "ui image pulled"                 "docker images | grep -q 'aquilla-main-ui'"
 run_test "update.sh exists and executable" "test -x /opt/fleet/update.sh"
+run_test "device CSR generated"            "test -s /opt/aquila/config/device.csr"
+run_test "device key owner-only (0600)"    "test \"\$(stat -c '%a' /opt/aquila/config/device.key)\" = 600"
 
 phase_pass "docker-compose.yml downloaded, all images pulled"
 
