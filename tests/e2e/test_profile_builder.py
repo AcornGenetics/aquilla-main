@@ -160,6 +160,36 @@ def test_valid_save_posts_stages_and_redirects(page, base_url):
         page.request.post(f"{base_url}/profiles/delete", data={"profiles": stale})
 
 
+def test_blank_name_blocks_save_and_flags_field(page, base_url):
+    """A blank profile name is required: it's flagged and blocks save even when
+    every Stage field is valid (concern #1 from the #218 review)."""
+    _goto_builder(page, base_url)
+    # All stage fields valid; name left blank.
+    page.locator("#stage-incubation-temp").fill("37")
+    page.locator("#stage-incubation-time").fill("600")
+    page.locator("#stage-denaturation-temp").fill("95")
+    page.locator("#stage-denaturation-time").fill("120")
+    page.locator("#stage-amp-cycles").fill("40")
+    page.locator("#stage-amp-sub-0-temp").fill("95")
+    page.locator("#stage-amp-sub-0-time").fill("11")
+    page.locator("#stage-amp-sub-1-temp").fill("60")
+    page.locator("#stage-amp-sub-1-time").fill("38")
+    page.locator("#stage-finalhold-temp").fill("25")
+    page.locator("#stage-finalhold-time").fill("60")
+
+    page.locator("#save-profile-button").click()
+    try:
+        # Blocked: still on the builder, name field flagged invalid.
+        assert page.url.rstrip("/").endswith("/profiles/builder")
+        assert "is-invalid" in (page.locator("#profile-name").get_attribute("class") or "")
+    finally:
+        # Defensive: a pre-fix run would have saved a blank-name profile.
+        listing = page.request.get(f"{base_url}/profiles").json()
+        stale = [p["id"] for p in listing if (p.get("id", "").replace("\\", "/") in ("local/profile.json",))]
+        if stale:
+            page.request.post(f"{base_url}/profiles/delete", data={"profiles": stale})
+
+
 # ---------------------------------------------------------------------------
 # Amplification Sub-stages — add/remove + rename + cycles (issue #202, B2)
 # ---------------------------------------------------------------------------
@@ -181,7 +211,7 @@ def test_amplification_starts_two_step_with_add_tab(page, base_url):
 
     # The add tab is shown; there is no remove control until a third exists.
     assert page.locator("#amp-add-substage").is_visible(), "add tab should show at two"
-    assert page.locator("#amp-remove-substage").count() == 0, "no X at two Sub-stages"
+    assert page.locator(".amp-substage__remove").count() == 0, "no X at two Sub-stages"
 
 
 def test_adding_third_substage_renames_appends_and_hides_add_tab(page, base_url):
@@ -200,7 +230,7 @@ def test_adding_third_substage_renames_appends_and_hides_add_tab(page, base_url)
 
     # At three: the add tab is hidden and the Extension row carries the X.
     assert not page.locator("#amp-add-substage").is_visible(), "add tab hidden at three"
-    assert page.locator("#amp-remove-substage").is_visible(), "Extension X should show"
+    assert page.locator(".amp-substage__remove").is_visible(), "Extension X should show"
 
 
 def test_removing_third_substage_via_x_reverts_to_two_step(page, base_url):
@@ -211,7 +241,7 @@ def test_removing_third_substage_via_x_reverts_to_two_step(page, base_url):
     page.locator("#amp-add-substage").click()      # 2 -> 3
     assert page.locator(".amp-substage").count() == 3
 
-    page.locator("#amp-remove-substage").click()   # X on the Extension row, 3 -> 2
+    page.locator(".amp-substage__remove").click()   # X on the Extension row, 3 -> 2
 
     assert page.locator(".amp-substage").count() == 2
     assert page.locator("#stage-amp-sub-2-name").count() == 0, "third row should be gone"
@@ -219,7 +249,7 @@ def test_removing_third_substage_via_x_reverts_to_two_step(page, base_url):
 
     # Back at two: the add tab returns and the X is gone.
     assert page.locator("#amp-add-substage").is_visible(), "add tab should return"
-    assert page.locator("#amp-remove-substage").count() == 0, "X should be gone at two"
+    assert page.locator(".amp-substage__remove").count() == 0, "X should be gone at two"
 
 
 def test_three_step_save_posts_three_substages(page, base_url):

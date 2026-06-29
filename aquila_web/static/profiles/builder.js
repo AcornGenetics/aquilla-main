@@ -8,11 +8,10 @@
   // Stages with an enable checkbox. Amplification is always present (no toggle).
   var OPTIONAL_STAGES = ["incubation", "denaturation", "finalhold"];
 
-  // When the URL carries ?id= (or ?profile=) the builder is editing an existing
-  // structured Profile: it repopulates from `stages` and saves in place (#203).
-  var editId =
-    new URLSearchParams(window.location.search).get("id") ||
-    new URLSearchParams(window.location.search).get("profile");
+  // When the URL carries ?id= the builder is editing an existing structured
+  // Profile: it repopulates from `stages` and saves in place (#203). The list
+  // always links with ?id=, and loadForEdit looks up by id, so that's the only key.
+  var editId = new URLSearchParams(window.location.search).get("id");
 
   function valueInputs(card) {
     // Every editable value field in the card (temp/time) — never the checkbox.
@@ -184,6 +183,12 @@
   function validateForm() {
     var valid = setEstimatedValid(validEstimated());
 
+    // Profile name is required — a blank name would otherwise save as "profile.json"
+    // with an empty title (#218 review). Flag it like any other field.
+    var nameInput = document.getElementById("profile-name");
+    var nameOk = !!nameInput && nameInput.value.trim() !== "";
+    valid = setFieldValid("profile-name", nameOk, "Enter a profile name") && valid;
+
     OPTIONAL_STAGES.forEach(function (key) {
       var box = document.getElementById("stage-" + key + "-enabled");
       var enabled = !box || box.checked;
@@ -287,10 +292,11 @@
       '</div>' +
       '</div>' +
       '</div>' +
-      '<button id="amp-remove-substage" class="amp-substage__remove" type="button" aria-label="Remove sub-stage">&times;</button>';
+      '<button class="amp-substage__remove" type="button" aria-label="Remove sub-stage">&times;</button>';
     // Set the name as text (never innerHTML) so it can't inject markup.
     row.querySelector(".amp-substage__name").textContent = name;
-    row.querySelector("#amp-remove-substage").addEventListener("click", removeSubstage);
+    // Query by class (not a per-row id) so additional removable rows can't collide.
+    row.querySelector(".amp-substage__remove").addEventListener("click", removeSubstage);
     return row;
   }
 

@@ -534,6 +534,27 @@ def test_nonfinite_in_disabled_stage_rejected_not_persisted(client):
 
 
 @pytest.mark.contract
+def test_edit_rename_keeps_structured_profile_in_local(client):
+    """Renaming a structured profile on edit keeps it under local/, not the
+    profiles root (concern #2 from the #218 review)."""
+    created = client.post("/profiles", json={
+        "name": "Rename Me", "fam_label": "FAM", "rox_label": "ROX", "stages": SAMPLE_STAGES,
+    }).json()["id"]
+    assert created.replace("\\", "/").startswith("local/")
+    resp = client.post("/profiles", json={
+        "name": "Renamed Profile", "profile_id": created,
+        "fam_label": "FAM", "rox_label": "ROX", "stages": SAMPLE_STAGES,
+    })
+    assert resp.status_code == 200, resp.text
+    new_id = resp.json()["id"]
+    try:
+        assert new_id.replace("\\", "/").startswith("local/"), f"renamed left local/: {new_id}"
+    finally:
+        _delete_profile(client, new_id)
+        _delete_profile(client, created)
+
+
+@pytest.mark.contract
 def test_structured_profile_keys_in_canonical_order(client):
     """A saved structured profile writes its top-level keys in canonical order:
     output_dir, post_in_gui, title, countdown fields, labels, stages, steps."""
