@@ -1636,6 +1636,58 @@ _startup_image_digest_ui: str | None = os.getenv("RUNNING_IMAGE_DIGEST_UI") or N
 _latest_ghcr_digest: str | None = None
 _latest_ghcr_digest_ui: str | None = None
 
+# --- OTA auto-reboot completion sentinel (issue #183, ADR-018) ----------------
+from aquila_web import update_sentinel as _sentinel
+
+# Lives on the /opt/fleet host volume so it survives the container swap + reboot.
+_UPDATE_SENTINEL_PATH = os.getenv("AQ_UPDATE_SENTINEL_PATH", "/opt/fleet/last_update.json")
+# Short TTL: a sentinel older than this is stale and must not pop a modal.
+_UPDATE_SENTINEL_TTL = int(os.getenv("AQ_UPDATE_SENTINEL_TTL", "600"))
+
+
+def _utcnow_iso() -> str:
+    return datetime.utcnow().isoformat() + "Z"
+
+
+def _trigger_host_reboot() -> bool:
+    """Best-effort: ask the host kiosk-control service to reboot the device.
+
+    Synchronous + swallows errors: the process is about to die anyway, and a
+    failure must not crash startup (it degrades to 'modal on next manual reset').
+    """
+    try:
+        headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
+        with httpx.Client(timeout=10.0) as client:
+            client.post(f"{KIOSK_CONTROL_URL}/reboot", json={}, headers=headers)
+        return True
+    except Exception as e:  # noqa: BLE001 - never let a reboot failure crash boot
+        logger.warning("host reboot request failed: %s", e)
+        return False
+
+
+def _resolve_startup_update_state() -> None:
+    """On boot, advance the update sentinel state machine.
+
+    reboot_pending -> persist show_complete, then reboot the host (once).
+    show_complete  -> surface the completion modal (_update_status = 'complete').
+    none/stale     -> clear the sentinel.
+    """
+    global _update_status
+    record = _sentinel.read_sentinel(_UPDATE_SENTINEL_PATH)
+    action = _sentinel.next_startup_action(record, datetime.utcnow(), _UPDATE_SENTINEL_TTL)
+    if action == "reboot":
+        # Don't reboot mid-run; a fresh post-update boot has no active run anyway.
+        if current_item.screen == "running":
+            return
+        _sentinel.write_sentinel(_UPDATE_SENTINEL_PATH, "show_complete", _utcnow_iso())
+        _update_status = "updating"
+        _trigger_host_reboot()
+    elif action == "show_complete":
+        _update_status = "complete"
+    else:
+        _sentinel.clear_sentinel(_UPDATE_SENTINEL_PATH)
+# ------------------------------------------------------------------------------
+
 
 async def _ghcr_bearer_token(user: str, token: str, repo: str) -> str | None:
     """Exchange Basic credentials for a short-lived GHCR Bearer token."""
@@ -1753,6 +1805,12 @@ async def apply_update():
             status_code=409,
             content={"ok": False, "error": "Cannot update during an active run. Stop the run first."},
         )
+    # Breadcrumb the new container reads on startup to drive the auto-reboot (#183).
+    # Written before triggering Watchtower so a kill mid-swap still leaves it behind.
+    try:
+        _sentinel.write_sentinel(_UPDATE_SENTINEL_PATH, "reboot_pending", _utcnow_iso())
+    except OSError:
+        logger.warning("could not write update sentinel at %s", _UPDATE_SENTINEL_PATH)
     _update_status = "updating"
     headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
     try:
@@ -1824,6 +1882,23 @@ async def reset_update_state():
     return {"ok": True}
 
 
+@app.post("/update/ack-complete")
+async def ack_update_complete():
+    """Operator dismissed the 'Update Complete' modal. Fire-once: clear sentinel."""
+    global _update_status
+    _sentinel.clear_sentinel(_UPDATE_SENTINEL_PATH)
+    if _update_status == "complete":
+        _update_status = "idle"
+    return {"ok": True}
+
+
+@app.post("/reboot")
+async def reboot_device():
+    """Proxy a host reboot request to the kiosk-control service."""
+    ok = _trigger_host_reboot()
+    return {"ok": ok}
+
+
 async def _background_update_poller() -> None:
     """Poll GHCR every UPDATE_CHECK_INTERVAL seconds. Never pulls the image."""
     while True:
@@ -1861,6 +1936,16 @@ async def _inject_device_id() -> None:
 @app.on_event("startup")
 async def _inject_device_id() -> None:
     inject_hw_serial_env()
+
+
+@app.on_event("startup")
+async def resolve_update_completion() -> None:
+    """On boot, advance the OTA sentinel: reboot if an update just applied, or
+    surface the 'Update Complete' state if we just came back from that reboot (#183)."""
+    try:
+        _resolve_startup_update_state()
+    except Exception as e:  # noqa: BLE001 - never block startup on this
+        logger.warning("update sentinel resolution failed: %s", e)
 
 
 @app.on_event("startup")

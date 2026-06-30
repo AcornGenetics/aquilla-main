@@ -1,5 +1,11 @@
 # Spec: OTA Update Complete State Survives Page Reload
 
+> **Superseded** by `specs/backend/spec_ota_auto_reboot_complete.md` and ADR-018.
+> The on-disk sentinel idea below is reused, but the completion flow is now a full
+> device reboot + a one-time "Update Complete" modal, not a reload + banner. Kept
+> for context (it documents the root cause and the rejected reload-only approach —
+> see ADR-018 Alternative A).
+
 ## Problem
 
 When a device update is applied, the UI shows an overlay ("Applying update…") and polls
