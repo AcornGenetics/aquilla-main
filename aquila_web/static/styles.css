@@ -628,7 +628,19 @@ a:active {
   cursor: pointer;
 }
 
+/* Truncate a long selected profile name to one line with an ellipsis so it
+   stays inside the picker box (issue #266). Only the closed button label
+   truncates; the open dropdown list keeps full names. */
+#profile-combo-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .profile-combo-chevron {
+  flex-shrink: 0;
   font-size: 16px;
   color: #6b7280;
   transition: transform 0.15s ease;

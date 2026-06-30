@@ -104,6 +104,47 @@ def _profile_rox_unavailable(profile_name: str | None) -> bool:
             continue
     return False
 
+def _resolve_profile_display_name(profile_ref: str | None) -> str:
+    """Resolve a profile reference to its human-readable display name.
+
+    ``profile_ref`` is normally the id stored by ``/profile/select`` — the
+    relative path emitted by ``GET /profiles`` (e.g. ``local/A3_Invalid_Temp.json``).
+    History must show the profile's ``name`` (e.g. ``A3 Invalid Temp``), never the
+    ``local/`` prefix, the ``.json`` extension, or the filename's underscores
+    (issue #267). Idempotent when given a value that is already a display name.
+    See specs/backend/spec_history_profile_display_name.md.
+    """
+    if not profile_ref:
+        return "--"
+    profile_dir = resolve_profile_dir()
+    # 1. Normal path: treat the ref as the relative-path id and read its JSON name.
+    try:
+        candidate = profile_dir / profile_ref
+        if candidate.is_file():
+            data = json.loads(candidate.read_text())
+            name = data.get("name") or data.get("title")
+            if name:
+                return str(name)
+    except Exception:
+        pass
+    # 2. Otherwise match by name/stem/filename/id across the profile tree.
+    try:
+        if profile_dir.exists():
+            for path in profile_dir.rglob("*.json"):
+                try:
+                    data = json.loads(path.read_text())
+                except Exception:
+                    continue
+                name = data.get("name") or data.get("title") or path.stem
+                rel = str(path.relative_to(profile_dir))
+                if profile_ref in (name, path.stem, path.name, rel):
+                    return str(name)
+    except Exception:
+        pass
+    # 3. Fallback: strip the directory and a trailing .json so a path is never
+    #    shown, while preserving dots that are part of the name (e.g. "Cycle 2.5").
+    return Path(profile_ref).name.removesuffix(".json")
+
 def _all_bundled_filenames() -> set[str]:
     profile_groups_path = BASE_DIR / "config_files" / "profile_groups.json"
     try:
@@ -582,7 +623,7 @@ async def _simulate_run(profile_name: str) -> None:
     history = _load_history()
     history.append({
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "profile": profile_name,
+        "profile": _resolve_profile_display_name(profile_name),
         "run_name": run_name,
         "result": detected_summary,
         "graph_path": f"/plots/{plot_filename}",
@@ -885,7 +926,7 @@ async def advance_run_name():
 async def append_history(payload: dict):
     global results_path, results_cleared
     path_value = payload.get("results_path")
-    profile = payload.get("profile") or "--"
+    profile = _resolve_profile_display_name(payload.get("profile"))
     run_label = payload.get("run_name") or "--"
     graph_path = payload.get("graph_path")
     result_path = None
