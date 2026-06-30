@@ -4,7 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=768, height=1024, initial-scale=1" />
   <title>Edit Profile</title>
-  <link rel="stylesheet" href="/static/styles.css?v=219" />
+  <link rel="stylesheet" href="/static/styles.css?v=235" />
+  <script>
+    // Apply read-only before first paint so the editable editor never flashes
+    // when a Legacy Profile opens via ?view=1 (issue #211). edit.js still runs
+    // applyViewMode() to populate the summary and disable inputs.
+    (function () {
+      var p = new URLSearchParams(location.search);
+      if (p.get("view") === "1" || p.get("mode") === "view") {
+        document.documentElement.classList.add("view-only");
+      }
+    })();
+  </script>
 </head>
 <body class="app-body">
   <div class="app-shell">
@@ -61,6 +72,7 @@
             <h2>Profile Summary</h2>
             <p>Read-only overview of every stage and step.</p>
           </header>
+          <div id="profile-summary-meta" class="profile-summary-meta"></div>
           <div id="profile-summary-list" class="profile-summary-list"></div>
         </section>
         <section class="card profile-edit" id="profile-edit-steps">
@@ -102,7 +114,7 @@
     </main>
   </div>
   <script src="/static/nav.js?v=1"></script>
-  <script src="/static/profiles/edit.js?v=19"></script>
+  <script src="/static/profiles/edit.js?v=23"></script>
   <script src="/static/keyboard.js?v=14"></script>
 </body>
 </html>
