@@ -9,11 +9,20 @@ pytestmark = pytest.mark.e2e
 
 KEYBOARD_SELECTOR = ".onscreen-keyboard"
 RUN_NAME_INPUT = "#run-name-input"
+BUILDER_NAME_INPUT = "#profile-name"
 
 
 def _goto_run(page, base_url):
     try:
         page.goto(f"{base_url}/run", timeout=10_000)
+    except Exception as exc:
+        pytest.skip(f"Backend not reachable at {base_url}: {exc}")
+    page.wait_for_load_state("domcontentloaded")
+
+
+def _goto_builder(page, base_url):
+    try:
+        page.goto(f"{base_url}/profiles/builder", timeout=10_000)
     except Exception as exc:
         pytest.skip(f"Backend not reachable at {base_url}: {exc}")
     page.wait_for_load_state("domcontentloaded")
@@ -58,6 +67,23 @@ def test_keyboard_has_letter_keys(page, base_url):
     for letter in ("a", "q", "z"):
         key_btn = page.locator(f"[data-value='{letter}']")
         assert key_btn.count() >= 1, f"Key '{letter}' not found in keyboard"
+
+
+# ---------------------------------------------------------------------------
+# Structured profile builder (issue #262)
+# ---------------------------------------------------------------------------
+
+def test_clicking_builder_name_shows_keyboard(page, base_url):
+    """Tapping a text field on the structured profile builder shows the keyboard."""
+    _goto_builder(page, base_url)
+    page.locator(BUILDER_NAME_INPUT).click()
+    page.wait_for_function(
+        "() => document.querySelector('.onscreen-keyboard')?.classList.contains('is-visible')",
+        timeout=3_000,
+    )
+    keyboard = page.locator(KEYBOARD_SELECTOR)
+    assert keyboard.count() == 1, "On-screen keyboard element not found on builder page"
+    assert keyboard.is_visible(), "On-screen keyboard not visible after tapping a builder field"
 
 
 # ---------------------------------------------------------------------------

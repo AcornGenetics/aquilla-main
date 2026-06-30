@@ -365,3 +365,215 @@ def test_saved_file_always_carries_both_fields_after_anchor(client):
         assert keys[keys.index("time_unavailable") + 1] == "estimated_completion_seconds"
     finally:
         _delete_profile(client, pid)
+
+
+# ---------------------------------------------------------------------------
+# Structured profiles — `stages` contract foundation (issue #197)
+# ---------------------------------------------------------------------------
+
+# The canonical structured-profile payload both routes build and test against.
+SAMPLE_STAGES = {
+    "incubation": {"enabled": True, "temp": 37, "time": 600},
+    "denaturation": {"enabled": True, "temp": 95, "time": 120},
+    "amplification": {
+        "cycles": 40,
+        "subStages": [
+            {"name": "Denaturation", "temp": 95, "time": 11},
+            {"name": "Annealing & Extension", "temp": 60.5, "time": 38},
+        ],
+    },
+    "finalHold": {"enabled": False, "temp": 25, "time": 60},
+}
+
+
+@pytest.mark.contract
+def test_post_profile_persists_and_returns_stages(client):
+    """A `stages` payload is accepted, persisted, and read back unchanged.
+
+    #197 only carries the contract surface — it does not assemble steps or
+    validate ranges (those are A1/A2/A3). It must, however, round-trip the
+    structured object so both routes can build against a real contract.
+    """
+    resp = client.post(
+        "/profiles",
+        json={"name": "Contract Stages Profile", "stages": SAMPLE_STAGES},
+    )
+    assert resp.status_code == 200, resp.text
+    pid = resp.json()["id"]
+    try:
+        details = client.get(f"/profiles/details?id={pid}")
+        assert details.status_code == 200
+        assert details.json()["stages"] == SAMPLE_STAGES
+    finally:
+        _delete_profile(client, pid)
+
+
+@pytest.mark.contract
+def test_profiles_builder_route_serves_html(client):
+    """GET /profiles/builder serves the structured-editor HTML shell (issue #197)."""
+    resp = client.get("/profiles/builder")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+
+
+@pytest.mark.contract
+def test_sample_stages_fixture_matches_contract():
+    """The committed sample fixture is the canonical `stages` shape (issue #197).
+
+    Both routes build against this file, so it must match the agreed contract:
+    incubation/denaturation/finalHold carry enabled+temp+time; amplification is
+    always present (no `enabled`) with cycles and 2-3 sub-stages.
+    """
+    fixture = Path(__file__).parent.parent / "fixtures" / "sample_stages.json"
+    data = json.loads(fixture.read_text())
+    assert data == SAMPLE_STAGES
+
+    for key in ("incubation", "denaturation", "finalHold"):
+        assert set(data[key]) == {"enabled", "temp", "time"}, key
+    amp = data["amplification"]
+    assert "enabled" not in amp
+    assert "cycles" in amp
+    assert 2 <= len(amp["subStages"]) <= 3
+    for sub in amp["subStages"]:
+        assert set(sub) == {"name", "temp", "time"}
+
+
+# ---------------------------------------------------------------------------
+# Structured profiles — endpoint wiring (issue #201 / A3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_post_structured_profile_assembles_steps(client):
+    """A valid stages payload is validated, assembled into steps, and persisted."""
+    resp = client.post("/profiles", json={"name": "A3 Assembled", "stages": SAMPLE_STAGES})
+    assert resp.status_code == 200, resp.text
+    pid = resp.json()["id"]
+    try:
+        data = client.get(f"/profiles/details?id={pid}").json()
+        steps = data["steps"]
+        # head, amplification repeat, and tail are all present
+        assert steps[0] == {"disable": 0, "duration": 1, "description": "Record equilibration without power."}
+        assert any("repeat" in s for s in steps)
+        assert steps[-1] == {"pcr_fanoff": 0}
+        # source of truth round-trips too
+        assert data["stages"] == SAMPLE_STAGES
+    finally:
+        _delete_profile(client, pid)
+
+
+@pytest.mark.contract
+def test_post_invalid_stages_returns_400(client):
+    """An out-of-range stages payload is rejected with 400 (validated before assembly)."""
+    bad = json.loads(json.dumps(SAMPLE_STAGES))  # deep copy
+    bad["incubation"]["temp"] = 200  # above the 100 C max
+    resp = client.post("/profiles", json={"name": "A3 Invalid Temp", "stages": bad})
+    assert resp.status_code == 400
+
+
+@pytest.mark.contract
+def test_post_malformed_stages_returns_400_not_500(client):
+    """Malformed structure (missing sub-stage name) is rejected cleanly, never a 500
+    (validate guards before assemble — the trust-boundary payoff)."""
+    bad = json.loads(json.dumps(SAMPLE_STAGES))  # deep copy
+    del bad["amplification"]["subStages"][0]["name"]
+    resp = client.post("/profiles", json={"name": "A3 Malformed", "stages": bad})
+    assert resp.status_code == 400
+
+
+@pytest.mark.contract
+def test_list_profiles_includes_structured_flag(client):
+    """GET /profiles flags structured profiles (have `stages`) vs legacy ones."""
+    structured_id = client.post(
+        "/profiles", json={"name": "A3 Structured Flag", "stages": SAMPLE_STAGES}
+    ).json()["id"]
+    legacy_id = _create_profile(client, name="A3 Legacy Flag")  # steps-based, no stages
+    try:
+        by_id = {p["id"]: p for p in client.get("/profiles").json()}
+        assert by_id[structured_id]["structured"] is True
+        assert by_id[legacy_id]["structured"] is False
+    finally:
+        _delete_profile(client, structured_id)
+        _delete_profile(client, legacy_id)
+
+
+# ---------------------------------------------------------------------------
+# Structured profiles — canonical JSON key order (issue #213 / A4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_nonfinite_in_disabled_stage_rejected_not_persisted(client):
+    """A non-finite value (NaN/Infinity) anywhere — even in a DISABLED stage that
+    validation skips — must be rejected with 400 and never written to disk.
+
+    Regression for the trust-boundary blocker: such a value used to pass
+    validation, persist as literal NaN/Infinity, and 500 every later read.
+    """
+    from aquila_web import main as web_main
+
+    bad = json.loads(json.dumps(SAMPLE_STAGES))  # deep copy
+    bad["incubation"] = {"enabled": False, "temp": "__NAN__", "time": "__INF__"}
+    # Build a raw body with literal NaN/Infinity tokens — a crafted client can send
+    # these (Starlette's json.loads accepts them); httpx's json= encoder cannot.
+    body = json.dumps({"name": "NonFinite Poison", "fam_label": "FAM",
+                       "rox_label": "ROX", "stages": bad})
+    body = body.replace('"__NAN__"', "NaN").replace('"__INF__"', "Infinity")
+    resp = client.post("/profiles", content=body,
+                       headers={"Content-Type": "application/json"})
+    try:
+        assert resp.status_code == 400, f"expected 400, got {resp.status_code}"
+        # nothing written: the poison profile must not appear in the listing
+        ids = [p["id"] for p in client.get("/profiles").json()]
+        assert not any("NonFinite_Poison" in i for i in ids)
+    finally:
+        # defensive: remove any poison file a failing (pre-fix) run may have written,
+        # since it would 500 every subsequent read of the listing/details
+        for p in (web_main.resolve_profile_dir() / "local").glob("NonFinite_Poison*.json"):
+            p.unlink(missing_ok=True)
+
+
+@pytest.mark.contract
+def test_edit_rename_keeps_structured_profile_in_local(client):
+    """Renaming a structured profile on edit keeps it under local/, not the
+    profiles root (concern #2 from the #218 review)."""
+    created = client.post("/profiles", json={
+        "name": "Rename Me", "fam_label": "FAM", "rox_label": "ROX", "stages": SAMPLE_STAGES,
+    }).json()["id"]
+    assert created.replace("\\", "/").startswith("local/")
+    resp = client.post("/profiles", json={
+        "name": "Renamed Profile", "profile_id": created,
+        "fam_label": "FAM", "rox_label": "ROX", "stages": SAMPLE_STAGES,
+    })
+    assert resp.status_code == 200, resp.text
+    new_id = resp.json()["id"]
+    try:
+        assert new_id.replace("\\", "/").startswith("local/"), f"renamed left local/: {new_id}"
+    finally:
+        _delete_profile(client, new_id)
+        _delete_profile(client, created)
+
+
+@pytest.mark.contract
+def test_structured_profile_keys_in_canonical_order(client):
+    """A saved structured profile writes its top-level keys in canonical order:
+    output_dir, post_in_gui, title, countdown fields, labels, stages, steps."""
+    from aquila_web import main as web_main
+
+    resp = client.post("/profiles", json={
+        "name": "A4 Key Order",
+        "fam_label": "FAM",
+        "rox_label": "ROX",
+        "stages": SAMPLE_STAGES,
+    })
+    assert resp.status_code == 200, resp.text
+    pid = resp.json()["id"]
+    try:
+        keys = list(json.loads((web_main.resolve_profile_dir() / pid).read_text()).keys())
+        assert keys == [
+            "output_dir", "post_in_gui", "title",
+            "time_unavailable", "estimated_completion_seconds",
+            "labels", "stages", "steps",
+        ]
+    finally:
+        _delete_profile(client, pid)

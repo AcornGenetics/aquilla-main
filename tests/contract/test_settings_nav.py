@@ -276,6 +276,7 @@ LIVE_NAV_PAGE_FILES = [
     "history_detail.html",
     "profiles/index.html",
     "profiles/edit_form.html",
+    "profiles/builder.html",
     "complete.html",
     "help.html",
     "settings.html",

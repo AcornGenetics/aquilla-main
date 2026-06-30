@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
 from aq_lib.device_id import inject_hw_serial_env
 from aquila_web.local_db import enqueue_event, init_local_db
+from aquila_web.profile_assembly import assemble_steps, validate_stages
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -142,6 +143,47 @@ def _profile_rox_unavailable(profile_name: str | None) -> bool:
             continue
     return False
 
+def _resolve_profile_display_name(profile_ref: str | None) -> str:
+    """Resolve a profile reference to its human-readable display name.
+
+    ``profile_ref`` is normally the id stored by ``/profile/select`` — the
+    relative path emitted by ``GET /profiles`` (e.g. ``local/A3_Invalid_Temp.json``).
+    History must show the profile's ``name`` (e.g. ``A3 Invalid Temp``), never the
+    ``local/`` prefix, the ``.json`` extension, or the filename's underscores
+    (issue #267). Idempotent when given a value that is already a display name.
+    See specs/backend/spec_history_profile_display_name.md.
+    """
+    if not profile_ref:
+        return "--"
+    profile_dir = resolve_profile_dir()
+    # 1. Normal path: treat the ref as the relative-path id and read its JSON name.
+    try:
+        candidate = profile_dir / profile_ref
+        if candidate.is_file():
+            data = json.loads(candidate.read_text())
+            name = data.get("name") or data.get("title")
+            if name:
+                return str(name)
+    except Exception:
+        pass
+    # 2. Otherwise match by name/stem/filename/id across the profile tree.
+    try:
+        if profile_dir.exists():
+            for path in profile_dir.rglob("*.json"):
+                try:
+                    data = json.loads(path.read_text())
+                except Exception:
+                    continue
+                name = data.get("name") or data.get("title") or path.stem
+                rel = str(path.relative_to(profile_dir))
+                if profile_ref in (name, path.stem, path.name, rel):
+                    return str(name)
+    except Exception:
+        pass
+    # 3. Fallback: strip the directory and a trailing .json so a path is never
+    #    shown, while preserving dots that are part of the name (e.g. "Cycle 2.5").
+    return Path(profile_ref).name.removesuffix(".json")
+
 def _all_bundled_filenames() -> set[str]:
     profile_groups_path = BASE_DIR / "config_files" / "profile_groups.json"
     try:
@@ -264,6 +306,37 @@ def _order_time_fields(profile: dict) -> dict:
     return ordered
 
 
+# Canonical top-level key order for structured profiles (issue #213 / A4):
+# metadata first, then the human-authored stages, then the derived steps last.
+CANONICAL_PROFILE_KEY_ORDER = (
+    "output_dir",
+    "post_in_gui",
+    "title",
+    "rox_unavailable",
+    "time_unavailable",
+    "estimated_completion_seconds",
+    "labels",
+    "stages",
+    "steps",
+)
+
+
+def _order_profile_keys(profile: dict) -> dict:
+    """Return a copy of *profile* with top-level keys in CANONICAL_PROFILE_KEY_ORDER.
+
+    Only keys that are present are emitted (no injection). Any keys not in the
+    canonical list are preserved and appended in their original relative order
+    (never dropped). See spec_profile_key_order.md."""
+    ordered: dict = {}
+    for key in CANONICAL_PROFILE_KEY_ORDER:
+        if key in profile:
+            ordered[key] = profile[key]
+    for key, value in profile.items():
+        if key not in ordered:
+            ordered[key] = value
+    return ordered
+
+
 class ProfileSelect(BaseModel):
     profile: str
 
@@ -275,6 +348,10 @@ class ProfileSave(BaseModel):
     rox_label: Optional[str] = None
     # Optional estimated completion time, in minutes. None clears any existing estimate.
     estimated_minutes: Optional[int] = None
+    # Structured-editor source of truth (issue #197 contract). When present, the
+    # profile is a Structured Profile; assembly/validation of these stages into
+    # `steps` is handled separately (A1/A2/A3). Persisted verbatim here.
+    stages: Optional[dict] = None
 
 class ProfileDelete(BaseModel):
     profiles: list[str]
@@ -585,7 +662,7 @@ async def _simulate_run(profile_name: str) -> None:
     history = _load_history()
     history.append({
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "profile": profile_name,
+        "profile": _resolve_profile_display_name(profile_name),
         "run_name": run_name,
         "result": detected_summary,
         "graph_path": f"/plots/{plot_filename}",
@@ -888,7 +965,7 @@ async def advance_run_name():
 async def append_history(payload: dict):
     global results_path, results_cleared
     path_value = payload.get("results_path")
-    profile = payload.get("profile") or "--"
+    profile = _resolve_profile_display_name(payload.get("profile"))
     run_label = payload.get("run_name") or "--"
     graph_path = payload.get("graph_path")
     result_path = None
@@ -950,6 +1027,15 @@ async def profiles_edit_page():
 async def profiles_edit_form_page():
     return FileResponse(
         static_dir / "profiles/edit_form.html",
+        headers={"Cache-Control": "no-store"}
+    )
+
+@app.get("/profiles/builder")
+async def profiles_builder_page():
+    # Structured profile editor (issue #197). Serves the shell; the Stage UI,
+    # validation, and save wiring are layered on in the frontend route (B1/B2/B3).
+    return FileResponse(
+        static_dir / "profiles/builder.html",
         headers={"Cache-Control": "no-store"}
     )
 
@@ -1243,6 +1329,7 @@ async def list_profiles():
                 "name": data.get("name"),
                 "label": data.get("name"),
                 "bundled": is_bundled,
+                "structured": "stages" in data,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
                 "configuration": data.get("configuration", {})
@@ -1255,6 +1342,7 @@ async def list_profiles():
                 "name": data.get("title", path.stem),
                 "label": data.get("title", path.stem),
                 "bundled": is_bundled,
+                "structured": "stages" in data,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
                 "configuration": _convert_legacy_steps_to_run_config(
@@ -1408,6 +1496,15 @@ async def save_profile(payload: ProfileSave):
     base_profile["post_in_gui"] = "True"
     if payload.steps is not None:
         base_profile["steps"] = payload.steps
+    # Structured Profile (issue #201): validate the stages, then regenerate steps
+    # from them (stages is the source of truth; any client-sent steps is ignored).
+    # validate_stages runs first so assemble_steps only ever sees valid input.
+    if payload.stages is not None:
+        stage_errors = validate_stages(payload.stages)
+        if stage_errors:
+            raise HTTPException(status_code=400, detail={"errors": stage_errors})
+        base_profile["stages"] = payload.stages
+        base_profile["steps"] = assemble_steps(payload.stages)
     labels = {}
     if isinstance(base_profile.get("labels"), dict):
         labels.update(base_profile.get("labels", {}))
@@ -1447,16 +1544,36 @@ async def save_profile(payload: ProfileSave):
     elif requested_title:
         sanitized_title = sanitize_name(requested_title)
         if sanitized_title and profile_path.stem != sanitized_title:
-            candidate_path = profile_dir / f"{sanitized_title}.json"
+            # Rename within the profile's own directory (e.g. local/) rather than
+            # the profiles root, so editing+renaming doesn't relocate the file (#218 review).
+            rename_dir = profile_path.parent
+            candidate_path = rename_dir / f"{sanitized_title}.json"
             if candidate_path.exists() and candidate_path != profile_path:
-                candidate_path = profile_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
+                candidate_path = rename_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
             profile_path = candidate_path
 
-    base_profile = _order_time_fields(base_profile)
+    # Structured profiles (issue #213) get the full canonical key order; legacy
+    # steps-based saves keep the narrower time-field ordering unchanged.
+    if "stages" in base_profile:
+        base_profile = _order_profile_keys(base_profile)
+    else:
+        base_profile = _order_time_fields(base_profile)
 
+    # Serialize first with allow_nan=False so a non-finite value (NaN/Infinity)
+    # anywhere — including a disabled stage that validation skips — fails loudly
+    # with a 400 instead of writing invalid JSON that 500s on every later read.
+    # Serializing before opening the file also prevents truncating an existing
+    # profile when re-saving an edit that turns out to be invalid.
+    try:
+        profile_text = json.dumps(base_profile, indent=2, allow_nan=False)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail={"errors": ["Profile contains non-finite numeric values (NaN/Infinity)."]},
+        )
     try:
         with profile_path.open("w") as f:
-            json.dump(base_profile, f, indent=2)
+            f.write(profile_text)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to save profile")
 
@@ -1542,7 +1659,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
         }
 
-    return {
+    details = {
         "id": profile_path.name,
         "title": data.get("title", profile_path.stem),
         "labels": data.get("labels", {}),
@@ -1551,6 +1668,11 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         "estimated_completion_seconds": data.get("estimated_completion_seconds"),
         "steps": data.get("steps", [])
     }
+    # Structured Profiles carry the `stages` source of truth; Legacy Profiles
+    # omit it entirely so the editor can branch on its presence (issue #197).
+    if data.get("stages") is not None:
+        details["stages"] = data["stages"]
+    return details
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -1681,6 +1803,58 @@ _startup_image_digest_ui: str | None = os.getenv("RUNNING_IMAGE_DIGEST_UI") or N
 _latest_ghcr_digest: str | None = None
 _latest_ghcr_digest_ui: str | None = None
 
+# --- OTA auto-reboot completion sentinel (issue #183, ADR-018) ----------------
+from aquila_web import update_sentinel as _sentinel
+
+# Lives on the /opt/fleet host volume so it survives the container swap + reboot.
+_UPDATE_SENTINEL_PATH = os.getenv("AQ_UPDATE_SENTINEL_PATH", "/opt/fleet/last_update.json")
+# Short TTL: a sentinel older than this is stale and must not pop a modal.
+_UPDATE_SENTINEL_TTL = int(os.getenv("AQ_UPDATE_SENTINEL_TTL", "600"))
+
+
+def _utcnow_iso() -> str:
+    return datetime.utcnow().isoformat() + "Z"
+
+
+def _trigger_host_reboot() -> bool:
+    """Best-effort: ask the host kiosk-control service to reboot the device.
+
+    Synchronous + swallows errors: the process is about to die anyway, and a
+    failure must not crash startup (it degrades to 'modal on next manual reset').
+    """
+    try:
+        headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
+        with httpx.Client(timeout=10.0) as client:
+            client.post(f"{KIOSK_CONTROL_URL}/reboot", json={}, headers=headers)
+        return True
+    except Exception as e:  # noqa: BLE001 - never let a reboot failure crash boot
+        logger.warning("host reboot request failed: %s", e)
+        return False
+
+
+def _resolve_startup_update_state() -> None:
+    """On boot, advance the update sentinel state machine.
+
+    reboot_pending -> persist show_complete, then reboot the host (once).
+    show_complete  -> surface the completion modal (_update_status = 'complete').
+    none/stale     -> clear the sentinel.
+    """
+    global _update_status
+    record = _sentinel.read_sentinel(_UPDATE_SENTINEL_PATH)
+    action = _sentinel.next_startup_action(record, datetime.utcnow(), _UPDATE_SENTINEL_TTL)
+    if action == "reboot":
+        # Don't reboot mid-run; a fresh post-update boot has no active run anyway.
+        if current_item.screen == "running":
+            return
+        _sentinel.write_sentinel(_UPDATE_SENTINEL_PATH, "show_complete", _utcnow_iso())
+        _update_status = "updating"
+        _trigger_host_reboot()
+    elif action == "show_complete":
+        _update_status = "complete"
+    else:
+        _sentinel.clear_sentinel(_UPDATE_SENTINEL_PATH)
+# ------------------------------------------------------------------------------
+
 
 async def _ghcr_bearer_token(user: str, token: str, repo: str) -> str | None:
     """Exchange Basic credentials for a short-lived GHCR Bearer token."""
@@ -1798,6 +1972,12 @@ async def apply_update():
             status_code=409,
             content={"ok": False, "error": "Cannot update during an active run. Stop the run first."},
         )
+    # Breadcrumb the new container reads on startup to drive the auto-reboot (#183).
+    # Written before triggering Watchtower so a kill mid-swap still leaves it behind.
+    try:
+        _sentinel.write_sentinel(_UPDATE_SENTINEL_PATH, "reboot_pending", _utcnow_iso())
+    except OSError:
+        logger.warning("could not write update sentinel at %s", _UPDATE_SENTINEL_PATH)
     _update_status = "updating"
     headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
     try:
@@ -1869,6 +2049,23 @@ async def reset_update_state():
     return {"ok": True}
 
 
+@app.post("/update/ack-complete")
+async def ack_update_complete():
+    """Operator dismissed the 'Update Complete' modal. Fire-once: clear sentinel."""
+    global _update_status
+    _sentinel.clear_sentinel(_UPDATE_SENTINEL_PATH)
+    if _update_status == "complete":
+        _update_status = "idle"
+    return {"ok": True}
+
+
+@app.post("/reboot")
+async def reboot_device():
+    """Proxy a host reboot request to the kiosk-control service."""
+    ok = _trigger_host_reboot()
+    return {"ok": ok}
+
+
 async def _background_update_poller() -> None:
     """Poll GHCR every UPDATE_CHECK_INTERVAL seconds. Never pulls the image."""
     while True:
@@ -1906,6 +2103,16 @@ async def _inject_device_id() -> None:
 @app.on_event("startup")
 async def _inject_device_id() -> None:
     inject_hw_serial_env()
+
+
+@app.on_event("startup")
+async def resolve_update_completion() -> None:
+    """On boot, advance the OTA sentinel: reboot if an update just applied, or
+    surface the 'Update Complete' state if we just came back from that reboot (#183)."""
+    try:
+        _resolve_startup_update_state()
+    except Exception as e:  # noqa: BLE001 - never block startup on this
+        logger.warning("update sentinel resolution failed: %s", e)
 
 
 @app.on_event("startup")

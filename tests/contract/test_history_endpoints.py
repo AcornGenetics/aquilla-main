@@ -75,6 +75,32 @@ def test_history_append_stores_all_fields(client):
 
 
 @pytest.mark.contract
+def test_history_append_stores_profile_name_not_path_id(client):
+    """A path-like profile id is stored as the profile's display name (issue #267)."""
+    _clear(client)
+    # Save a profile whose name has spaces; its id is a path with underscores
+    # (e.g. local/A3_Invalid_Temp.json) — the exact shape that leaked into History.
+    resp = client.post(
+        "/profiles",
+        json={"name": "A3 Invalid Temp", "steps": [{"setpoint": 95, "duration": 1}]},
+    )
+    profile_id = resp.json()["id"]
+    try:
+        # sanity: the id really is a path/slug, not a clean name
+        assert (".json" in profile_id) and ("_" in profile_id)
+
+        client.post("/history/append", json={**HISTORY_ENTRY, "profile": profile_id})
+        entry = client.get("/history/data").json()[-1]
+
+        assert entry["profile"] == "A3 Invalid Temp"
+        assert "/" not in entry["profile"] and "\\" not in entry["profile"]
+        assert ".json" not in entry["profile"]
+    finally:
+        client.post("/profiles/delete", json={"profiles": [profile_id]})
+        _clear(client)
+
+
+@pytest.mark.contract
 def test_history_entry_has_expected_keys(client):
     """History entry contains: timestamp, profile, run_name, results_path, graph_path, tube_names."""
     _clear(client)

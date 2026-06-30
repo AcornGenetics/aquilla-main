@@ -36,6 +36,30 @@ The operator-facing name for a Protocol. The Run screen labels the protocol pick
 **Run**
 A single execution of a Protocol on a Sentri, producing results for up to 4 Wells. A Run has a start time, end time, and status (completed, aborted). A Run is the unit of event emission — one `run_complete` event per Run.
 
+### Profile Authoring
+
+Terms for the structured profile editor. These name the user-facing phases of a [[Profile]]; they are an authoring abstraction over the raw JSON `steps` array, not stored fields.
+
+**Stage**
+One of the four fixed top-level phases the structured editor presents: Incubation, Initial Denaturation, Amplification, and Final Temp Hold. Distinct from the old editor's generic, free-form "stage." Incubation, Initial Denaturation, and Final Temp Hold are optional (toggled by a checkbox); Amplification is always present.
+_Avoid_: "step" (a Step is the raw JSON unit; a Stage expands into one or more Steps).
+
+**Sub-stage**
+One temperature/time phase within the Amplification Stage, repeated each cycle. There are 2 or 3: with 2, they are Denaturation and "Annealing & Extension"; adding a 3rd splits the second into Annealing and Extension. The Extension-bearing Sub-stage (the 2nd of two, or the 3rd of three) is where the optics read fires.
+_Avoid_: calling these "stages" — the editor mockup labels them "Stage 1/Stage 2," but they are Sub-stages of Amplification, not top-level Stages.
+
+**Step**
+The raw JSON unit inside a Profile's `steps` array — a `setpoint`, `ramp_rate`, `optics`, `enable`/`disable`, or fan command. Stages and Sub-stages are assembled into Steps by the backend; operators never see Steps directly in the structured editor.
+
+**Boilerplate**
+The fixed head and tail Steps the backend injects around the user's Stages on every structured Profile (equilibration, fan, optics init, entry/exit ramps, cooldown). Not user-editable and not represented in the structured editor.
+
+**Structured Profile**
+A [[Profile]] authored by the structured editor. Identified solely by the presence of a top-level `stages` object in its JSON, which is the editable source of truth; its `steps` array is regenerated from `stages` by the backend on every save. Re-opening a Structured Profile populates the editor from `stages` — `steps` is never reverse-parsed.
+
+**Legacy Profile**
+Any [[Profile]] without a `stages` object — every Profile that predates the structured editor, plus all bundled Profiles. Opens read-only in the app (no in-app editing); still runnable and still hand-editable as a JSON file on disk. Adding a valid `stages` block to a Legacy Profile's file promotes it to a Structured Profile.
+
 **Well**
 One of 4 sample positions (numbered 1–4) in the Sentri carousel. Each Well is read independently.
 

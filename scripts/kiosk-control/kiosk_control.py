@@ -126,6 +126,18 @@ def _start_chromium() -> tuple[bool, str]:
     return True, "chromium launched"
 
 
+def _reboot_host() -> tuple[bool, str]:
+    """Reboot the device. Used by the OTA auto-reboot flow (#183, ADR-018)."""
+    result = subprocess.run(["systemctl", "reboot"], capture_output=True)
+    if result.returncode == 0:
+        return True, "rebooting"
+    # Fall back to `sudo reboot` if not running as root / systemctl unavailable.
+    fallback = subprocess.run(["sudo", "reboot"], capture_output=True)
+    if fallback.returncode == 0:
+        return True, "rebooting"
+    return False, fallback.stderr.decode(errors="replace").strip() or "reboot failed"
+
+
 # ---------------------------------------------------------------------------
 # WiFi helpers (nmcli)
 # ---------------------------------------------------------------------------
@@ -309,6 +321,11 @@ class KioskHandler(BaseHTTPRequestHandler):
         elif self.path == "/start-kiosk":
             ok, msg = _start_chromium()
             log.info("start-kiosk: %s", msg)
+            self._respond(200 if ok else 500, {"ok": ok, "message": msg})
+
+        elif self.path == "/reboot":
+            ok, msg = _reboot_host()
+            log.info("reboot: %s", msg)
             self._respond(200 if ok else 500, {"ok": ok, "message": msg})
 
         elif self.path == "/wifi/connect":
