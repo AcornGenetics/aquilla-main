@@ -1,16 +1,19 @@
 {
     "all": null,
     "classic": [
-        "ABBA_ramp1.75_EA30.json",
+        "Beer_Spoilers_Bacteria.json",
         "Hygiena_ramp1.75_EA30.json",
         "ryan_thermal_tests.json",
         "verification_profile.json"
     ],
     "duke": [
-        "ABBA_ramp1.75_EA30.json",
+        "Beer_Spoilers_Bacteria.json",
         "O157__ESBL_full.json",
         "ryan_thermal_tests.json",
         "STEC_and_EPEC_Hygiena1.75_no37Cstep.json",
         "verification_profile.json"
+    ],
+    "breweries": [
+        "Beer_Spoilers_Bacteria.json"
     ]
 }
