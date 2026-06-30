@@ -1547,11 +1547,37 @@ def _trigger_host_reboot() -> bool:
         return False
 
 
+def _fetch_running_digests() -> list[str]:
+    """Ask the host kiosk-control service for every digest the running API image is known by.
+
+    This is the only trustworthy "what booted" signal: the container's own
+    RUNNING_IMAGE_DIGEST env is stamped with the target before the swap (see
+    apply_update), so it can't tell a successful update from a crash. Returns the
+    list of api digests (e.g. ['sha256:...']) or [] if the host can't be reached /
+    has no such endpoint (older device) — the caller treats [] as 'unknown' and stays
+    optimistic so a working update never shows a false failure.
+    """
+    try:
+        headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
+        with httpx.Client(timeout=10.0) as client:
+            r = client.get(f"{KIOSK_CONTROL_URL}/image-digest", headers=headers)
+        if r.status_code != 200:
+            return []
+        api = r.json().get("api")
+        return list(api) if api else []
+    except Exception as e:  # noqa: BLE001 - indeterminate digest must not crash boot
+        logger.warning("running-image digest lookup failed: %s", e)
+        return []
+
+
 def _resolve_startup_update_state() -> None:
     """On boot, advance the update sentinel state machine.
 
-    reboot_pending -> persist show_complete, then reboot the host (once).
+    reboot_pending -> verify the running image vs the target we tried to install,
+                      persist show_complete (applied / indeterminate) or show_failed
+                      (confirmed old image still running), then reboot the host once.
     show_complete  -> surface the completion modal (_update_status = 'complete').
+    show_failed    -> surface the failure modal   (_update_status = 'failed').
     none/stale     -> clear the sentinel.
     """
     global _update_status
@@ -1561,11 +1587,21 @@ def _resolve_startup_update_state() -> None:
         # Don't reboot mid-run; a fresh post-update boot has no active run anyway.
         if current_item.screen == "running":
             return
-        _sentinel.write_sentinel(_UPDATE_SENTINEL_PATH, "show_complete", _utcnow_iso())
+        # Verify the update actually applied. 'failed' is only ever returned on a
+        # POSITIVE match to the recorded old image, so an unreachable host or a
+        # digest-format mismatch stays optimistic -> show_complete and never regresses
+        # a working update into a false 'Update Failed'.
+        verdict = _sentinel.classify_update(
+            record.get("target_digest"), record.get("prev_digest"), _fetch_running_digests()
+        )
+        next_state = "show_failed" if verdict == "failed" else "show_complete"
+        _sentinel.write_sentinel(_UPDATE_SENTINEL_PATH, next_state, _utcnow_iso())
         _update_status = "updating"
         _trigger_host_reboot()
     elif action == "show_complete":
         _update_status = "complete"
+    elif action == "show_failed":
+        _update_status = "failed"
     else:
         _sentinel.clear_sentinel(_UPDATE_SENTINEL_PATH)
 # ------------------------------------------------------------------------------
@@ -1680,8 +1716,16 @@ async def apply_update():
         )
     # Breadcrumb the new container reads on startup to drive the auto-reboot (#183).
     # Written before triggering Watchtower so a kill mid-swap still leaves it behind.
+    # Record the target digest (what we're installing) AND the image running right now,
+    # in the host's own digest format, so the post-update boot can prove whether the
+    # device actually moved off the old image. See spec_ota_update_failed_detection.md.
+    _prev_digests = _fetch_running_digests()
     try:
-        _sentinel.write_sentinel(_UPDATE_SENTINEL_PATH, "reboot_pending", _utcnow_iso())
+        _sentinel.write_sentinel(
+            _UPDATE_SENTINEL_PATH, "reboot_pending", _utcnow_iso(),
+            target_digest=_latest_ghcr_digest,
+            prev_digest=_prev_digests[0] if _prev_digests else None,
+        )
     except OSError:
         logger.warning("could not write update sentinel at %s", _UPDATE_SENTINEL_PATH)
     _update_status = "updating"
@@ -1761,6 +1805,20 @@ async def ack_update_complete():
     global _update_status
     _sentinel.clear_sentinel(_UPDATE_SENTINEL_PATH)
     if _update_status == "complete":
+        _update_status = "idle"
+    return {"ok": True}
+
+
+@app.post("/update/ack-failed")
+async def ack_update_failed():
+    """Operator dismissed the 'Update Failed' modal. Fire-once: clear sentinel.
+
+    The device stays on its old (working) image; the operator can re-trigger the
+    update from Help -> Updates. Mirrors ack-complete.
+    """
+    global _update_status
+    _sentinel.clear_sentinel(_UPDATE_SENTINEL_PATH)
+    if _update_status == "failed":
         _update_status = "idle"
     return {"ok": True}
 

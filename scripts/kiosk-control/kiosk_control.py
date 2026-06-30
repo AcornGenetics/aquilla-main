@@ -11,6 +11,7 @@ Endpoints:
     POST /exit-kiosk     — kill the Chromium kiosk process
     POST /start-kiosk    — launch Chromium in kiosk mode
     GET  /health         — liveness check
+    GET  /image-digest   — real digests of the running API/UI containers (OTA verify)
     GET  /wifi/status    — current WiFi connection info
     GET  /wifi/scan      — scan for available networks
     POST /wifi/connect   — connect to a network  {ssid, password}
@@ -136,6 +137,46 @@ def _reboot_host() -> tuple[bool, str]:
     if fallback.returncode == 0:
         return True, "rebooting"
     return False, fallback.stderr.decode(errors="replace").strip() or "reboot failed"
+
+
+def _image_digests(container: str) -> list:
+    """Every registry digest ('sha256:...') the running image of ``container`` is known by.
+
+    Used by OTA failed-update detection (spec_ota_update_failed_detection.md): the
+    only honest answer to "what image actually booted". We inspect the running
+    container's image id (not the :tag), so a crash that left Watchtower's pulled
+    image tagged but never swapped in still reports the OLD digest. An image can carry
+    several RepoDigests (e.g. index vs platform manifest), so we return all of them and
+    let the backend match the target against any. Empty list on any docker error
+    (treated upstream as 'unknown' -> optimistic, no false failure).
+    """
+    img = subprocess.run(
+        ["docker", "inspect", "--format", "{{.Image}}", container],
+        capture_output=True, text=True,
+    )
+    image_id = img.stdout.strip()
+    if img.returncode != 0 or not image_id:
+        return []
+    repo = subprocess.run(
+        ["docker", "inspect", "--format", "{{json .RepoDigests}}", image_id],
+        capture_output=True, text=True,
+    )
+    if repo.returncode != 0:
+        return []
+    try:
+        refs = json.loads(repo.stdout.strip() or "[]")
+    except ValueError:
+        return []
+    # refs like ghcr.io/acorngenetics/aquilla-main-api@sha256:abc -> keep the sha part.
+    return [ref.split("@", 1)[1] for ref in refs if isinstance(ref, str) and "@" in ref]
+
+
+def _running_image_digests() -> dict:
+    """Real digests of the running API + UI containers (compose container_names)."""
+    return {
+        "api": _image_digests("aquila-backend"),
+        "ui": _image_digests("aquila-ui"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +347,8 @@ class KioskHandler(BaseHTTPRequestHandler):
             self._respond(200, {"networks": networks})
         elif self.path == "/wifi/saved":
             self._respond(200, {"profiles": _wifi_saved()})
+        elif self.path == "/image-digest":
+            self._respond(200, _running_image_digests())
         else:
             self._respond(404, {"error": "not found"})
 

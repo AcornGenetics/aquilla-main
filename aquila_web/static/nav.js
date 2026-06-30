@@ -34,31 +34,50 @@ document.addEventListener("click", (event) => {
     .catch(() => {});
 })();
 
-// One-time "Update Complete" modal after an OTA auto-reboot (#183, ADR-018).
-// The backend reports status === "complete" once, driven by the on-disk sentinel.
-(function showUpdateCompleteModal() {
+// One-time OTA result modal after an auto-reboot (#183, ADR-018).
+// The backend reports status === "complete" once (update applied) or "failed" once
+// (crash mid-update: still on the old image), driven by the on-disk sentinel.
+// See spec_ota_update_failed_detection.md.
+(function showUpdateResultModal() {
+  const MODALS = {
+    complete: {
+      modifier: "",
+      title: "✓ Update Complete",
+      body: "The device updated successfully and is ready to use.",
+      ack: "/update/ack-complete",
+    },
+    failed: {
+      modifier: "update-complete-modal--failed",
+      title: "✗ Update Failed",
+      body: "The update did not finish; the device is still on its previous version. Please try again.",
+      ack: "/update/ack-failed",
+    },
+  };
+
   if (document.querySelector(".update-complete-modal")) return;
   fetch("/update/status")
     .then(r => r.ok ? r.json() : null)
     .then(data => {
-      if (!data || data.status !== "complete") return;
+      const cfg = data && MODALS[data.status];
+      if (!cfg) return;
 
       const backdrop = document.createElement("div");
       backdrop.className = "update-complete-modal";
 
       const card = document.createElement("div");
       card.className = "update-complete-modal__card";
+      if (cfg.modifier) card.classList.add(cfg.modifier);
       card.setAttribute("role", "alertdialog");
-      card.setAttribute("aria-labelledby", "update-complete-title");
+      card.setAttribute("aria-labelledby", "update-result-title");
 
       const title = document.createElement("div");
-      title.id = "update-complete-title";
+      title.id = "update-result-title";
       title.className = "update-complete-modal__title";
-      title.textContent = "✓ Update Complete";
+      title.textContent = cfg.title;
 
       const body = document.createElement("div");
       body.className = "update-complete-modal__body";
-      body.textContent = "The device updated successfully and is ready to use.";
+      body.textContent = cfg.body;
 
       const ok = document.createElement("button");
       ok.type = "button";
@@ -66,7 +85,7 @@ document.addEventListener("click", (event) => {
       ok.textContent = "OK";
       ok.addEventListener("click", () => {
         backdrop.remove();
-        fetch("/update/ack-complete", { method: "POST" }).catch(() => {});
+        fetch(cfg.ack, { method: "POST" }).catch(() => {});
       });
 
       card.appendChild(title);

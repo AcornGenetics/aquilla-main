@@ -355,6 +355,16 @@ a:active {
   cursor: pointer;
 }
 
+/* Red variant: a failed update (crash mid-update) — see
+   spec_ota_update_failed_detection.md */
+.update-complete-modal--failed .update-complete-modal__title {
+  color: #dc2626;
+}
+
+.update-complete-modal--failed .update-complete-modal__ok {
+  background: #dc2626;
+}
+
 .help-content {
   max-width: 680px;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
