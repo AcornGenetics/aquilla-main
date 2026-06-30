@@ -1,10 +1,18 @@
 # PRD: Sentri Analytics Pipeline — Device-Edge mTLS Migration & Aurora Connectivity
 
-> **Revision 1 — 2026-06-17**
-> Successor to `analytics-pipeline-prd.md`. Supersedes its *Authentication and Key Rotation*
-> and *AWS Ingest Architecture* sections: ingest ownership moves to the Sentri Analytics
-> Platform and device auth switches from the shared Fleet API Key to per-device mTLS Device
-> Certificates. See **ADR-013** (ingest moves to platform; auth → mTLS) and **ADR-014**
+> **⚠️ Largely superseded by the six-repo split (2026-06).** The cloud-side scope of this
+> PRD has moved out of aquilla-main: **ingest → `acorn-analytics`** (ADR-015, serverless
+> Lambda pipeline) and the **device CA → `acorn-ca`** (ADR-014). The old SAM ingest stack,
+> its handlers, the warehouse schema, and the predecessor `analytics-pipeline-prd.md` have
+> been **deleted from this repo** (#250). What remains live here is the **device side**:
+> on-device enrollment (shipped — `aq_lib/device_csr|enroll|verify`) and the **automatic
+> certificate renewal + offline re-enrollment** scope (user stories 12–14, 27–30), the next
+> aquilla-main slice. Kept for that remaining scope and as the migration's narrative record.
+
+> **Revision 1 — 2026-06-17** *(pre-split)*
+> Supersedes the predecessor's *Authentication and Key Rotation* and *AWS Ingest Architecture*
+> sections: device auth switches from the shared Fleet API Key to per-device mTLS Device
+> Certificates. See **ADR-013** (ingest moves off this repo; auth → mTLS) and **ADR-014**
 > (device PKI: self-managed KMS-backed CA, short-lived certs). Glossary in `CONTEXT.md`.
 
 ## Problem Statement
