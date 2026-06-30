@@ -1706,6 +1706,12 @@ async def websocket_endpoint(websocket: WebSocket):
             panel_with_timer["drawer_state_open"] = drawer_state_open
             panel_with_timer["drawer_state_closed"] = drawer_state_closed
 
+            # Server-authoritative run identity for the Run-card header (issue #265).
+            # The header must keep showing the active run's profile/run name even
+            # when the dropdown cannot re-select it after navigating back to /run.
+            panel_with_timer["run_name"] = run_name
+            panel_with_timer["profile_name"] = _resolve_profile_display_name(selected_profile)
+
             #await state_change_event.wait()
             #logger.info ( "Submitted state", current_item.dict() )
             await websocket.send_json( panel_with_timer )

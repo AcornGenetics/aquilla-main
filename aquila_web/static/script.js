@@ -37,6 +37,11 @@ let currentScreen = null;
 let runDoneAcknowledged = false;
 let lastDrawerState = { open: null, closed: null };
 let lastScreen = null;
+// Server-authoritative run identity for the Run-card header (issue #265). Kept in
+// sync from each WebSocket panel so the header survives navigating away from /run
+// and back, even when the dropdown cannot re-select the running profile.
+let activeRunProfileName = "";
+let activeRunName = "";
 let completedRunSeen = false;
 let resultsRequestId = 0;
 const RUN_ACK_KEY = "runCompleteAcknowledged";
@@ -269,10 +274,18 @@ function updateStartHeader(screen) {
 
   const isActive = screen === "running" || screen === "complete";
   if (isActive) {
-    const select = document.getElementById("mySelect");
-    const selectedOption = select && select.selectedOptions ? select.selectedOptions[0] : null;
-    const profileText = selectedOption ? selectedOption.textContent.trim() : "";
-    const runName = runNameInput ? runNameInput.value.trim() : "";
+    // Prefer the server-authoritative run identity (issue #265). Fall back to the
+    // live form controls so an in-page run start still reflects instantly, but
+    // never surface the dropdown's disabled "Select a profile" placeholder.
+    let profileText = activeRunProfileName;
+    if (!profileText) {
+      const select = document.getElementById("mySelect");
+      const selectedOption = select && select.selectedOptions ? select.selectedOptions[0] : null;
+      if (selectedOption && !selectedOption.disabled) {
+        profileText = selectedOption.textContent.trim();
+      }
+    }
+    const runName = activeRunName || (runNameInput ? runNameInput.value.trim() : "");
 
     const profileEl = document.getElementById("run-start-profile");
     const runNameEl = document.getElementById("run-start-runname");
@@ -599,6 +612,14 @@ function wsHandleMessage(event) {
   try {
     const panel = JSON.parse(event.data);
     console.log("Elapsed secs:", panel.elapsed);
+    // Track the server-authoritative run identity (issue #265) before any header
+    // render so the Run-card header reflects the active run, not the dropdown.
+    if (typeof panel.profile_name === "string") {
+      activeRunProfileName = panel.profile_name;
+    }
+    if (typeof panel.run_name === "string") {
+      activeRunName = panel.run_name;
+    }
     showPanel(panel);
     // Lock in countdown vs. stopwatch mode on the transition into a run.
     if (panel.screen === "running" && lastScreen !== "running") {
