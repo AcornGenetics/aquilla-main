@@ -4,6 +4,46 @@
   const selectAllCheckbox = document.getElementById("profiles-select-all");
   if (!tableBody) return;
 
+  let editingDisabled = false;
+
+  const fetchEditingDisabled = async () => {
+    try {
+      const response = await fetch("/profiles/permissions");
+      if (!response.ok) return false;
+      const data = await response.json();
+      return Boolean(data.editing_disabled);
+    } catch (error) {
+      // Fail open: if we can't tell, leave editing enabled.
+      return false;
+    }
+  };
+
+  const applyEditingLock = () => {
+    if (!editingDisabled) return;
+    const shell = document.querySelector(".profiles-shell");
+    if (shell) shell.classList.add("profiles-shell--locked");
+
+    // Disable build affordances in the toolbar.
+    const newProfileLink = document.querySelector('.profiles-actions a[href="/profiles/builder"]');
+    if (newProfileLink) {
+      newProfileLink.classList.add("is-disabled");
+      newProfileLink.setAttribute("aria-disabled", "true");
+      newProfileLink.removeAttribute("href");
+      newProfileLink.addEventListener("click", (event) => event.preventDefault());
+    }
+    if (deleteButton) deleteButton.disabled = true;
+    if (selectAllCheckbox) selectAllCheckbox.disabled = true;
+
+    // Banner explaining why building is unavailable.
+    const toolbar = document.querySelector(".profiles-toolbar");
+    if (toolbar && !document.querySelector(".profiles-locked-banner")) {
+      const banner = document.createElement("div");
+      banner.className = "profiles-locked-banner";
+      banner.textContent = "Contact administrator for this feature.";
+      toolbar.parentNode.insertBefore(banner, toolbar.nextSibling);
+    }
+  };
+
   const formatDuration = (seconds) => {
     if (!Number.isFinite(seconds) || seconds <= 0) return "--:--:--";
     const total = Math.round(seconds);
@@ -129,10 +169,14 @@
     if (!isBundled) {
       const idParam = encodeURIComponent(profile.id || "");
       if (profile.structured) {
-        // Structured Profiles edit in the guided builder.
-        editCell.appendChild(createActionLink("Edit", `/profiles/builder?id=${idParam}`));
+        // Structured Profiles edit in the guided builder — hidden when editing
+        // is disabled for this device.
+        if (!editingDisabled) {
+          editCell.appendChild(createActionLink("Edit", `/profiles/builder?id=${idParam}`));
+        }
       } else {
-        // Legacy Profiles are read-only in-app — open the viewer (?view=1).
+        // Legacy Profiles are read-only in-app — the viewer (?view=1) stays
+        // available even when editing is disabled.
         editCell.appendChild(createActionLink("View", `/profiles/edit-form?id=${idParam}&view=1`));
       }
     }
@@ -252,7 +296,11 @@
     });
   }
 
-  loadProfiles();
+  (async () => {
+    editingDisabled = await fetchEditingDisabled();
+    applyEditingLock();
+    await loadProfiles();
+  })();
 
   tableBody.addEventListener("change", (event) => {
     if (event.target && event.target.classList.contains("profile-checkbox")) {

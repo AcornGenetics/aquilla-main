@@ -2284,6 +2284,31 @@ a:active {
   margin-bottom: 24px;
 }
 
+/* Per-device profile-editing lock: grey out building, show admin message. */
+.profiles-locked-banner {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background-color: #f1f1f1;
+  border: 1px solid #d9d9d9;
+  color: #555;
+  font-size: 15px;
+  text-align: center;
+}
+
+.profiles-shell--locked .profiles-table-wrapper {
+  opacity: 0.5;
+  filter: grayscale(0.4);
+}
+
+.run-secondary-btn.is-disabled,
+.run-secondary-btn:disabled,
+.profiles-action-btn.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
 .profiles-toolbar h1 {
   margin: 0;
   font-size: 28px;
