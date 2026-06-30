@@ -979,6 +979,7 @@ async def profiles_page():
 
 @app.get("/profiles/edit")
 async def profiles_edit_page():
+    _guard_profile_editing()
     return FileResponse(
         static_dir / "profiles/edit_form.html",
         headers={"Cache-Control": "no-store"}
@@ -986,6 +987,7 @@ async def profiles_edit_page():
 
 @app.get("/profiles/edit-form")
 async def profiles_edit_form_page():
+    _guard_profile_editing()
     return FileResponse(
         static_dir / "profiles/edit_form.html",
         headers={"Cache-Control": "no-store"}
@@ -995,10 +997,17 @@ async def profiles_edit_form_page():
 async def profiles_builder_page():
     # Structured profile editor (issue #197). Serves the shell; the Stage UI,
     # validation, and save wiring are layered on in the frontend route (B1/B2/B3).
+    _guard_profile_editing()
     return FileResponse(
         static_dir / "profiles/builder.html",
         headers={"Cache-Control": "no-store"}
     )
+
+@app.get("/profiles/permissions")
+async def profiles_permissions():
+    """Report whether profile building is disabled for this device so the
+    frontend can render the greyed-out 'contact administrator' state."""
+    return {"editing_disabled": resolve_profile_editing_disabled()}
 
 @app.get("/history")
 async def history_page():
@@ -1262,6 +1271,15 @@ def resolve_profile_editing_disabled() -> bool:
     return bool(device_entry.get("profile_editing_disabled", False))
 
 
+def _guard_profile_editing() -> None:
+    """Raise 403 if profile building is disabled for this device."""
+    if resolve_profile_editing_disabled():
+        raise HTTPException(
+            status_code=403,
+            detail="Profile editing is disabled on this device. Contact administrator for this feature.",
+        )
+
+
 @app.get("/profiles")
 async def list_profiles():
     profiles = []
@@ -1443,6 +1461,7 @@ def _convert_run_config_to_steps(configuration: dict) -> list:
 
 @app.post("/profiles")
 async def save_profile(payload: ProfileSave):
+    _guard_profile_editing()
     profile_dir = resolve_profile_dir()
     profile_dir.mkdir(parents=True, exist_ok=True)
     def sanitize_name(value: str) -> str:
@@ -1570,6 +1589,7 @@ async def save_profile(payload: ProfileSave):
 
 @app.post("/profiles/delete")
 async def delete_profiles(payload: ProfileDelete):
+    _guard_profile_editing()
     profile_dir = resolve_profile_dir()
     deleted = []
     missing = []

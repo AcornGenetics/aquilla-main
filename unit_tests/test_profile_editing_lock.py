@@ -51,3 +51,28 @@ def test_flag_true_disables_editing(monkeypatch, base_dir):
     monkeypatch.setenv("DEVICE_HOSTNAME", "locked-device")
     import aquila_web.main as web_main
     assert web_main.resolve_profile_editing_disabled() is True
+
+
+def test_flag_false_keeps_editing_enabled(monkeypatch, base_dir):
+    monkeypatch.setenv("DEVICE_HOSTNAME", "unlocked-device")
+    import aquila_web.main as web_main
+    assert web_main.resolve_profile_editing_disabled() is False
+
+
+def test_missing_flag_keeps_editing_enabled(monkeypatch, base_dir):
+    monkeypatch.setenv("DEVICE_HOSTNAME", "default-device")
+    import aquila_web.main as web_main
+    assert web_main.resolve_profile_editing_disabled() is False
+
+
+def test_unknown_hostname_keeps_editing_enabled(monkeypatch, base_dir):
+    monkeypatch.setenv("DEVICE_HOSTNAME", "not-in-config")
+    import aquila_web.main as web_main
+    assert web_main.resolve_profile_editing_disabled() is False
+
+
+def test_missing_config_keeps_editing_enabled(monkeypatch, base_dir):
+    (base_dir / "config_files" / "device_profiles.json").unlink()
+    monkeypatch.setenv("DEVICE_HOSTNAME", "locked-device")
+    import aquila_web.main as web_main
+    assert web_main.resolve_profile_editing_disabled() is False
