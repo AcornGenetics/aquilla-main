@@ -86,45 +86,6 @@ def _load_profile_labels(profile_name: str | None) -> dict:
             continue
     return {}
 
-def _resolve_profile_display_name(value: str | None) -> str:
-    """Resolve a selected-profile identifier to its human display name.
-
-    ``value`` is whatever ``/profile/select`` stored — normally the relative-path
-    ``id`` used by ``/profiles`` (e.g. ``local/foo.json``), but legacy flows may
-    pass a bare profile name/stem. Resolution reads the profile file directly off
-    disk, so it succeeds even for profiles the device's allow-list hides from the
-    ``/profiles`` dropdown (issue #265). Falls back to the raw value rather than an
-    empty string so the Run header never renders blank for an active run.
-    """
-    if not value:
-        return ""
-    profile_dir = resolve_profile_dir()
-    if not profile_dir.exists():
-        return str(value)
-    # Fast path: value is the relative-path id used by /profiles.
-    direct = profile_dir / value
-    candidates = [direct] if direct.is_file() else []
-    if not candidates:
-        for path in profile_dir.rglob("*.json"):
-            stored_name = None
-            try:
-                stored_name = json.loads(path.read_text()).get("name")
-            except Exception:
-                stored_name = None
-            if (str(path.relative_to(profile_dir)) == value
-                    or path.stem == value
-                    or path.name == value
-                    or stored_name == value):
-                candidates.append(path)
-                break
-    for path in candidates:
-        try:
-            data = json.loads(path.read_text())
-        except Exception:
-            continue
-        return str(data.get("name") or data.get("title") or path.stem)
-    return str(value)
-
 def _profile_rox_unavailable(profile_name: str | None) -> bool:
     if not profile_name:
         return False
