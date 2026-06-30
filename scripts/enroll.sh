@@ -19,7 +19,11 @@
 #   ./scripts/enroll.sh sn03
 set -euo pipefail
 
-SN="${1:?usage: $0 <sn>   (e.g. $0 sn03)}"
+SN="${1:-}"
+if [[ -z "$SN" ]]; then
+    read -rp "Device serial-number host (e.g. sn03): " SN
+fi
+[[ -z "$SN" ]] && { echo "ERROR: no device given." >&2; exit 1; }
 PI="pi@${SN}"
 REGION="${AWS_REGION:-us-east-2}"
 ENROLL_ENDPOINT="${ENROLL_ENDPOINT:-https://1x9561i626.execute-api.us-east-2.amazonaws.com/enroll}"
