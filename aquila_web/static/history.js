@@ -181,8 +181,7 @@ async function deleteSelectedHistory() {
         return runCell?.textContent?.trim() || `Run ${index + 1}`;
       })
       .filter(Boolean);
-    const runLabel = selectedNames.length === 1 ? selectedNames[0] : `${selectedNames.length} runs`;
-    const confirmed = window.confirm(`Are you sure you want to delete ${runLabel}?`);
+    const confirmed = await confirmModal(historyDeleteCopy(selectedNames));
     if (!confirmed) {
       return;
     }
