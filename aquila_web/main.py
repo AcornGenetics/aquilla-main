@@ -978,16 +978,18 @@ async def profiles_page():
     return FileResponse(static_dir / "profiles/index.html")
 
 @app.get("/profiles/edit")
-async def profiles_edit_page():
-    _guard_profile_editing()
+async def profiles_edit_page(view: str | None = Query(default=None), mode: str | None = Query(default=None)):
+    if not _is_view_mode(view, mode):
+        _guard_profile_editing()
     return FileResponse(
         static_dir / "profiles/edit_form.html",
         headers={"Cache-Control": "no-store"}
     )
 
 @app.get("/profiles/edit-form")
-async def profiles_edit_form_page():
-    _guard_profile_editing()
+async def profiles_edit_form_page(view: str | None = Query(default=None), mode: str | None = Query(default=None)):
+    if not _is_view_mode(view, mode):
+        _guard_profile_editing()
     return FileResponse(
         static_dir / "profiles/edit_form.html",
         headers={"Cache-Control": "no-store"}
@@ -1278,6 +1280,15 @@ def _guard_profile_editing() -> None:
             status_code=403,
             detail="Profile editing is disabled on this device. Contact administrator for this feature.",
         )
+
+
+def _is_view_mode(view: "str | None", mode: "str | None") -> bool:
+    """True when an edit-form request is a read-only view (legacy profiles).
+
+    Read-only viewing stays available even when editing is disabled; only the
+    editor/builder surfaces are gated.
+    """
+    return (view or "").lower() in ("1", "true", "yes") or (mode or "").lower() == "view"
 
 
 @app.get("/profiles")

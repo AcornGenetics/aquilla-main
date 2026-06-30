@@ -42,16 +42,29 @@ def client(monkeypatch, tmp_path):
         yield c
 
 
+def test_locked_device_blocks_builder_page(monkeypatch, client):
+    monkeypatch.setenv("DEVICE_HOSTNAME", "locked-device")
+    resp = client.get("/profiles/builder")
+    assert resp.status_code == 403
+
+
 def test_locked_device_blocks_edit_page(monkeypatch, client):
     monkeypatch.setenv("DEVICE_HOSTNAME", "locked-device")
     resp = client.get("/profiles/edit")
     assert resp.status_code == 403
 
 
-def test_locked_device_blocks_edit_form_page(monkeypatch, client):
+def test_locked_device_blocks_edit_form_editing(monkeypatch, client):
     monkeypatch.setenv("DEVICE_HOSTNAME", "locked-device")
     resp = client.get("/profiles/edit-form")
     assert resp.status_code == 403
+
+
+def test_locked_device_allows_read_only_view(monkeypatch, client):
+    # Legacy profiles open read-only via ?view=1 — viewing stays enabled.
+    monkeypatch.setenv("DEVICE_HOSTNAME", "locked-device")
+    resp = client.get("/profiles/edit-form?id=verification_profile.json&view=1")
+    assert resp.status_code == 200
 
 
 def test_locked_device_blocks_save_profile(monkeypatch, client):
