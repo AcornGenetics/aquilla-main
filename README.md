@@ -109,6 +109,21 @@ Hardware-only behavior that cannot be tested in CI should be documented with `@p
 - Fleet setup: `scripts/setup_fleet_device.sh`
 - Ring helpers: `scripts/setup/device_dev.sh`, `scripts/setup/device_pilot.sh`, `scripts/setup/device_prod.sh`
 
+## Device Enrollment (Device Certificate)
+
+After `deployment2.sh` has run on a Sentri (it generates the device keypair +
+CSR), enrol it to get its mTLS **Device Certificate** from acorn-ca. Run from the
+**operator's workstation** with AWS credentials — never on the Pi. The Pi must be
+powered on (enrolment is two SSH round-trips: read the CSR, install the cert).
+
+```bash
+# one-shot: confirm CSR → enrol → verify over mTLS (defaults to PROD endpoints)
+./scripts/enroll.sh sn03          # pass the serial-number host; SSHes as pi@sn03
+```
+
+Success prints `✅ sn03: enrolled + verified`. Full protocol, prerequisites, and
+troubleshooting: [`docs/deployment/enrolling-a-device.md`](docs/deployment/enrolling-a-device.md).
+
 ## Versioning
 
 The device UI displays the software version in the **Help** screen, at the bottom of the Help Topics panel.
