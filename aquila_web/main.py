@@ -978,14 +978,18 @@ async def profiles_page():
     return FileResponse(static_dir / "profiles/index.html")
 
 @app.get("/profiles/edit")
-async def profiles_edit_page():
+async def profiles_edit_page(view: str | None = Query(default=None), mode: str | None = Query(default=None)):
+    if not _is_view_mode(view, mode):
+        _guard_profile_editing()
     return FileResponse(
         static_dir / "profiles/edit_form.html",
         headers={"Cache-Control": "no-store"}
     )
 
 @app.get("/profiles/edit-form")
-async def profiles_edit_form_page():
+async def profiles_edit_form_page(view: str | None = Query(default=None), mode: str | None = Query(default=None)):
+    if not _is_view_mode(view, mode):
+        _guard_profile_editing()
     return FileResponse(
         static_dir / "profiles/edit_form.html",
         headers={"Cache-Control": "no-store"}
@@ -995,10 +999,17 @@ async def profiles_edit_form_page():
 async def profiles_builder_page():
     # Structured profile editor (issue #197). Serves the shell; the Stage UI,
     # validation, and save wiring are layered on in the frontend route (B1/B2/B3).
+    _guard_profile_editing()
     return FileResponse(
         static_dir / "profiles/builder.html",
         headers={"Cache-Control": "no-store"}
     )
+
+@app.get("/profiles/permissions")
+async def profiles_permissions():
+    """Report whether profile building is disabled for this device so the
+    frontend can render the greyed-out 'contact administrator' state."""
+    return {"editing_disabled": resolve_profile_editing_disabled()}
 
 @app.get("/history")
 async def history_page():
@@ -1240,6 +1251,46 @@ def resolve_device_profiles() -> "set[str] | None":
     return set(allowed)
 
 
+def resolve_profile_editing_disabled() -> bool:
+    """True when profile building (edit/new) is disabled for the running device.
+
+    Reads the `profile_editing_disabled` flag from the device's entry in
+    config_files/device_profiles.json. Fails OPEN (returns False) on unknown
+    hostname, missing flag, or unreadable config so editing stays enabled by
+    default — matching the fail-open behavior of resolve_device_profiles().
+    """
+    import socket
+    hostname = os.getenv("DEVICE_HOSTNAME") or socket.gethostname()
+    device_profiles_path = BASE_DIR / "config_files" / "device_profiles.json"
+    try:
+        device_profiles = json.loads(device_profiles_path.read_text())
+    except Exception:
+        logger.warning("Could not load device_profiles.json; profile editing enabled")
+        return False
+    device_entry = device_profiles.get(hostname)
+    if not isinstance(device_entry, dict):
+        return False
+    return bool(device_entry.get("profile_editing_disabled", False))
+
+
+def _guard_profile_editing() -> None:
+    """Raise 403 if profile building is disabled for this device."""
+    if resolve_profile_editing_disabled():
+        raise HTTPException(
+            status_code=403,
+            detail="Profile editing is disabled on this device. Contact administrator for this feature.",
+        )
+
+
+def _is_view_mode(view: "str | None", mode: "str | None") -> bool:
+    """True when an edit-form request is a read-only view (legacy profiles).
+
+    Read-only viewing stays available even when editing is disabled; only the
+    editor/builder surfaces are gated.
+    """
+    return (view or "").lower() in ("1", "true", "yes") or (mode or "").lower() == "view"
+
+
 @app.get("/profiles")
 async def list_profiles():
     profiles = []
@@ -1421,6 +1472,7 @@ def _convert_run_config_to_steps(configuration: dict) -> list:
 
 @app.post("/profiles")
 async def save_profile(payload: ProfileSave):
+    _guard_profile_editing()
     profile_dir = resolve_profile_dir()
     profile_dir.mkdir(parents=True, exist_ok=True)
     def sanitize_name(value: str) -> str:
@@ -1548,6 +1600,7 @@ async def save_profile(payload: ProfileSave):
 
 @app.post("/profiles/delete")
 async def delete_profiles(payload: ProfileDelete):
+    _guard_profile_editing()
     profile_dir = resolve_profile_dir()
     deleted = []
     missing = []
