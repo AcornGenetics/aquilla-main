@@ -149,3 +149,71 @@ def test_optics_input_is_excluded_from_onscreen_keyboard(page, base_url):
     classes = optics.get_attribute("class") or ""
     assert "keyboard-ignore" in classes
     assert optics.get_attribute("autocomplete") == "off"
+
+
+# ---------------------------------------------------------------------------
+# Long profile name truncation (issue #266)
+# ---------------------------------------------------------------------------
+
+import httpx
+
+LONG_PROFILE_NAME = (
+    "Very Long Profile Name That Should Definitely Overflow The Run Screen Picker Box"
+)
+
+
+def _create_long_profile(base_url: str, name: str) -> str:
+    payload = {
+        "name": name,
+        "fam_label": "FAM Target",
+        "rox_label": "ROX Target",
+        "steps": [
+            {"setpoint": 95, "duration": 30},
+            {"setpoint": 55, "duration": 60},
+            {"setpoint": 72, "duration": 60},
+        ],
+    }
+    try:
+        resp = httpx.post(f"{base_url}/profiles", json=payload, timeout=5)
+        resp.raise_for_status()
+    except Exception as exc:
+        pytest.skip(f"Could not create profile: {exc}")
+    return resp.json()["id"]
+
+
+def test_long_profile_name_truncates_with_ellipsis(page, base_url):
+    """A long selected profile name stays inside the box: single-line, clipped,
+    text-overflow: ellipsis — while the full text remains in the DOM and the
+    chevron is not pushed out."""
+    profile_id = _create_long_profile(base_url, LONG_PROFILE_NAME)
+    try:
+        _goto_run(page, base_url)
+        page.wait_for_selector(PROFILE_OPTION, state="attached", timeout=5_000)
+        page.locator(PROFILE_BUTTON).click()
+        page.locator(PROFILE_OPTION, has_text=LONG_PROFILE_NAME).first.click()
+
+        label = page.locator("#profile-combo-label")
+        # The full name stays in the DOM — only the *display* is clipped.
+        assert label.inner_text() == LONG_PROFILE_NAME
+
+        metrics = label.evaluate(
+            "el => ({"
+            "  scroll: el.scrollWidth, client: el.clientWidth,"
+            "  overflow: getComputedStyle(el).textOverflow,"
+            "  whiteSpace: getComputedStyle(el).whiteSpace"
+            "})"
+        )
+        assert metrics["scroll"] > metrics["client"], "label is not clipped (no overflow)"
+        assert metrics["overflow"] == "ellipsis"
+        assert metrics["whiteSpace"] == "nowrap"
+
+        # The button must not overflow its own box (chevron stays put).
+        button_overflow = page.locator(PROFILE_BUTTON).evaluate(
+            "el => el.scrollWidth - el.clientWidth"
+        )
+        assert button_overflow <= 1, f"profile button overflows its box by {button_overflow}px"
+    finally:
+        try:
+            httpx.post(f"{base_url}/profiles/delete", json={"profiles": [profile_id]}, timeout=5)
+        except Exception:
+            pass
