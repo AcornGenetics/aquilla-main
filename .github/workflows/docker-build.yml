@@ -21,8 +21,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set lowercase repo
-        run: echo "REPO_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      - name: Set build vars
+        run: |
+          echo "REPO_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -44,6 +46,8 @@ jobs:
           file: docker/Dockerfile.api
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            AQ_APP_VERSION=${{ env.SHORT_SHA }}
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}-api:latest
             ghcr.io/${{ env.REPO_LOWER }}-api:${{ github.sha }}

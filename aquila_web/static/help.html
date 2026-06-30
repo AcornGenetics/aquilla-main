@@ -304,15 +304,14 @@
       catch (err) { console.error("Exit failed", err); }
     }
 
-    fetch("/button_status")
+    // Show the version baked into the running image. Falls back to the
+    // hardcoded value in the markup if /version is unreachable.
+    fetch("/version")
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (!data) return;
-        const el = document.getElementById("help-version-info");
-        const parts = [];
-        if (data.firmware) parts.push("Firmware " + data.firmware);
-        if (data.device_id) parts.push("Device " + data.device_id);
-        if (parts.length) el.textContent = parts.join(" · ");
+        if (data && data.version) {
+          document.getElementById("help-version-info").textContent = "V " + data.version;
+        }
       }).catch(() => {});
   </script>
   <script src="/static/keyboard.js?v=14"></script>
