@@ -224,11 +224,8 @@
       const selectedNames = selectedCheckboxes
         .map((checkbox) => checkbox.dataset.profileName || "profile")
         .filter(Boolean);
-      const nameList = selectedNames.length <= 3
-        ? selectedNames.join(", ")
-        : `${selectedNames.slice(0, 3).join(", ")} and ${selectedNames.length - 3} more`;
-      const message = `Are you sure you want to delete ${selectedIds.length} profile${selectedIds.length === 1 ? "" : "s"}?\n${nameList}`;
-      if (!window.confirm(message)) {
+      const confirmed = await confirmModal(profilesDeleteCopy(selectedNames));
+      if (!confirmed) {
         return;
       }
 

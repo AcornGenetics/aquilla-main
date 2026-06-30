@@ -196,10 +196,10 @@ def test_delete_with_confirmation_removes_entry(page, base_url):
         "     .some(td => td.textContent.includes('Delete Me'))",
         timeout=5_000,
     )
-    # Accept the confirm() dialog
-    page.once("dialog", lambda dialog: dialog.accept())
     page.locator(".history-checkbox").first.check()
     page.locator("#history-clear").click()
+    # Confirm via the themed modal's Delete button (replaces native confirm())
+    page.locator(".confirm-modal__btn--confirm").click()
     # Wait for the row to disappear or for "No runs yet" to appear
     page.wait_for_function(
         "() => !Array.from(document.querySelectorAll('#history-table-body tr td'))"
@@ -208,3 +208,58 @@ def test_delete_with_confirmation_removes_entry(page, base_url):
     )
     body_text = page.locator("#history-table-body").inner_text()
     assert "Delete Me" not in body_text, "Entry still present after confirmed delete"
+
+
+def test_delete_opens_themed_modal(page, base_url):
+    """Clicking Delete opens the in-app themed confirm modal (not native confirm())."""
+    _clear_history(base_url)
+    _append_history(base_url, run_name="Styled Delete")
+    _goto_history(page, base_url)
+    page.wait_for_function(
+        "() => document.querySelectorAll('.history-checkbox').length > 0",
+        timeout=5_000,
+    )
+    page.locator(".history-checkbox").first.check()
+    page.locator("#history-clear").click()
+    modal = page.locator(".confirm-modal")
+    modal.wait_for(state="visible", timeout=3_000)
+    assert modal.is_visible(), "Themed confirm modal did not appear"
+    assert "Styled Delete" in modal.inner_text(), "Modal does not name the run"
+
+
+def _open_delete_modal(page, base_url, run_name):
+    _clear_history(base_url)
+    _append_history(base_url, run_name=run_name)
+    _goto_history(page, base_url)
+    page.wait_for_function(
+        "() => document.querySelectorAll('.history-checkbox').length > 0",
+        timeout=5_000,
+    )
+    page.locator(".history-checkbox").first.check()
+    page.locator("#history-clear").click()
+    page.locator(".confirm-modal").wait_for(state="visible", timeout=3_000)
+
+
+def test_delete_modal_cancel_keeps_entry(page, base_url):
+    """Cancel dismisses the modal and deletes nothing (fail-closed)."""
+    _open_delete_modal(page, base_url, "Keep Via Cancel")
+    page.locator(".confirm-modal__btn--cancel").click()
+    page.locator(".confirm-modal").wait_for(state="hidden", timeout=3_000)
+    assert "Keep Via Cancel" in page.locator("#history-table-body").inner_text()
+
+
+def test_delete_modal_escape_keeps_entry(page, base_url):
+    """Esc dismisses the modal and deletes nothing (fail-closed)."""
+    _open_delete_modal(page, base_url, "Keep Via Escape")
+    page.keyboard.press("Escape")
+    page.locator(".confirm-modal").wait_for(state="hidden", timeout=3_000)
+    assert "Keep Via Escape" in page.locator("#history-table-body").inner_text()
+
+
+def test_delete_modal_backdrop_keeps_entry(page, base_url):
+    """Tapping the backdrop dismisses the modal and deletes nothing (fail-closed)."""
+    _open_delete_modal(page, base_url, "Keep Via Backdrop")
+    # Click a backdrop corner, outside the centered card.
+    page.locator(".confirm-modal").click(position={"x": 5, "y": 5})
+    page.locator(".confirm-modal").wait_for(state="hidden", timeout=3_000)
+    assert "Keep Via Backdrop" in page.locator("#history-table-body").inner_text()

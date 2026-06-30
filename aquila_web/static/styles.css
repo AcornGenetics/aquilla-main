@@ -1041,6 +1041,81 @@ a:active {
   justify-content: center;
 }
 
+/* Shared delete-confirmation modal (issue #261, ADR-019) — matches the
+   .run-modal dialog family: dimmed backdrop + white rounded card. */
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(15, 23, 42, 0.45);
+  z-index: 10000;
+}
+
+.confirm-modal__card {
+  background-color: var(--icon-white);
+  border-radius: 16px;
+  padding: 32px 40px;
+  min-width: 320px;
+  max-width: 480px;
+  text-align: center;
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.25);
+  color: #111827;
+}
+
+.confirm-modal__title {
+  margin: 0 0 12px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.confirm-modal__message {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: #334155;
+  word-break: break-word;
+}
+
+.confirm-modal__detail {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: #64748b;
+  word-break: break-word;
+}
+
+.confirm-modal__actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.confirm-modal__btn {
+  border: none;
+  border-radius: 999px;
+  padding: 12px 28px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.confirm-modal__btn--cancel {
+  background-color: #e5e7eb;
+  color: #1f2937;
+}
+
+.confirm-modal__btn--confirm {
+  background-color: #b91c1c;
+  color: #ffffff;
+}
+
+.confirm-modal__btn--cancel:hover,
+.confirm-modal__btn--confirm:hover {
+  filter: brightness(0.92);
+}
+
 .run-status-footer {
   display: flex;
   flex-direction: column;
