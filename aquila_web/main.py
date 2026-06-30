@@ -1278,7 +1278,7 @@ def _guard_profile_editing() -> None:
     if resolve_profile_editing_disabled():
         raise HTTPException(
             status_code=403,
-            detail="Profile editing is disabled on this device. Contact administrator for this feature.",
+            detail="Profile editing is disabled on this device. Contact administrator for profile management.",
         )
 
 

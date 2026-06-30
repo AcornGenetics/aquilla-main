@@ -39,7 +39,7 @@
     if (toolbar && !document.querySelector(".profiles-locked-banner")) {
       const banner = document.createElement("div");
       banner.className = "profiles-locked-banner";
-      banner.textContent = "Contact administrator for this feature.";
+      banner.textContent = "Contact administrator for profile management";
       toolbar.parentNode.insertBefore(banner, toolbar.nextSibling);
     }
   };
