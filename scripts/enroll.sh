@@ -43,7 +43,16 @@ python3 "$REPO/scripts/enroll_device.py" \
     --pi "$PI" --endpoint "$ENROLL_ENDPOINT" --region "$REGION"
 
 echo "==> [3/3] ${SN}: verify the cert authenticates over mTLS to /renew"
-ssh "$PI" "cd /opt/aquila && sudo bash -c 'set -a && . config/device.env && \
-    python scripts/verify_device_cert.py --renew-endpoint ${RENEW_ENDPOINT}'"
-
+# Self-contained handshake check: present the installed cert/key to /renew with
+# curl (only curl + the cert are needed on the Pi — the repo's verify script
+# isn't deployed there). A successful mTLS handshake returns an HTTP status; a
+# rejected/absent cert resets the TLS connection, which curl reports as 000.
+code="$(ssh "$PI" "sudo curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
+    --cert /opt/aquila/config/device.crt --key /opt/aquila/config/device.key \
+    -X POST '${RENEW_ENDPOINT}' -d '{}'" 2>/dev/null || true)"
+if [[ -z "$code" || "$code" == "000" ]]; then
+    echo "❌ ${SN}: mTLS verify FAILED — handshake rejected (cert not accepted at /renew)" >&2
+    exit 1
+fi
+echo "    mTLS handshake OK — /renew accepted the cert (HTTP ${code})"
 echo "✅ ${SN}: enrolled + verified"

@@ -77,15 +77,24 @@ Success prints `enrolled <pi>: certificate installed at /opt/aquila/config/devic
 
 The renew domain is live (`renew.cloud.acorngenetics.com`), so confirm the
 certificate authenticates over mTLS — no AWS credentials needed, the cert is the
-credential. Run under `sudo` because `device.env`, `device.crt`, and `device.key`
-are `0600 root`:
+credential. `enroll.sh` does this automatically (step 3); to run it by hand,
+present the installed cert/key to `/renew` with `curl` from the Pi (run under
+`sudo` — the cert/key are `0600 root`):
 
 ```bash
-ssh pi@<sn> "cd /opt/aquila && sudo bash -c 'set -a && . config/device.env && \
-  python scripts/verify_device_cert.py \
-    --renew-endpoint https://renew.cloud.acorngenetics.com/renew'"
-# PASS: Device Certificate authenticated over mTLS to /renew
+ssh pi@<sn> "sudo curl -sS -o /dev/null -w 'HTTP %{http_code}\n' --max-time 15 \
+  --cert /opt/aquila/config/device.crt --key /opt/aquila/config/device.key \
+  -X POST https://renew.cloud.acorngenetics.com/renew -d '{}'"
 ```
+
+A successful mTLS handshake returns an **HTTP status** (e.g. `HTTP 500` for the
+empty body — auth passed, the handler just rejected the payload). A rejected or
+missing cert **resets the TLS connection**, which curl reports as `HTTP 000`. So
+*any* status other than `000` means the cert authenticated.
+
+> `scripts/verify_device_cert.py` does the same check with nicer output, but it
+> imports `aq_lib` and must run where the repo is checked out — it is **not**
+> deployed on the Pi, so the `curl` form above is what works on a fleet device.
 
 A missing / expired / wrong-CA certificate fails the TLS handshake and reports `FAIL`.
 
