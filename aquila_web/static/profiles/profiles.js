@@ -128,7 +128,13 @@
     const editCell = document.createElement("td");
     if (!isBundled) {
       const idParam = encodeURIComponent(profile.id || "");
-      editCell.appendChild(createActionLink("Edit", `/profiles/edit-form?id=${idParam}`));
+      if (profile.structured) {
+        // Structured Profiles edit in the guided builder.
+        editCell.appendChild(createActionLink("Edit", `/profiles/builder?id=${idParam}`));
+      } else {
+        // Legacy Profiles are read-only in-app — open the viewer (?view=1).
+        editCell.appendChild(createActionLink("View", `/profiles/edit-form?id=${idParam}&view=1`));
+      }
     }
     row.appendChild(editCell);
 

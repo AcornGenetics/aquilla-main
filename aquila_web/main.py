@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
 from aq_lib.device_id import inject_hw_serial_env
 from aquila_web.local_db import enqueue_event, init_local_db
+from aquila_web.profile_assembly import assemble_steps, validate_stages
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -225,6 +226,37 @@ def _order_time_fields(profile: dict) -> dict:
     return ordered
 
 
+# Canonical top-level key order for structured profiles (issue #213 / A4):
+# metadata first, then the human-authored stages, then the derived steps last.
+CANONICAL_PROFILE_KEY_ORDER = (
+    "output_dir",
+    "post_in_gui",
+    "title",
+    "rox_unavailable",
+    "time_unavailable",
+    "estimated_completion_seconds",
+    "labels",
+    "stages",
+    "steps",
+)
+
+
+def _order_profile_keys(profile: dict) -> dict:
+    """Return a copy of *profile* with top-level keys in CANONICAL_PROFILE_KEY_ORDER.
+
+    Only keys that are present are emitted (no injection). Any keys not in the
+    canonical list are preserved and appended in their original relative order
+    (never dropped). See spec_profile_key_order.md."""
+    ordered: dict = {}
+    for key in CANONICAL_PROFILE_KEY_ORDER:
+        if key in profile:
+            ordered[key] = profile[key]
+    for key, value in profile.items():
+        if key not in ordered:
+            ordered[key] = value
+    return ordered
+
+
 class ProfileSelect(BaseModel):
     profile: str
 
@@ -236,6 +268,10 @@ class ProfileSave(BaseModel):
     rox_label: Optional[str] = None
     # Optional estimated completion time, in minutes. None clears any existing estimate.
     estimated_minutes: Optional[int] = None
+    # Structured-editor source of truth (issue #197 contract). When present, the
+    # profile is a Structured Profile; assembly/validation of these stages into
+    # `steps` is handled separately (A1/A2/A3). Persisted verbatim here.
+    stages: Optional[dict] = None
 
 class ProfileDelete(BaseModel):
     profiles: list[str]
@@ -914,6 +950,15 @@ async def profiles_edit_form_page():
         headers={"Cache-Control": "no-store"}
     )
 
+@app.get("/profiles/builder")
+async def profiles_builder_page():
+    # Structured profile editor (issue #197). Serves the shell; the Stage UI,
+    # validation, and save wiring are layered on in the frontend route (B1/B2/B3).
+    return FileResponse(
+        static_dir / "profiles/builder.html",
+        headers={"Cache-Control": "no-store"}
+    )
+
 @app.get("/history")
 async def history_page():
     return FileResponse(static_dir / "history.html")
@@ -1204,6 +1249,7 @@ async def list_profiles():
                 "name": data.get("name"),
                 "label": data.get("name"),
                 "bundled": is_bundled,
+                "structured": "stages" in data,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
                 "configuration": data.get("configuration", {})
@@ -1216,6 +1262,7 @@ async def list_profiles():
                 "name": data.get("title", path.stem),
                 "label": data.get("title", path.stem),
                 "bundled": is_bundled,
+                "structured": "stages" in data,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
                 "configuration": _convert_legacy_steps_to_run_config(
@@ -1369,6 +1416,15 @@ async def save_profile(payload: ProfileSave):
     base_profile["post_in_gui"] = "True"
     if payload.steps is not None:
         base_profile["steps"] = payload.steps
+    # Structured Profile (issue #201): validate the stages, then regenerate steps
+    # from them (stages is the source of truth; any client-sent steps is ignored).
+    # validate_stages runs first so assemble_steps only ever sees valid input.
+    if payload.stages is not None:
+        stage_errors = validate_stages(payload.stages)
+        if stage_errors:
+            raise HTTPException(status_code=400, detail={"errors": stage_errors})
+        base_profile["stages"] = payload.stages
+        base_profile["steps"] = assemble_steps(payload.stages)
     labels = {}
     if isinstance(base_profile.get("labels"), dict):
         labels.update(base_profile.get("labels", {}))
@@ -1408,16 +1464,36 @@ async def save_profile(payload: ProfileSave):
     elif requested_title:
         sanitized_title = sanitize_name(requested_title)
         if sanitized_title and profile_path.stem != sanitized_title:
-            candidate_path = profile_dir / f"{sanitized_title}.json"
+            # Rename within the profile's own directory (e.g. local/) rather than
+            # the profiles root, so editing+renaming doesn't relocate the file (#218 review).
+            rename_dir = profile_path.parent
+            candidate_path = rename_dir / f"{sanitized_title}.json"
             if candidate_path.exists() and candidate_path != profile_path:
-                candidate_path = profile_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
+                candidate_path = rename_dir / f"{sanitized_title}_{int(datetime.now().timestamp())}.json"
             profile_path = candidate_path
 
-    base_profile = _order_time_fields(base_profile)
+    # Structured profiles (issue #213) get the full canonical key order; legacy
+    # steps-based saves keep the narrower time-field ordering unchanged.
+    if "stages" in base_profile:
+        base_profile = _order_profile_keys(base_profile)
+    else:
+        base_profile = _order_time_fields(base_profile)
 
+    # Serialize first with allow_nan=False so a non-finite value (NaN/Infinity)
+    # anywhere — including a disabled stage that validation skips — fails loudly
+    # with a 400 instead of writing invalid JSON that 500s on every later read.
+    # Serializing before opening the file also prevents truncating an existing
+    # profile when re-saving an edit that turns out to be invalid.
+    try:
+        profile_text = json.dumps(base_profile, indent=2, allow_nan=False)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail={"errors": ["Profile contains non-finite numeric values (NaN/Infinity)."]},
+        )
     try:
         with profile_path.open("w") as f:
-            json.dump(base_profile, f, indent=2)
+            f.write(profile_text)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to save profile")
 
@@ -1503,7 +1579,7 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
             "steps": _convert_run_config_to_steps(data.get("configuration", {}))
         }
 
-    return {
+    details = {
         "id": profile_path.name,
         "title": data.get("title", profile_path.stem),
         "labels": data.get("labels", {}),
@@ -1512,6 +1588,11 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         "estimated_completion_seconds": data.get("estimated_completion_seconds"),
         "steps": data.get("steps", [])
     }
+    # Structured Profiles carry the `stages` source of truth; Legacy Profiles
+    # omit it entirely so the editor can branch on its presence (issue #197).
+    if data.get("stages") is not None:
+        details["stages"] = data["stages"]
+    return details
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
