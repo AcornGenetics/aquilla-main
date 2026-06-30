@@ -25,7 +25,7 @@ A new helper `_resolve_profile_display_name(profile_ref: str | None) -> str`:
 1. If `profile_ref` is falsy → return `"--"`.
 2. **Treat it as a relative-path id:** if `resolve_profile_dir() / profile_ref` is a file, read its JSON and return `name` (falling back to `title`) when present. This is the normal path — the id stored by `/profile/select`.
 3. **Otherwise match by name/stem/filename/id** across `resolve_profile_dir().rglob("*.json")` (handles a bare name being passed) and return the matched profile's `name`/`title`.
-4. **Fallback:** return `Path(profile_ref).stem` — strips the directory and `.json` so the user never sees a path even if the profile file is missing.
+4. **Fallback:** return `Path(profile_ref).name.removesuffix(".json")` — strips the directory and a trailing `.json` so the user never sees a path even if the profile file is missing, while preserving dots that are part of the name (e.g. `Cycle 2.5`). (Using `Path.stem` would wrongly truncate `Sample 3.2 Panel` → `Sample 3`.)
 
 The helper is **idempotent** for a value that is already a display name: passing `"A3 Invalid Temp"` returns `"A3 Invalid Temp"` (matched in step 3, or returned unchanged by the step-4 fallback).
 
@@ -47,7 +47,8 @@ The helper is **idempotent** for a value that is already a display name: passing
 - Result contains no path separator, no `.json`, and no underscore-for-space artifact.
 - Passing the already-resolved name `"A3 Invalid Temp"` returns it unchanged (idempotent).
 - `None`/empty → `"--"`.
-- Missing file (`local/ghost.json`) → falls back to stem `"ghost"` (no path, no extension).
+- Missing file (`local/ghost.json`) → falls back to `"ghost"` (no path, no extension).
+- Fallback preserves dots: an unmatched `"Sample 3.2 Panel"` returns unchanged; `"local/Cycle 2.5.json"` → `"Cycle 2.5"`.
 
 **Contract** — `tests/contract/test_history_endpoints.py`:
 - `POST /history/append` with `profile` set to a saved profile's id stores the profile's `name`, not the id (no `\\`, `/`, or `.json` in the stored `profile`).

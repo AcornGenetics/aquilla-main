@@ -84,3 +84,13 @@ def test_missing_file_falls_back_to_stem(tmp_path, monkeypatch):
     monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: tmp_path)
 
     assert web_main._resolve_profile_display_name("local/ghost.json") == "ghost"
+
+
+def test_fallback_preserves_dots_in_name(tmp_path, monkeypatch):
+    """A dotted name with no matching file keeps its dots (only .json is stripped)."""
+    monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: tmp_path)
+
+    # Bare display name with a dot — nothing on disk matches it.
+    assert web_main._resolve_profile_display_name("Sample 3.2 Panel") == "Sample 3.2 Panel"
+    # Path-like id with a dotted stem — strip the dir and .json, keep the dot.
+    assert web_main._resolve_profile_display_name("local/Cycle 2.5.json") == "Cycle 2.5"

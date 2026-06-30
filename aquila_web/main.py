@@ -140,8 +140,9 @@ def _resolve_profile_display_name(profile_ref: str | None) -> str:
                     return str(name)
     except Exception:
         pass
-    # 3. Fallback: strip directory and extension so a path is never shown.
-    return Path(profile_ref).stem
+    # 3. Fallback: strip the directory and a trailing .json so a path is never
+    #    shown, while preserving dots that are part of the name (e.g. "Cycle 2.5").
+    return Path(profile_ref).name.removesuffix(".json")
 
 def _all_bundled_filenames() -> set[str]:
     profile_groups_path = BASE_DIR / "config_files" / "profile_groups.json"
