@@ -40,34 +40,50 @@ Pi (deployment2.sh)            Operator workstation (AWS creds)        acorn-ca
 
 ## Enroll
 
-From your workstation (not the Pi):
+From your workstation (not the Pi). The one-shot wrapper does confirm-CSR →
+enrol → verify for one Sentri by serial — pass just the `<sn>`:
+
+```bash
+./scripts/enroll.sh sn04          # defaults to the PROD enroll + renew endpoints
+```
+
+Or call the enrol step directly (the wrapper runs this for step 2):
 
 ```bash
 python scripts/enroll_device.py \
-    --pi sn04 \
-    --endpoint https://<id>.execute-api.us-east-2.amazonaws.com/enroll \
+    --pi pi@sn04 \
+    --endpoint https://1x9561i626.execute-api.us-east-2.amazonaws.com/enroll \
     --region us-east-2
 ```
 
+> **SSH host:** use `pi@<sn>` (the `pi` user). A bare `<sn>` can fail Tailscale
+> SSH with `failed to look up local user "<you>"`.
+
 This:
-1. SSH-reads the CSR (`/opt/aquila/config/device.csr`) off the Pi.
+1. SSH-reads the CSR (`/opt/aquila/config/device.csr`) off the Pi (`sudo cat`).
 2. SigV4-signs a POST of the CSR to `/enroll` with **your** AWS identity.
-3. SSH-writes the issued certificate to `/opt/aquila/config/device.crt` (`0600`).
+3. SSH-writes the issued certificate to `/opt/aquila/config/device.crt` (`0600`,
+   root) via `sudo tee`.
 4. Rewrites `/opt/aquila/config/device.env`: adds `AQ_SYNC_CLIENT_CERT` /
    `AQ_SYNC_CLIENT_KEY` and removes any stale `AQ_SYNC_API_KEY`.
+
+> **Why sudo:** `deployment2.sh` runs under `sudo`, so `/opt/aquila/config` and
+> its files are `root`-owned. The enrol tool uses the Pi's passwordless `sudo`
+> for the reads/writes there — your AWS credentials still never touch the Pi.
 
 Success prints `enrolled <pi>: certificate installed at /opt/aquila/config/device.crt`.
 
 ## Verify (optional, runs on the Pi)
 
-Once the prod renew domain is live (`renew.cloud.acorngenetics.com`), confirm the
+The renew domain is live (`renew.cloud.acorngenetics.com`), so confirm the
 certificate authenticates over mTLS — no AWS credentials needed, the cert is the
-credential:
+credential. Run under `sudo` because `device.env`, `device.crt`, and `device.key`
+are `0600 root`:
 
 ```bash
-ssh <pi> 'cd /opt/aquila && set -a && . config/device.env && \
+ssh pi@<sn> "cd /opt/aquila && sudo bash -c 'set -a && . config/device.env && \
   python scripts/verify_device_cert.py \
-    --renew-endpoint https://renew.cloud.acorngenetics.com/renew'
+    --renew-endpoint https://renew.cloud.acorngenetics.com/renew'"
 # PASS: Device Certificate authenticated over mTLS to /renew
 ```
 
