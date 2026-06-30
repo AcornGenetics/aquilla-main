@@ -10,7 +10,8 @@
         "profile_editing_disabled": true
     },
     "sn04": {
-        "profile_group": "breweries"
+        "profile_group": "breweries",
+        "profile_editing_disabled": true
     },
     "sn05": {
         "profile_group": "duke"
