@@ -21,12 +21,18 @@ The CSR is produced on the Pi during deployment (#239). The Sync client reads
 the installed cert/key paths from ``device.env`` (#241).
 """
 import argparse
+import os
 import subprocess
 import sys
 
 import botocore.session
 
-from aq_lib.enroll import EnrollmentError, device_env_after_enroll, enroll
+# Make `aq_lib` importable when run as `python scripts/enroll_device.py` from
+# anywhere: only `scripts/` is on sys.path by default, not the repo root that
+# holds `aq_lib/`. Insert the repo root (the parent of this file's dir).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from aq_lib.enroll import EnrollmentError, device_env_after_enroll, enroll  # noqa: E402
 
 CONFIG_DIR = "/opt/aquila/config"
 CSR_PATH = f"{CONFIG_DIR}/device.csr"
