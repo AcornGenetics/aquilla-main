@@ -36,15 +36,21 @@ ENV_PATH = f"{CONFIG_DIR}/device.env"
 
 
 def _ssh_read(pi, path):
+    # /opt/aquila/config is root-owned (deployment2.sh runs under sudo), and
+    # device.env is 0600 root — so read via sudo. The Pi user has passwordless
+    # sudo; AWS creds still never touch the Pi (this only runs `cat` there).
     return subprocess.run(
-        ["ssh", pi, "cat", path], check=True, capture_output=True, text=True
+        ["ssh", pi, "sudo", "cat", path], check=True, capture_output=True, text=True
     ).stdout
 
 
 def _ssh_write(pi, path, content, mode="600"):
-    # umask first so the file is never world-readable, even momentarily.
+    # Write into the root-owned config dir as root via `sudo tee`. `umask 077`
+    # (inherited by tee) keeps the file non-world-readable even momentarily;
+    # `sudo chmod` pins the final mode. The file ends up root-owned, matching the
+    # rest of /opt/aquila/config.
     subprocess.run(
-        ["ssh", pi, f"umask 077 && cat > {path} && chmod {mode} {path}"],
+        ["ssh", pi, f"umask 077 && sudo tee {path} >/dev/null && sudo chmod {mode} {path}"],
         input=content, check=True, capture_output=True, text=True,
     )
 
