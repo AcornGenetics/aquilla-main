@@ -1240,6 +1240,28 @@ def resolve_device_profiles() -> "set[str] | None":
     return set(allowed)
 
 
+def resolve_profile_editing_disabled() -> bool:
+    """True when profile building (edit/new) is disabled for the running device.
+
+    Reads the `profile_editing_disabled` flag from the device's entry in
+    config_files/device_profiles.json. Fails OPEN (returns False) on unknown
+    hostname, missing flag, or unreadable config so editing stays enabled by
+    default — matching the fail-open behavior of resolve_device_profiles().
+    """
+    import socket
+    hostname = os.getenv("DEVICE_HOSTNAME") or socket.gethostname()
+    device_profiles_path = BASE_DIR / "config_files" / "device_profiles.json"
+    try:
+        device_profiles = json.loads(device_profiles_path.read_text())
+    except Exception:
+        logger.warning("Could not load device_profiles.json; profile editing enabled")
+        return False
+    device_entry = device_profiles.get(hostname)
+    if not isinstance(device_entry, dict):
+        return False
+    return bool(device_entry.get("profile_editing_disabled", False))
+
+
 @app.get("/profiles")
 async def list_profiles():
     profiles = []
