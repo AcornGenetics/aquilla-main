@@ -764,7 +764,7 @@ async def health_check():
 
 @app.get("/version")
 async def version_check():
-    return {"version": os.getenv("AQ_APP_VERSION", "unknown")}
+    return {"version": os.getenv("AQ_APP_VERSION") or "unknown"}
 
 
 @app.get("/results")
