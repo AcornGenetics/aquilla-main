@@ -394,6 +394,15 @@ def _persist_selected_profile() -> None:
     except Exception:
         logger.warning("Could not persist selected_profile to %s", RUN_STATE_PATH)
 
+def _set_selected_profile(value: "str | None") -> None:
+    """Single entry point for changing the selected profile + persisting it.
+
+    Every mutation of selected_profile goes through here so the durable copy on
+    disk (RUN_STATE_PATH) can never drift from memory."""
+    global selected_profile
+    selected_profile = value
+    _persist_selected_profile()
+
 def _init_selected_profile() -> None:
     """Restore selected_profile from disk on startup, mirroring _init_run_name.
 
@@ -802,6 +811,9 @@ async def clear_results():
 async def acknowledge_run_complete():
     global run_complete_ack
     run_complete_ack = True
+    # Run is done and dismissed — clear the selection so the ready screen resets
+    # to "Select a profile" for the next run (no manual reset needed, #275).
+    _set_selected_profile(None)
     return {"ok": True}
 
 @app.post("/run/complete/ack/reset")
@@ -1239,20 +1251,32 @@ async def set_drawer_state(payload: dict):
 
 @app.post("/profile/select")
 async def select_profile(payload: ProfileSelect):
-    global selected_profile
-    selected_profile = payload.profile
-    _persist_selected_profile()
+    _set_selected_profile(payload.profile)
     logger.info("Selected profile:", selected_profile)
     return {"ok":True}
 
 @app.post("/run_status/reset")
 async def run_status_reset():
-    global run_requested, selected_profile
+    global run_requested
     run_requested = False
-    selected_profile = None
-    _persist_selected_profile()
+    _set_selected_profile(None)
     logger.info("Run button reset, profile reset")
     return{"ok":True}
+
+@app.post("/run_requested/ack")
+async def run_requested_ack():
+    """Consume the run-request edge WITHOUT clearing the selected profile.
+
+    The device state loop (aq_lib/state_requests.wait_for_button) calls this
+    once it has picked up a run press, so the press is not handled twice. Unlike
+    /run_status/reset it must NOT clear selected_profile: the profile has to
+    survive for the whole run so the Run-card header keeps showing its name
+    instead of the "--" no-profile sentinel (#275). Clearing it here was the
+    root cause — the header went blank the moment a run started."""
+    global run_requested
+    run_requested = False
+    logger.info("Run request acknowledged (profile preserved)")
+    return {"ok": True}
 
 def resolve_device_profiles() -> "set[str] | None":
     import socket

@@ -171,9 +171,12 @@ def wait_for_button(include_run_complete_ack: bool = False):
             profile_id = data.get("profile")
             logger.info("Requests profile selected: %s" % (profile_id))
             try:
-                requests.post(f"{BACKEND_URL}/run_status/reset", timeout=5)
+                # Consume only the run-request edge — must NOT clear the selected
+                # profile, or the Run-card header goes blank ("--") for the whole
+                # run (#275). /run_status/reset would wipe the profile too.
+                requests.post(f"{BACKEND_URL}/run_requested/ack", timeout=5)
             except Exception as e:
-                logger.warning("Error resetting button", e)
+                logger.warning("Error acknowledging run request", e)
             return data
         elif data.get("drawer_open_status"):
             logger.info("Drawer open button pressed")
