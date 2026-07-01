@@ -137,5 +137,11 @@ it needs AWS credentials that must never land on the Pi.
 
 - acorn-ca `CONTEXT.md` — Enrollment, Renewal, Revocation, Cohort definitions.
 - `specs/prd/kms-ca-enrollment-mtls-s3-verification-prd.md` (Rev 2) — the slice spec.
-- Renewal (automatic, before expiry) and the offline re-enrollment fallback are a
-  later slice; this covers first-time enrollment.
+- **Automatic renewal is now live** (#279): `deployment2.sh` installs an
+  `aquila-cert-renew.timer` that runs `aq_lib.renew` daily in the app image. Once
+  the cert passes ~⅔ of its life it presents the current cert to `/renew` over
+  mTLS and installs a freshly-rotated keypair + cert in place — no operator, no
+  AWS creds. A failed run is a no-op on disk and retries next tick; the device
+  keeps its current cert until a renewal succeeds.
+- The offline re-enrollment fallback (for a cert that lapsed before it could renew)
+  is still a later slice.
