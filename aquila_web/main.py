@@ -1254,6 +1254,21 @@ async def run_status_reset():
     logger.info("Run button reset, profile reset")
     return{"ok":True}
 
+@app.post("/run_requested/ack")
+async def run_requested_ack():
+    """Consume the run-request edge WITHOUT clearing the selected profile.
+
+    The device state loop (aq_lib/state_requests.wait_for_button) calls this
+    once it has picked up a run press, so the press is not handled twice. Unlike
+    /run_status/reset it must NOT clear selected_profile: the profile has to
+    survive for the whole run so the Run-card header keeps showing its name
+    instead of the "--" no-profile sentinel (#275). Clearing it here was the
+    root cause — the header went blank the moment a run started."""
+    global run_requested
+    run_requested = False
+    logger.info("Run request acknowledged (profile preserved)")
+    return {"ok": True}
+
 def resolve_device_profiles() -> "set[str] | None":
     import socket
     hostname = os.getenv("DEVICE_HOSTNAME") or socket.gethostname()
