@@ -600,11 +600,22 @@ chmod +x /opt/fleet/update.sh
 # is later submitted to acorn-ca /enroll (#240). Runs in the app image, which
 # carries the crypto deps; the host does not. The container reads the same
 # /proc/cpuinfo serial, so its CN matches DEVICE_ID written above.
-docker run --rm \
-    -v /opt/aquila/config:/config \
-    -v /proc/cpuinfo:/proc/cpuinfo:ro \
-    "ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG}" \
-    python -m aq_lib.device_csr /config
+#
+# IDEMPOTENT: only generate on first provisioning. Re-running deployment2.sh must
+# NOT regenerate the keypair — doing so overwrites device.key while the already
+# enrolled device.crt stays put, orphaning the cert (cert/key mismatch → mTLS,
+# Sync and renewal all break, requiring re-enrollment). If a key already exists,
+# keep it (and its matching cert). To intentionally re-key, delete device.key +
+# device.crt first, then re-run and re-enroll.
+if [[ -s /opt/aquila/config/device.key ]]; then
+    echo "  ℹ device.key already present — keeping existing keypair/CSR (not regenerating)."
+else
+    docker run --rm \
+        -v /opt/aquila/config:/config \
+        -v /proc/cpuinfo:/proc/cpuinfo:ro \
+        "ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG}" \
+        python -m aq_lib.device_csr /config
+fi
 
 run_test "docker-compose.yml downloaded"   "test -f /opt/fleet/docker-compose.yml"
 run_test "compose file non-empty"          "test -s /opt/fleet/docker-compose.yml"
@@ -613,6 +624,10 @@ run_test "ui image pulled"                 "docker images | grep -q 'aquilla-mai
 run_test "update.sh exists and executable" "test -x /opt/fleet/update.sh"
 run_test "device CSR generated"            "test -s /opt/aquila/config/device.csr"
 run_test "device key owner-only (0600)"    "test \"\$(stat -c '%a' /opt/aquila/config/device.key)\" = 600"
+# If a cert is already installed (device previously enrolled), it MUST still match
+# the key — catches the orphaned-cert failure a non-idempotent keygen would cause.
+run_test "device cert/key match (if enrolled)" \
+    "! test -s /opt/aquila/config/device.crt || diff -q <(openssl x509 -in /opt/aquila/config/device.crt -noout -pubkey) <(openssl pkey -in /opt/aquila/config/device.key -pubout)"
 
 phase_pass "docker-compose.yml downloaded, all images pulled"
 
