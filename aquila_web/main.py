@@ -394,6 +394,15 @@ def _persist_selected_profile() -> None:
     except Exception:
         logger.warning("Could not persist selected_profile to %s", RUN_STATE_PATH)
 
+def _set_selected_profile(value: "str | None") -> None:
+    """Single entry point for changing the selected profile + persisting it.
+
+    Every mutation of selected_profile goes through here so the durable copy on
+    disk (RUN_STATE_PATH) can never drift from memory."""
+    global selected_profile
+    selected_profile = value
+    _persist_selected_profile()
+
 def _init_selected_profile() -> None:
     """Restore selected_profile from disk on startup, mirroring _init_run_name.
 
@@ -802,6 +811,9 @@ async def clear_results():
 async def acknowledge_run_complete():
     global run_complete_ack
     run_complete_ack = True
+    # Run is done and dismissed — clear the selection so the ready screen resets
+    # to "Select a profile" for the next run (no manual reset needed, #275).
+    _set_selected_profile(None)
     return {"ok": True}
 
 @app.post("/run/complete/ack/reset")
@@ -1239,18 +1251,15 @@ async def set_drawer_state(payload: dict):
 
 @app.post("/profile/select")
 async def select_profile(payload: ProfileSelect):
-    global selected_profile
-    selected_profile = payload.profile
-    _persist_selected_profile()
+    _set_selected_profile(payload.profile)
     logger.info("Selected profile:", selected_profile)
     return {"ok":True}
 
 @app.post("/run_status/reset")
 async def run_status_reset():
-    global run_requested, selected_profile
+    global run_requested
     run_requested = False
-    selected_profile = None
-    _persist_selected_profile()
+    _set_selected_profile(None)
     logger.info("Run button reset, profile reset")
     return{"ok":True}
 
