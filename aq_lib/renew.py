@@ -130,12 +130,16 @@ def _read_env(config_dir):
     return values
 
 
-def run_renewal(config_dir, *, now: dt.datetime = None, http_post=None):
+def run_renewal(config_dir, *, now: dt.datetime = None, http_post=None, renew_at=None):
     """On-device entrypoint: renew the installed cert using ``device.env`` config.
 
     Reads ``DEVICE_ID`` and the renew endpoint (``AQ_RENEW_ENDPOINT``, else the
     prod default) from ``config_dir/device.env`` and renews the installed cert in
     place. Returns the new cert PEM, or ``None`` if renewal was not yet due.
+
+    ``renew_at`` overrides the due-threshold fraction (``--force`` passes ``1.0``,
+    which makes every run due); when ``None`` it falls back to ``AQ_RENEW_AT`` in
+    device.env, then the default.
     """
     if now is None:
         now = dt.datetime.now(dt.timezone.utc)
@@ -144,19 +148,28 @@ def run_renewal(config_dir, *, now: dt.datetime = None, http_post=None):
     if not device_id:
         raise RenewalError(f"no DEVICE_ID in {config_dir}/{ENV_FILENAME}")
     endpoint = env.get("AQ_RENEW_ENDPOINT") or DEFAULT_RENEW_ENDPOINT
+    if renew_at is None:
+        renew_at = float(env["AQ_RENEW_AT"]) if env.get("AQ_RENEW_AT") else DEFAULT_RENEW_AT
 
     return renew_device_cert(
         endpoint, config_dir=config_dir, device_id=device_id,
-        now=now, http_post=http_post,
+        now=now, http_post=http_post, renew_at=renew_at,
     )
 
 
 def main(argv=None):  # pragma: no cover - thin container/systemd entrypoint
+    import argparse
     import sys
 
-    config_dir = (argv or sys.argv[1:] or ["/config"])[0]
+    p = argparse.ArgumentParser(description="Renew this device's Device Certificate.")
+    p.add_argument("config_dir", nargs="?", default="/config",
+                   help="config dir holding device.crt/key/env (default /config)")
+    p.add_argument("--force", action="store_true",
+                   help="renew now even if the cert is not yet due (for testing/ops)")
+    args = p.parse_args(sys.argv[1:] if argv is None else argv)
+
     try:
-        new_cert = run_renewal(config_dir)
+        new_cert = run_renewal(args.config_dir, renew_at=1.0 if args.force else None)
     except RenewalError as e:
         # Fail this run loudly so systemd records it; the next timer tick retries.
         # The installed cert is untouched, so the device keeps working until then.
@@ -165,7 +178,7 @@ def main(argv=None):  # pragma: no cover - thin container/systemd entrypoint
     if new_cert is None:
         print("certificate not yet due for renewal — no action")
     else:
-        print(f"renewed: installed new certificate at {config_dir}/{CERT_FILENAME}")
+        print(f"renewed: installed new certificate at {args.config_dir}/{CERT_FILENAME}")
     return 0
 
 
