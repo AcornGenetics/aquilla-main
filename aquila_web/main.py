@@ -52,6 +52,10 @@ if str(BASE_DIR) not in sys.path:
 RESULTS_DIR = BASE_DIR / "logs" / "results"
 PLOTS_DIR = BASE_DIR / "logs" / "plots"
 HISTORY_PATH = BASE_DIR / "logs" / "history.json"
+# Durable run state so the running profile survives a backend restart (#272
+# follow-up). run_name is re-derived from history on startup; selected_profile
+# cannot be, so it is persisted here and restored by _init_selected_profile().
+RUN_STATE_PATH = BASE_DIR / "logs" / "run_state.json"
 DEFAULT_PROFILE_DIR = BASE_DIR / "profiles"
 LOCAL_PROFILE_DIR = MODULE_BASE_DIR / "profiles"
 BUNDLED_PROFILE_DIR = DEFAULT_PROFILE_DIR / "bundled"
@@ -382,6 +386,29 @@ def _init_run_name() -> None:
     global run_name, run_counter
     run_name, run_counter = _next_run_info()
 
+def _persist_selected_profile() -> None:
+    """Write the current selected_profile to disk so it survives a restart."""
+    try:
+        RUN_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        RUN_STATE_PATH.write_text(json.dumps({"selected_profile": selected_profile}))
+    except Exception:
+        logger.warning("Could not persist selected_profile to %s", RUN_STATE_PATH)
+
+def _init_selected_profile() -> None:
+    """Restore selected_profile from disk on startup, mirroring _init_run_name.
+
+    On the device the backend is replaced mid-run (watchtower / container
+    restarts); without this the running profile would be lost and the Run-card
+    header would fall back to the ``"--"`` no-profile sentinel (#272)."""
+    global selected_profile
+    try:
+        if RUN_STATE_PATH.exists():
+            value = json.loads(RUN_STATE_PATH.read_text()).get("selected_profile")
+            if value:
+                selected_profile = value
+    except Exception:
+        logger.warning("Could not restore selected_profile from %s", RUN_STATE_PATH)
+
 def _save_history(entries: list[dict]) -> None:
     HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     with HISTORY_PATH.open("w") as f:
@@ -425,6 +452,7 @@ def _resolve_results_path() -> Path | None:
     return None
 
 _init_run_name()
+_init_selected_profile()
 
 def _next_run_index(profile_name: str) -> int:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1213,6 +1241,7 @@ async def set_drawer_state(payload: dict):
 async def select_profile(payload: ProfileSelect):
     global selected_profile
     selected_profile = payload.profile
+    _persist_selected_profile()
     logger.info("Selected profile:", selected_profile)
     return {"ok":True}
 
@@ -1221,6 +1250,7 @@ async def run_status_reset():
     global run_requested, selected_profile
     run_requested = False
     selected_profile = None
+    _persist_selected_profile()
     logger.info("Run button reset, profile reset")
     return{"ok":True}
 
