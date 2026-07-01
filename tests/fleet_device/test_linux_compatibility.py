@@ -107,8 +107,9 @@ class TestLinuxCompatibility:
 
     def test_compose_volumes_use_opt_aquila(self):
         """
-        All host volume mounts must be under /opt/aquila/ — the standard
-        device path. Mounts to /tmp/, relative paths, or developer home dirs
+        All host volume mounts must be under a standard device path — /opt/aquila/
+        (app data) or /opt/fleet/ (fleet control dir: compose, .env, and the OTA
+        reboot sentinel). Mounts to /tmp/, relative paths, or developer home dirs
         indicate a local-dev config that will fail or leak data on device.
         """
         services = _compose()["services"]
@@ -122,9 +123,13 @@ class TestLinuxCompatibility:
                     continue
                 if host_path == "/root/.docker/config.json":
                     continue
-                assert host_path.startswith("/opt/aquila") or host_path.startswith("/root"), (
+                assert (
+                    host_path.startswith("/opt/aquila")
+                    or host_path.startswith("/opt/fleet")
+                    or host_path.startswith("/root")
+                ), (
                     f"Service '{name}' volume '{volume}' mounts from '{host_path}' "
-                    f"— expected /opt/aquila/... path for device deployment"
+                    f"— expected /opt/aquila/... or /opt/fleet/... path for device deployment"
                 )
 
     def test_compose_no_platform_mac(self):

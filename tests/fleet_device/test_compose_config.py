@@ -103,3 +103,28 @@ class TestFleetCompose:
         assert any("8090" in p for p in ports), (
             f"backend service doesn't expose port 8090. Ports: {ports}"
         )
+
+    def test_backend_persists_ota_sentinel_directory(self):
+        """
+        The OTA auto-reboot sentinel (/opt/fleet/last_update.json) must sit on a
+        host-backed bind mount so it survives the Watchtower container swap.
+
+        /update/apply writes the sentinel, then Watchtower DESTROYS the old backend
+        container and creates a new one; the new container reads the sentinel on
+        startup to decide whether to reboot the host. If only /opt/fleet/.env is
+        mounted (not the directory), the sentinel lands in the old container's
+        ephemeral layer and is discarded — the device never auto-reboots.
+
+        Regression guard for the #183 auto-reboot: the sentinel's parent directory
+        (/opt/fleet) must be bind-mounted into the backend service, not just the
+        single .env file.
+        """
+        backend = _load(FLEET_COMPOSE)["services"]["backend"]
+        volumes = backend.get("volumes", [])
+        # host_path:container_path[:opts] — collect the container-side targets.
+        targets = [str(v).split(":")[1] for v in volumes if ":" in str(v)]
+        assert "/opt/fleet" in targets, (
+            "backend service must bind-mount the /opt/fleet directory so the OTA "
+            "reboot sentinel (/opt/fleet/last_update.json) survives the container "
+            f"swap. Mounting only /opt/fleet/.env is not enough. Volumes: {volumes}"
+        )
