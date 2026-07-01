@@ -283,3 +283,44 @@ class TestRunRenewal:
         assert post.seen["url"] == "https://renew.example/renew"
         assert result == post.seen["issued"]
         assert (config / "device.crt").read_bytes().decode() == post.seen["issued"]
+
+    def test_force_renews_a_cert_that_is_not_yet_due(self, tmp_path):
+        # Testing/ops override: with renew_at=1.0 (what --force maps to) a cert
+        # nowhere near expiry is renewed anyway, so a renewal can be triggered on
+        # demand instead of waiting until it naturally ages.
+        now = dt.datetime(2026, 7, 2, tzinfo=dt.timezone.utc)
+        config = tmp_path / "config"
+        fresh = make_cert_pem(
+            not_before=now - dt.timedelta(days=1),
+            not_after=now + dt.timedelta(days=13),   # ~13/14 left: normally NOT due
+        )
+        write_config(config, fresh)
+        (config / "device.env").write_text(
+            f"DEVICE_ID={DEVICE_ID}\nAQ_RENEW_ENDPOINT=https://renew.example/renew\n"
+        )
+        post = issuing_post(now)
+
+        result = run_renewal(str(config), now=now, http_post=post, renew_at=1.0)
+
+        assert result == post.seen["issued"]
+        assert (config / "device.crt").read_bytes().decode() == post.seen["issued"]
+
+    def test_reads_renew_at_override_from_device_env(self, tmp_path):
+        # AQ_RENEW_AT in device.env tunes the threshold without a code change;
+        # 1.0 makes every run due (the env equivalent of --force).
+        now = dt.datetime(2026, 7, 2, tzinfo=dt.timezone.utc)
+        config = tmp_path / "config"
+        write_config(config, make_cert_pem(
+            not_before=now - dt.timedelta(days=1),
+            not_after=now + dt.timedelta(days=13),
+        ))
+        (config / "device.env").write_text(
+            f"DEVICE_ID={DEVICE_ID}\n"
+            "AQ_RENEW_ENDPOINT=https://renew.example/renew\n"
+            "AQ_RENEW_AT=1.0\n"
+        )
+        post = issuing_post(now)
+
+        result = run_renewal(str(config), now=now, http_post=post)
+
+        assert result == post.seen["issued"]
