@@ -52,3 +52,23 @@ def thermal_parser(steps, last_temp = 25, last_time = 0, n = "-1", ramp_rate = 1
         elif "ramp_rate" in s:
             ramp_rate = s["ramp_rate"]
             yield "call", "change_ramprate", [ s["ramp_rate"] ]
+
+
+def count_optics_passes(steps) -> int:
+    """Number of optical read passes a profile plans to fire.
+
+    One pass per ``optics`` action the parser emits — a baseline pass plus one
+    per repeat cycle. Read from the planned profile (not the runtime counter) so
+    optics ``expected_lines`` reflects the intended total even when a run aborts
+    early, so ``complete`` is false and the cloud coverage view shows true data
+    loss (acorn-analytics#45). Best-effort: returns the count reached before any
+    malformed step rather than raising into the run.
+    """
+    count = 0
+    try:
+        for action in thermal_parser(steps):
+            if action and action[0] == "optics":
+                count += 1
+    except Exception:
+        pass
+    return count
