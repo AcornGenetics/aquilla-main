@@ -66,6 +66,27 @@ class TestRunCompleteEndpoint:
         assert payload["run_name"] == "Run 2"
         assert payload["profile"] == "hotstart.json"
 
+    def test_payload_carries_supplied_run_timestamp(self, db_client):
+        client, local_db = db_client
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+            "run_timestamp": "2026-07-02T14:03:11Z",
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload["run_timestamp"] == "2026-07-02T14:03:11Z"
+
+    def test_payload_defaults_run_timestamp_when_omitted(self, db_client):
+        client, local_db = db_client
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload.get("run_timestamp")
+
     def test_event_payload_includes_non_empty_result(self, db_client):
         client, local_db = db_client
         client.post("/events/run_complete", json={
@@ -99,3 +120,22 @@ class TestEmitRunComplete:
         assert calls[0]["json"]["run_name"] == "Run 1"
         assert calls[0]["json"]["profile"] == "basic_pcr.json"
         assert calls[0]["json"]["results_path"] == "/logs/results/run1.json"
+
+    def test_forwards_canonical_run_timestamp(self, monkeypatch):
+        import aq_lib.state_requests as sr
+
+        calls = []
+
+        class _FakeResponse:
+            status_code = 200
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append({"url": url, "json": json})
+            return _FakeResponse()
+
+        monkeypatch.setattr("aq_lib.state_requests.requests.post", fake_post)
+        sr.emit_run_complete(
+            "Run 1", "basic_pcr.json", "/logs/results/run1.json",
+            run_timestamp="2026-07-02T14:03:11Z",
+        )
+        assert calls[0]["json"]["run_timestamp"] == "2026-07-02T14:03:11Z"
