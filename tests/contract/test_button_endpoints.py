@@ -157,6 +157,26 @@ def test_button_status_has_required_keys(client):
     assert not missing, f"Missing keys in /button_status: {missing}"
 
 
+@pytest.mark.contract
+def test_button_status_reports_dev_simulate_flag(client):
+    """GET /button_status exposes dev_simulate reflecting the AQ_DEV_SIMULATE flag.
+
+    Frontend dev-mode behavior (script.js) keys off this field, so it must
+    track the module flag in both states.
+    """
+    from aquila_web import main as web_main
+
+    original = web_main.DEV_SIMULATE
+    try:
+        web_main.DEV_SIMULATE = True
+        assert client.get("/button_status").json()["dev_simulate"] is True
+
+        web_main.DEV_SIMULATE = False
+        assert client.get("/button_status").json()["dev_simulate"] is False
+    finally:
+        web_main.DEV_SIMULATE = original
+
+
 # ---------------------------------------------------------------------------
 # Reset endpoints
 # ---------------------------------------------------------------------------
