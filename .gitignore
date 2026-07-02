@@ -260,3 +260,6 @@ ruvector.db
 .swarm/
 .claude/
 .claude-flow/
+
+# Shared optics test fixtures are committed (byte-identical to acorn-analytics)
+!tests/fixtures/optics/*.log

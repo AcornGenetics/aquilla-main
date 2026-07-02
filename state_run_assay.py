@@ -32,10 +32,16 @@ from aq_lib.motor_class import Axis, Drawer
 from aq_curve.main import results_to_json
 from aq_lib.fan_class import Fan
 from aq_lib.adc_class import OpticalRead
+from aquila_web.optics_readings import expected_lines
 
 logging.config.dictConfig( LOGGING_CONFIG )
 logger = logging.getLogger( "aquila" )
 config = Config()
+
+# Optical blinks fired per read pass in read_wells (rox phases 0-3 + fam phases
+# 2-5). The device's expected_lines derives from this rather than a hardcoded
+# 480, per the frozen optics contract (acorn-analytics#45).
+READS_PER_CYCLE = 8
 
 class AssayInterface():
 
@@ -125,8 +131,11 @@ class AssayInterface():
 
     def read_wells( self, args ):
         cycle = args[1]  # name, n, last_temp...
+        # One optical read pass per read_wells call (baseline + one per cycle);
+        # feeds expected_lines for the optics_readings completeness check (#288).
+        self._optics_pass_count += 1
 
-        for task in [ 
+        for task in [
             { "goto_position":0 }, { "capture":"rox", "cycle":cycle, "position":0 },
             { "goto_position":1 }, { "capture":"rox", "cycle":cycle, "position":1 },
             { "goto_position":2 }, { "capture":"rox", "cycle":cycle, "position":2 },
@@ -176,6 +185,9 @@ class AssayInterface():
         # Shared by run_complete and the forthcoming optics_readings event so the
         # cloud derives the same run_id = uuid5(device_id : run_timestamp).
         self.run_timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        # Count optical read passes this run so the optics_readings event can
+        # report expected_lines for the completeness check (#288).
+        self._optics_pass_count = 0
         logger.info("RUN START index=%d run_timestamp=%s", self._run_index, self.run_timestamp)
         sr.change_screen("2")
         time.sleep(1)
@@ -276,6 +288,14 @@ class AssayInterface():
                 stop_thread.join(timeout=2)
             sr.update_drawer_state(is_open=True, is_closed=False)
             if self.run_aborted:
+                # Emit whatever optics were captured, labeled aborted; an
+                # aborted run with no capture emits no event (#288).
+                sr.emit_optics_readings(
+                    str(optics_log),
+                    run_timestamp=self.run_timestamp,
+                    expected_lines=expected_lines(self._optics_pass_count, READS_PER_CYCLE),
+                    aborted=True,
+                )
                 sr.change_screen("1")
             else:
                 try:
@@ -296,6 +316,14 @@ class AssayInterface():
                 sr.emit_run_complete(
                     self.run_name, profile_name, str(results_json),
                     run_timestamp=self.run_timestamp,
+                )
+                # Capture the exact optics file just consumed onto the same
+                # outbox, sharing run_timestamp (#288).
+                sr.emit_optics_readings(
+                    str(optics_log),
+                    run_timestamp=self.run_timestamp,
+                    expected_lines=expected_lines(self._optics_pass_count, READS_PER_CYCLE),
+                    aborted=False,
                 )
                 sr.advance_run_name()
                 sr.change_screen("3")

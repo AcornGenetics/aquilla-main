@@ -121,6 +121,28 @@ def emit_run_complete(
     except requests.exceptions.RequestException as e:
         logger.exception("Error emitting run_complete event: %s", e)
 
+def emit_optics_readings(
+    optics_path: str,
+    run_timestamp: str,
+    expected_lines: int,
+    aborted: bool = False,
+) -> None:
+    # Capture the exact optics file this run produced onto the same events
+    # outbox as run_complete, sharing its run_timestamp so the cloud derives one
+    # run_id per Run (#288). The backend reads/gzips/hashes the file and applies
+    # the completeness + abort rules from the frozen contract.
+    url = f"{BACKEND_URL}/events/optics_readings"
+    payload = {
+        "optics_path": optics_path,
+        "run_timestamp": run_timestamp,
+        "expected_lines": expected_lines,
+        "aborted": aborted,
+    }
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error emitting optics_readings event: %s", e)
+
 def reset_exit():
     try:
         requests.post(f"{BACKEND_URL}/exit/reset", timeout=5)

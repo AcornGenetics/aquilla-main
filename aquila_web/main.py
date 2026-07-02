@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
 from aq_lib.device_id import inject_hw_serial_env
 from aquila_web.local_db import enqueue_event, init_local_db, _utc_now
+from aquila_web.optics_readings import build_optics_readings, count_data_lines
 from aquila_web.profile_assembly import assemble_steps, validate_stages
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -683,6 +684,18 @@ async def _simulate_run(profile_name: str) -> None:
         },
     )
 
+    # Capture the exact optics file process_run() just consumed onto the same
+    # outbox, sharing run_timestamp (#288). The simulated run consumes a complete
+    # optics log, so expected_lines is its own data-row count -> complete=true.
+    optics_payload = build_optics_readings(
+        str(optics_path),
+        run_timestamp=run_timestamp,
+        expected_lines=count_data_lines(optics_path),
+        aborted=False,
+    )
+    if optics_payload is not None:
+        enqueue_event("optics_readings", optics_payload)
+
     current_item.screen = "complete"
     state_change_event.set()
     state_change_event.clear()
@@ -853,6 +866,32 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "calls": _calls_from_file(results_file) if results_file else [],
         },
     )
+    return {"ok": True, "event_id": event_id}
+
+
+class _OpticsReadingsEventRequest(BaseModel):
+    optics_path: str
+    run_timestamp: str
+    expected_lines: int
+    aborted: bool = False
+
+
+@app.post("/events/optics_readings")
+async def events_optics_readings(req: _OpticsReadingsEventRequest):
+    # Capture the exact optics file the run just consumed onto the same outbox
+    # as run_complete, sharing its run_timestamp (#288). An aborted run with no
+    # capture yields no payload -> no event, so the coverage view shows it as
+    # genuinely missing rather than an empty-but-present capture.
+    init_local_db()
+    payload = build_optics_readings(
+        req.optics_path,
+        run_timestamp=req.run_timestamp,
+        expected_lines=req.expected_lines,
+        aborted=req.aborted,
+    )
+    if payload is None:
+        return {"ok": True, "event_id": None, "skipped": True}
+    event_id = enqueue_event("optics_readings", payload)
     return {"ok": True, "event_id": event_id}
 
 @app.get("/results/get_path")
