@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
 from aq_lib.device_id import inject_hw_serial_env
-from aquila_web.local_db import enqueue_event, init_local_db
+from aquila_web.local_db import enqueue_event, init_local_db, _utc_now
 from aquila_web.profile_assembly import assemble_steps, validate_stages
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -606,6 +606,8 @@ async def _simulate_run(profile_name: str) -> None:
     run_in_progress = True
     run_complete_ack = False
     start_time = datetime.now()
+    # Canonical run_timestamp captured once at run start (#287).
+    run_timestamp = _utc_now()
     elapsed_time = 0
     timer_running = True
     current_item.screen = "running"
@@ -676,6 +678,7 @@ async def _simulate_run(profile_name: str) -> None:
             "run_name": run_name,
             "profile": profile_name,
             "result": detected_summary,
+            "run_timestamp": run_timestamp,
             "calls": _calls_from_file(results_file),
         },
     )
@@ -827,6 +830,7 @@ class _RunCompleteEventRequest(BaseModel):
     run_name: str
     profile: str
     results_path: Optional[str] = None
+    run_timestamp: Optional[str] = None
 
 
 @app.post("/events/run_complete")
@@ -834,12 +838,18 @@ async def events_run_complete(req: _RunCompleteEventRequest):
     init_local_db()
     results_file = Path(req.results_path) if req.results_path else None
     result = _summarize_results_from_file(results_file) if results_file else ""
+    # One canonical run_timestamp per Run (#287): the device supplies the value
+    # captured once at run start so run_complete and the forthcoming
+    # optics_readings event derive the same run_id cloud-side. Fall back to
+    # enqueue time only for legacy callers that don't send one.
+    run_timestamp = req.run_timestamp or _utc_now()
     event_id = enqueue_event(
         "run_complete",
         {
             "run_name": req.run_name,
             "profile": req.profile,
             "result": result,
+            "run_timestamp": run_timestamp,
             "calls": _calls_from_file(results_file) if results_file else [],
         },
     )

@@ -11,6 +11,7 @@ import subprocess
 import requests as _requests
 import re
 import os
+from datetime import datetime
 from pathlib import Path
 
 from aq_lib.meerstetter import MeerStetter
@@ -171,7 +172,11 @@ class AssayInterface():
     def run( self ):
         #Run screen
         self._run_index += 1
-        logger.info("RUN START index=%d", self._run_index)
+        # One canonical run_timestamp per Run (#287), captured once at run start.
+        # Shared by run_complete and the forthcoming optics_readings event so the
+        # cloud derives the same run_id = uuid5(device_id : run_timestamp).
+        self.run_timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        logger.info("RUN START index=%d run_timestamp=%s", self._run_index, self.run_timestamp)
         sr.change_screen("2")
         time.sleep(1)
         sr.timer_control( status = "start" )
@@ -288,7 +293,10 @@ class AssayInterface():
                     logger.error("Failed to generate plot: %s", e)
                 profile_name = self.thermal_profile.replace("profiles/", "")
                 sr.log_history(profile_name, self.run_name, results_json, graph_path)
-                sr.emit_run_complete(self.run_name, profile_name, str(results_json))
+                sr.emit_run_complete(
+                    self.run_name, profile_name, str(results_json),
+                    run_timestamp=self.run_timestamp,
+                )
                 sr.advance_run_name()
                 sr.change_screen("3")
 
