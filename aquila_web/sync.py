@@ -12,6 +12,7 @@ from aquila_web.local_db import (
 from aquila_web.sync_batching import (
     MAX_MESSAGE_BYTES,
     batch_events,
+    envelope_overhead_bytes,
     event_size_bytes,
     max_batch_bytes,
     partition_oversized,
@@ -20,16 +21,37 @@ from aquila_web.sync_batching import (
 logger = logging.getLogger(__name__)
 
 
-def _resolve_max_batch_bytes(device_id: str | None, max_events: int) -> int:
+def _resolve_max_batch_bytes(device_id: str | None) -> int:
     """Byte cap for the events in one POST body.
 
-    Reserves only the actual {device_id, events:[...]} wrapper (measured, not a
-    coarse fixed headroom), so an event just under the ceiling still fits. The
-    SQS message ceiling is overridable for tests/tuning via env.
+    Reserves only the actual {device_id, events:[]} wrapper (measured, not a
+    coarse fixed headroom); the inter-event separators are counted by
+    batch_events as it packs. The SQS message ceiling is overridable for
+    tests/tuning via env.
     """
+    ceiling = MAX_MESSAGE_BYTES
     override = os.getenv("AQ_SYNC_MAX_MESSAGE_BYTES")
-    ceiling = int(override) if override else MAX_MESSAGE_BYTES
-    return max_batch_bytes(device_id, ceiling, max_events)
+    if override:
+        try:
+            parsed = int(override)
+        except ValueError:
+            logger.warning(
+                "Ignoring non-numeric AQ_SYNC_MAX_MESSAGE_BYTES=%r; using default %d",
+                override,
+                MAX_MESSAGE_BYTES,
+            )
+            parsed = MAX_MESSAGE_BYTES
+        # A ceiling at/below the envelope would make the cap ≤ 0 and quarantine
+        # every event (irreversible) — reject the misconfig and fall back.
+        if parsed <= envelope_overhead_bytes(device_id):
+            logger.warning(
+                "Ignoring AQ_SYNC_MAX_MESSAGE_BYTES=%d (≤ envelope overhead); using default %d",
+                parsed,
+                MAX_MESSAGE_BYTES,
+            )
+        else:
+            ceiling = parsed
+    return max_batch_bytes(device_id, ceiling)
 
 
 def sync_pending_events(
@@ -60,7 +82,7 @@ def sync_pending_events(
     # kept in the DB (never truncated or dropped) but taken out of the flushable
     # set, so one poison payload cannot silently corrupt the queue, block healthy
     # events behind it, or be re-fetched and re-logged on every flush.
-    batch_cap = _resolve_max_batch_bytes(device_id, resolved_batch_size)
+    batch_cap = _resolve_max_batch_bytes(device_id)
     fittable, oversized = partition_oversized(pending_events, batch_cap)
     if oversized:
         for event in oversized:

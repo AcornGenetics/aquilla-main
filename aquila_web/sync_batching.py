@@ -10,6 +10,7 @@ import json
 from typing import Any
 
 MAX_MESSAGE_BYTES = 262_144  # SQS hard limit: 256 KiB
+ITEM_SEPARATOR_BYTES = 2  # json.dumps puts ", " between array items by default
 
 
 def event_size_bytes(event: dict[str, Any]) -> int:
@@ -17,23 +18,21 @@ def event_size_bytes(event: dict[str, Any]) -> int:
     return len(json.dumps(event).encode("utf-8"))
 
 
-def envelope_overhead_bytes(device_id: str | None, max_events: int = 1) -> int:
-    """Bytes the {device_id, events:[...]} wrapper adds around the events.
+def envelope_overhead_bytes(device_id: str | None) -> int:
+    """Bytes the empty {device_id, events:[]} wrapper adds around the events.
 
-    Measured, not guessed: the empty wrapper plus one separator byte per extra
-    event. Reserving exactly this (rather than a coarse fixed headroom) lets an
-    event just under the ceiling still fit instead of being needlessly quarantined.
+    Measured, not guessed — a coarse fixed headroom would needlessly quarantine
+    an event just under the ceiling. The per-item ", " separators are accounted
+    for inside batch_events as each event is packed, not reserved here.
     """
-    empty_wrapper = len(json.dumps({"device_id": device_id, "events": []}).encode("utf-8"))
-    inter_event_separators = max(0, max_events - 1)  # ", " → 1 comma each; ", " space is inside
-    return empty_wrapper + inter_event_separators
+    return len(json.dumps({"device_id": device_id, "events": []}).encode("utf-8"))
 
 
 def max_batch_bytes(
-    device_id: str | None, message_ceiling: int = MAX_MESSAGE_BYTES, max_events: int = 1
+    device_id: str | None, message_ceiling: int = MAX_MESSAGE_BYTES
 ) -> int:
     """Cap for the events in one POST, leaving room for the real wrapper."""
-    return message_ceiling - envelope_overhead_bytes(device_id, max_events)
+    return message_ceiling - envelope_overhead_bytes(device_id)
 
 
 # Conservative default for the pure helpers when a caller does not know the
@@ -47,7 +46,7 @@ def partition_oversized(
     """Split events into (fittable, oversized), preserving order in each.
 
     An oversized event cannot fit in a message even alone; the caller
-    quarantines it (leave pending, log loudly) rather than drop or truncate.
+    quarantines it (retained in the DB, logged) rather than drop or truncate.
     """
     ok: list[dict[str, Any]] = []
     oversized: list[dict[str, Any]] = []
@@ -64,20 +63,25 @@ def batch_events(
 ) -> list[list[dict[str, Any]]]:
     """Greedily pack events (each assumed to fit alone) into batches ≤ max_bytes.
 
-    Id order is preserved. An event that fits alone but not alongside the
-    current batch starts a new one — so a large optics event lands alone.
+    The 2-byte ", " separator between consecutive events is counted as each
+    event is added, so max_bytes need only reserve the wrapper — the serialised
+    events array is guaranteed to fit. Id order is preserved; an event that fits
+    alone but not alongside the current batch starts a new one, so a large optics
+    event lands alone.
     """
     batches: list[list[dict[str, Any]]] = []
     current: list[dict[str, Any]] = []
     current_size = 0
     for event in events:
+        separator = ITEM_SEPARATOR_BYTES if current else 0
         size = event_size_bytes(event)
-        if current and current_size + size > max_bytes:
+        if current and current_size + separator + size > max_bytes:
             batches.append(current)
             current = []
             current_size = 0
+            separator = 0
         current.append(event)
-        current_size += size
+        current_size += separator + size
     if current:
         batches.append(current)
     return batches

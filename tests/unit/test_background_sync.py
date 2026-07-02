@@ -185,7 +185,7 @@ class TestSizeAwareFlush:
         [pending] = local_db.get_pending_events()
         size = sync_batching.event_size_bytes(pending)
         old_reserve_cap = sync_batching.MAX_MESSAGE_BYTES - 4_096
-        true_cap = sync_batching.max_batch_bytes("dev-abc-123", max_events=100)
+        true_cap = sync_batching.max_batch_bytes("dev-abc-123")
         assert old_reserve_cap < size <= true_cap  # discriminates old vs new reserve
 
         sent_ids = []
@@ -204,6 +204,28 @@ class TestSizeAwareFlush:
         assert response.json()["synced"] == 1        # fits — not needlessly quarantined
         assert sent_ids == [event_id]
         assert local_db.get_quarantined_events() == []
+
+    @pytest.mark.parametrize("bad_override", ["not-a-number", "5", "-100", "0"])
+    def test_misconfigured_message_ceiling_falls_back_instead_of_mass_quarantine(
+        self, db_client, tmp_path, monkeypatch, bad_override
+    ):
+        # A non-numeric or below-envelope AQ_SYNC_MAX_MESSAGE_BYTES must not crash
+        # the flush or quarantine every event (quarantine is irreversible) — it
+        # falls back to the real ceiling and syncs normally.
+        client, local_db = db_client
+        event_id = local_db.enqueue_event("run_complete", {"ok": True})
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        monkeypatch.setenv("AQ_SYNC_MAX_MESSAGE_BYTES", bad_override)
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", lambda *a, **kw: _OK())
+        response = client.post("/sync/flush")
+
+        assert response.json()["synced"] == 1
+        assert local_db.get_quarantined_events() == []  # nothing wrongly quarantined
 
     def test_network_error_on_later_batch_keeps_earlier_batch_synced(self, db_client, tmp_path, monkeypatch):
         import requests as _requests

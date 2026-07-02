@@ -153,8 +153,10 @@ events stay pending" behaviors.
 7. `split_log`: a blob over the limit → N ordered chunks, all sharing one `sha256`,
    each ≤ cap, and decode+concat reconstructs the original bytes exactly.
 
-Plus `envelope_overhead_bytes` is the measured wrapper (< 100 B), one separator per extra
-event; `max_batch_bytes` = ceiling − overhead.
+Plus: a maximally-packed batch of many small events **serialises under the ceiling** — the
+2-byte `", "` item separator is counted by `batch_events` as it packs, so the cap reserves
+only the measured `envelope_overhead_bytes` wrapper (< 100 B); `max_batch_bytes` = ceiling −
+overhead.
 
 ### Quarantine seam — `unit_tests/test_local_db_quarantine.py`
 Additive migration adds the columns to a legacy table without dropping rows and is
@@ -168,6 +170,8 @@ discoverable via `get_quarantined_events`.
 10. A network error on batch 2 leaves batch-2 events pending while batch-1 stays synced.
 11. A quarantined event is **not** reprocessed on the next flush (no re-POST, no re-log).
 12. An event just under the true ceiling still syncs (precise reserve, not the coarse 4 KB).
+13. A misconfigured `AQ_SYNC_MAX_MESSAGE_BYTES` (non-numeric, or ≤ the envelope) falls back
+    to the real ceiling — never crashes the flush or mass-quarantines every event.
 
 Existing green behaviors (cert presented, no api-key, no-endpoint→0, error-swallowed) must
 stay passing.

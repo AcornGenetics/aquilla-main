@@ -40,6 +40,22 @@ class TestBatchEvents:
         for batch in batches:
             assert sum(sync_batching.event_size_bytes(e) for e in batch) <= cap
 
+    def test_packed_batch_serializes_under_the_real_ceiling(self):
+        # The core guarantee: whatever batch_events packs, the ACTUAL POST body
+        # (with the real {device_id, events:[...]} JSON, including the 2-byte
+        # ", " item separators) must stay within the ceiling. The worst case is
+        # one batch holding many small events, each pair adding a 2-byte separator.
+        device_id = "dev-abc-123"
+        ceiling = 2_000
+        events = [_event(i, {"pad": "x" * 20}) for i in range(200)]
+        cap = sync_batching.max_batch_bytes(device_id, ceiling)
+        batches = sync_batching.batch_events(events, max_bytes=cap)
+
+        assert any(len(b) > 1 for b in batches)  # multi-event batches actually exercised
+        for batch in batches:
+            body = json.dumps({"device_id": device_id, "events": batch})
+            assert len(body.encode("utf-8")) <= ceiling  # separators included
+
     def test_large_optics_event_is_sent_alone(self):
         small_a = _event(1, {"n": 1})
         small_b = _event(3, {"n": 3})
@@ -84,19 +100,14 @@ class TestEnvelopeOverhead:
     def test_overhead_is_the_measured_wrapper_not_a_coarse_reserve(self):
         # The reserve must be the actual {device_id, events:[]} wrapper (tens of
         # bytes), never a fat fixed headroom that quarantines near-ceiling events.
-        overhead = sync_batching.envelope_overhead_bytes("dev-abc-123", max_events=1)
+        overhead = sync_batching.envelope_overhead_bytes("dev-abc-123")
         empty = {"device_id": "dev-abc-123", "events": []}
         assert overhead == len(json.dumps(empty).encode("utf-8"))
         assert overhead < 100  # far tighter than the old 4096-byte reserve
 
-    def test_overhead_reserves_one_separator_per_extra_event(self):
-        one = sync_batching.envelope_overhead_bytes("d", max_events=1)
-        many = sync_batching.envelope_overhead_bytes("d", max_events=10)
-        assert many - one == 9  # 9 commas between 10 events
-
     def test_max_batch_bytes_leaves_the_ceiling_minus_overhead(self):
-        cap = sync_batching.max_batch_bytes("d", message_ceiling=1000, max_events=1)
-        assert cap == 1000 - sync_batching.envelope_overhead_bytes("d", 1)
+        cap = sync_batching.max_batch_bytes("d", message_ceiling=1000)
+        assert cap == 1000 - sync_batching.envelope_overhead_bytes("d")
 
 
 class TestSplitLog:
