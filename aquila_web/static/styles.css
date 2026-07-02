@@ -1,7 +1,7 @@
 @import url("icon-colors.css?v=1");
 
-/* Hide cursor in kiosk mode */
-* { cursor: none !important; }
+/* Do not hide the cursor in app CSS — the kiosk suppresses the pointer at the
+   X-server level (X -nocursor, PR #153). Hiding it here breaks dev (#285). */
 
 html,
 body {
