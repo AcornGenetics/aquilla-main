@@ -42,6 +42,14 @@ def init_local_db() -> None:
             )
             """
         )
+        # Additive migration for existing devices: quarantine column for events
+        # too large to Sync (#289). Kept out of the flushable set without dropping
+        # the row, so a poison event is handled once and never re-fetched.
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(events)")}
+        if "quarantined_at" not in columns:
+            connection.execute("ALTER TABLE events ADD COLUMN quarantined_at TEXT")
+        if "quarantine_reason" not in columns:
+            connection.execute("ALTER TABLE events ADD COLUMN quarantine_reason TEXT")
 
 
 def enqueue_event(event_type: str, payload: dict[str, Any], device_id: str | None = None) -> int:
@@ -63,7 +71,7 @@ def get_pending_events(limit: int = 100) -> list[dict[str, Any]]:
             """
             SELECT id, event_type, payload, device_id, created_at
             FROM events
-            WHERE synced_at IS NULL
+            WHERE synced_at IS NULL AND quarantined_at IS NULL
             ORDER BY id ASC
             LIMIT ?
             """,
@@ -92,6 +100,37 @@ def mark_event_synced(event_ids: list[int]) -> None:
     values = [_utc_now(), *event_ids]
     with _connect() as connection:
         connection.execute(query, values)
+
+
+def mark_event_quarantined(event_ids: list[int], reason: str | None = None) -> None:
+    """Flag events as too large to Sync so they drop out of the pending set.
+
+    The row is retained (never dropped or truncated) — quarantine only stops it
+    from being re-fetched, re-serialized, and re-logged on every flush (#289).
+    """
+    if not event_ids:
+        return
+    placeholders = ",".join("?" for _ in event_ids)
+    query = (
+        f"UPDATE events SET quarantined_at = ?, quarantine_reason = ? "
+        f"WHERE id IN ({placeholders}) AND quarantined_at IS NULL"
+    )
+    values = [_utc_now(), reason, *event_ids]
+    with _connect() as connection:
+        connection.execute(query, values)
+
+
+def get_quarantined_events() -> list[dict[str, Any]]:
+    with _connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, event_type, device_id, created_at, quarantined_at, quarantine_reason
+            FROM events
+            WHERE quarantined_at IS NOT NULL
+            ORDER BY id ASC
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def cleanup_synced_events(retain_days: int = 7) -> int:
