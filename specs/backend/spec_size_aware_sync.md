@@ -58,9 +58,6 @@ MAX_MESSAGE_BYTES = 262_144          # SQS hard limit: 256 KiB
 ENVELOPE_OVERHEAD_BYTES = 4_096      # headroom for {device_id, events:[...]} wrapper
 MAX_BATCH_BYTES = MAX_MESSAGE_BYTES - ENVELOPE_OVERHEAD_BYTES
 
-class OversizedEventError(Exception):
-    """A single event exceeds MAX_BATCH_BYTES and cannot be split further."""
-
 def event_size_bytes(event: dict) -> int: ...
     # Serialised UTF-8 byte length of one event as it appears in the POST body.
 

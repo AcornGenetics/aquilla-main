@@ -83,6 +83,90 @@ class TestClientCertificate:
         assert "x-api-key" not in captured.get("headers", {})
 
 
+class TestSizeAwareFlush:
+    """Size-aware Sync (#289): byte-capped batching + oversized-event quarantine."""
+
+    def test_events_over_cap_are_sent_in_separate_posts(self, db_client, tmp_path, monkeypatch):
+        client, local_db = db_client
+        # Two events, each ~600 bytes of payload, with a tiny message cap so they
+        # cannot share one POST.
+        local_db.enqueue_event("run_complete", {"blob": "a" * 600})
+        local_db.enqueue_event("run_complete", {"blob": "b" * 600})
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        monkeypatch.setenv("AQ_SYNC_MAX_MESSAGE_BYTES", "900")
+
+        posts = []
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            posts.append(kw.get("json"))
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        response = client.post("/sync/flush")
+
+        assert response.json()["synced"] == 2
+        assert len(posts) == 2  # one event per POST — never bundled over the cap
+        assert len(local_db.get_pending_events()) == 0
+
+    def test_oversized_event_is_quarantined_and_rest_sync(self, db_client, tmp_path, monkeypatch):
+        client, local_db = db_client
+        healthy_id = local_db.enqueue_event("run_complete", {"blob": "a" * 100})
+        poison_id = local_db.enqueue_event("optics_readings", {"blob": "z" * 5_000})
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        # Cap holds the healthy event but not the poison one (which can't be sent alone).
+        monkeypatch.setenv("AQ_SYNC_MAX_MESSAGE_BYTES", "800")
+
+        sent_ids = []
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            sent_ids.extend(e["id"] for e in kw["json"]["events"])
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        response = client.post("/sync/flush")
+
+        assert response.json()["synced"] == 1          # poison excluded from the count
+        assert sent_ids == [healthy_id]                # only the healthy event went out
+        pending_ids = [e["id"] for e in local_db.get_pending_events()]
+        assert pending_ids == [poison_id]              # poison stays pending, not dropped
+
+    def test_network_error_on_later_batch_keeps_earlier_batch_synced(self, db_client, tmp_path, monkeypatch):
+        import requests as _requests
+        client, local_db = db_client
+        first_id = local_db.enqueue_event("run_complete", {"blob": "a" * 600})
+        second_id = local_db.enqueue_event("run_complete", {"blob": "b" * 600})
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        monkeypatch.setenv("AQ_SYNC_MAX_MESSAGE_BYTES", "900")  # one event per POST
+
+        calls = {"n": 0}
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _flaky(*a, **kw):
+            calls["n"] += 1
+            if calls["n"] == 2:  # second batch fails
+                raise _requests.exceptions.ConnectionError("offline")
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _flaky)
+        response = client.post("/sync/flush")
+
+        assert response.json()["synced"] == 1                  # only the first batch
+        pending_ids = [e["id"] for e in local_db.get_pending_events()]
+        assert pending_ids == [second_id]                      # second stays pending
+        assert first_id not in pending_ids                     # first was durably synced
+
+
 class TestSyncFlushEndpoint:
     """POST /sync/flush behaviour."""
 
