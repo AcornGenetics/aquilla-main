@@ -135,8 +135,75 @@ class TestSizeAwareFlush:
 
         assert response.json()["synced"] == 1          # poison excluded from the count
         assert sent_ids == [healthy_id]                # only the healthy event went out
+        # Poison is quarantined: no longer pending (frees its batch slot), but the
+        # row is NOT dropped — it stays in the DB, visible for follow-up.
         pending_ids = [e["id"] for e in local_db.get_pending_events()]
-        assert pending_ids == [poison_id]              # poison stays pending, not dropped
+        assert poison_id not in pending_ids
+        assert local_db.get_quarantined_events()[0]["id"] == poison_id
+
+    def test_quarantined_event_is_not_reprocessed_on_next_flush(self, db_client, tmp_path, monkeypatch):
+        # A poison event must be logged/handled once, then left alone — never
+        # re-fetched, re-serialized, or re-logged every interval (unbounded spam),
+        # and never occupying a batch slot behind healthy events.
+        client, local_db = db_client
+        local_db.enqueue_event("optics_readings", {"blob": "z" * 5_000})
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        monkeypatch.setenv("AQ_SYNC_MAX_MESSAGE_BYTES", "800")
+
+        posts = []
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            posts.append(kw.get("json"))
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        client.post("/sync/flush")   # first flush quarantines it
+        second = client.post("/sync/flush")   # second flush must ignore it entirely
+
+        assert second.json()["synced"] == 0
+        assert posts == []                     # nothing was ever POSTed across both flushes
+        assert local_db.get_pending_events() == []  # not re-fetched as pending
+
+    def test_event_just_under_the_true_ceiling_still_syncs(self, db_client, tmp_path, monkeypatch):
+        # The batch cap must reserve only the ACTUAL envelope size, not a coarse
+        # 4 KB guess. An event ~150 bytes under the 256 KB ceiling fits once the
+        # real ~40-byte wrapper is accounted for; the old fixed reserve would have
+        # wrongly quarantined it.
+        from aquila_web import sync_batching
+        client, local_db = db_client
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        monkeypatch.setenv("AQ_SYNC_DEVICE_ID", "dev-abc-123")
+        # Size the payload so the event lands ~2 KB under the ceiling: above the
+        # OLD 4 KB-reserve cap (would be quarantined) but genuinely fits once the
+        # real ~40-byte wrapper is reserved.
+        blob_len = sync_batching.MAX_MESSAGE_BYTES - 2_000
+        event_id = local_db.enqueue_event("optics_readings", {"blob": "z" * blob_len})
+        [pending] = local_db.get_pending_events()
+        size = sync_batching.event_size_bytes(pending)
+        old_reserve_cap = sync_batching.MAX_MESSAGE_BYTES - 4_096
+        true_cap = sync_batching.max_batch_bytes("dev-abc-123", max_events=100)
+        assert old_reserve_cap < size <= true_cap  # discriminates old vs new reserve
+
+        sent_ids = []
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            sent_ids.extend(e["id"] for e in kw["json"]["events"])
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        response = client.post("/sync/flush")
+
+        assert response.json()["synced"] == 1        # fits — not needlessly quarantined
+        assert sent_ids == [event_id]
+        assert local_db.get_quarantined_events() == []
 
     def test_network_error_on_later_batch_keeps_earlier_batch_synced(self, db_client, tmp_path, monkeypatch):
         import requests as _requests

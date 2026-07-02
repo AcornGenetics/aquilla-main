@@ -55,26 +55,47 @@ Three complementary defenses, none of which silently drops or truncates data:
 
 ```python
 MAX_MESSAGE_BYTES = 262_144          # SQS hard limit: 256 KiB
-ENVELOPE_OVERHEAD_BYTES = 4_096      # headroom for {device_id, events:[...]} wrapper
-MAX_BATCH_BYTES = MAX_MESSAGE_BYTES - ENVELOPE_OVERHEAD_BYTES
 
 def event_size_bytes(event: dict) -> int: ...
     # Serialised UTF-8 byte length of one event as it appears in the POST body.
 
-def partition_oversized(events, max_bytes=MAX_BATCH_BYTES) -> tuple[list, list]: ...
+def envelope_overhead_bytes(device_id, max_events=1) -> int: ...
+    # MEASURED size the {device_id, events:[...]} wrapper adds (empty wrapper +
+    # one separator byte per extra event). Not a coarse fixed reserve — a
+    # near-ceiling event is no longer needlessly quarantined.
+
+def max_batch_bytes(device_id, message_ceiling=MAX_MESSAGE_BYTES, max_events=1) -> int: ...
+    # message_ceiling - envelope_overhead_bytes(...). The precise per-POST cap.
+
+DEFAULT_MAX_BATCH_BYTES = max_batch_bytes(None)  # default for the pure helpers
+
+def partition_oversized(events, max_bytes=DEFAULT_MAX_BATCH_BYTES) -> tuple[list, list]: ...
     # (ok_events, oversized_events). The guard's partition step.
 
-def batch_events(events, max_bytes=MAX_BATCH_BYTES) -> list[list[dict]]: ...
+def batch_events(events, max_bytes) -> list[list[dict]]: ...
     # Greedily pack events (assumed each fits alone) into batches ≤ max_bytes,
     # preserving id order. An event that fits alone but not with the current
     # batch starts a new batch — so a large optics event lands alone.
 
 def split_log(compressed: bytes, sha256: str,
-              max_chunk_bytes=MAX_BATCH_BYTES) -> list[dict]: ...
+              max_chunk_bytes=DEFAULT_MAX_BATCH_BYTES) -> list[dict]: ...
     # Split gzipped bytes into ordered chunk payloads, all sharing sha256.
     # Each chunk: {sha256, chunk_index, chunk_count, data(base64)}.
     # chunk_index 0..count-1; concatenating decoded chunk bytes == compressed.
     # Fits in one chunk -> single chunk with chunk_count == 1.
+    # NOTE: consumed by #288's optics producer; not wired into Sync here.
+```
+
+**Quarantine persistence (`local_db.py`).** An oversized event is not left
+pending — it is flagged so it drops out of the flushable set without being
+dropped or truncated:
+
+```python
+# events table gains (additive migration for existing devices):
+#   quarantined_at TEXT, quarantine_reason TEXT
+get_pending_events(...)        # now excludes quarantined_at IS NOT NULL
+mark_event_quarantined(ids, reason)  # set quarantined_at once
+get_quarantined_events()       # retained rows, discoverable for follow-up
 ```
 
 ---
@@ -100,13 +121,13 @@ concatenate `data`, verify `sha256` of the result.
 `sync_pending_events()` changes from one-POST to per-batch:
 
 ```
-pending = get_pending_events(batch_size)
-ok, oversized = partition_oversized(pending)
-for ev in oversized:
-    logger.error("Oversized event id=%s (%d bytes) exceeds %d — quarantined, "
-                 "left pending, not truncated", ev["id"], size, MAX_BATCH_BYTES)
-    # NOT marked synced -> stays pending, visible for follow-up
-for batch in batch_events(ok):
+pending = get_pending_events(batch_size)   # already excludes quarantined
+cap = max_batch_bytes(device_id, ceiling, batch_size)   # precise, measured reserve
+ok, oversized = partition_oversized(pending, cap)
+if oversized:
+    log each ERROR once, then mark_event_quarantined([ids], reason)
+    # excluded from future flushes: no re-fetch/re-log spam, no slot occupied
+for batch in batch_events(ok, cap):
     POST {device_id, events: batch}   # same envelope, same mTLS cert as today
     on success: mark_event_synced([e["id"] for e in batch])
     on RequestException: log, stop — remaining batches stay pending, return count so far
@@ -132,11 +153,21 @@ events stay pending" behaviors.
 7. `split_log`: a blob over the limit → N ordered chunks, all sharing one `sha256`,
    each ≤ cap, and decode+concat reconstructs the original bytes exactly.
 
+Plus `envelope_overhead_bytes` is the measured wrapper (< 100 B), one separator per extra
+event; `max_batch_bytes` = ceiling − overhead.
+
+### Quarantine seam — `unit_tests/test_local_db_quarantine.py`
+Additive migration adds the columns to a legacy table without dropping rows and is
+idempotent; a quarantined event leaves the pending set but its row is retained and
+discoverable via `get_quarantined_events`.
+
 ### Flush integration — `tests/unit/test_background_sync.py` (extend)
 8. Two events whose combined size exceeds the cap produce **two** POSTs, not one.
-9. An oversized single event is quarantined: it stays pending, healthy events in the same
-   flush still sync, and the flush count excludes the poison.
+9. An oversized single event is quarantined: excluded from pending and the flush count,
+   healthy events in the same flush still sync, its row retained (not dropped).
 10. A network error on batch 2 leaves batch-2 events pending while batch-1 stays synced.
+11. A quarantined event is **not** reprocessed on the next flush (no re-POST, no re-log).
+12. An event just under the true ceiling still syncs (precise reserve, not the coarse 4 KB).
 
 Existing green behaviors (cert presented, no api-key, no-endpoint→0, error-swallowed) must
 stay passing.
@@ -147,12 +178,15 @@ stay passing.
 
 | File | Change |
 |---|---|
-| `aquila_web/sync_batching.py` | **New** — pure batching, guard partition, `split_log` |
-| `aquila_web/sync.py` | Per-batch POST loop; quarantine oversized; per-batch mark-synced |
-| `unit_tests/test_sync_batching.py` | **New** — pure-logic tests (behaviors 1–7) |
-| `tests/unit/test_background_sync.py` | Extend — flush batching/guard tests (8–10) |
+| `aquila_web/sync_batching.py` | **New** — pure batching, guard partition, measured envelope reserve, `split_log` |
+| `aquila_web/sync.py` | Per-batch POST loop; quarantine oversized; precise device-aware cap; per-batch mark-synced |
+| `aquila_web/local_db.py` | Additive `quarantined_at`/`quarantine_reason` columns; `mark_event_quarantined`/`get_quarantined_events`; `get_pending_events` excludes quarantined |
+| `unit_tests/test_sync_batching.py` | **New** — pure-logic tests |
+| `unit_tests/test_local_db_quarantine.py` | **New** — migration + quarantine seam tests |
+| `tests/unit/test_background_sync.py` | Extend — flush batching/guard/quarantine tests |
 
-No changes to `local_db.py` schema, the POST envelope contract, or env-var names.
+The POST envelope contract and env-var names are unchanged; the `local_db` schema change is
+additive (migrates existing devices in place).
 
 ---
 
@@ -167,8 +201,10 @@ No changes to `local_db.py` schema, the POST envelope contract, or env-var names
 
 ## 9. Open questions
 
-- [ ] Final value of `ENVELOPE_OVERHEAD_BYTES` — 4 KB is a conservative guess for the
-      `{device_id, events:[]}` wrapper; confirm against a real max-size batch. — Owner: Jack
+- [x] ~~Envelope reserve~~ — **resolved**: the reserve is now the *measured*
+      `{device_id, events:[...]}` wrapper (`envelope_overhead_bytes`), not a fixed 4 KB
+      guess, so a near-ceiling event is no longer needlessly quarantined.
 - [ ] Does #288's producer split **before** enqueue (chunks as separate outbox events) or
       does Sync split at flush? This spec assumes producer-side split using `split_log`;
-      confirm when #288 is implemented. — Owner: Jack
+      `split_log` is built and unit-tested but intentionally **not wired into Sync** — #288
+      (built concurrently) owns wiring it. Confirm the direction when #288 lands. — Owner: Jack

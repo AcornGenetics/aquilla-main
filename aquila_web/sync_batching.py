@@ -10,8 +10,6 @@ import json
 from typing import Any
 
 MAX_MESSAGE_BYTES = 262_144  # SQS hard limit: 256 KiB
-ENVELOPE_OVERHEAD_BYTES = 4_096  # headroom for the {device_id, events:[...]} wrapper
-MAX_BATCH_BYTES = MAX_MESSAGE_BYTES - ENVELOPE_OVERHEAD_BYTES
 
 
 def event_size_bytes(event: dict[str, Any]) -> int:
@@ -19,8 +17,32 @@ def event_size_bytes(event: dict[str, Any]) -> int:
     return len(json.dumps(event).encode("utf-8"))
 
 
+def envelope_overhead_bytes(device_id: str | None, max_events: int = 1) -> int:
+    """Bytes the {device_id, events:[...]} wrapper adds around the events.
+
+    Measured, not guessed: the empty wrapper plus one separator byte per extra
+    event. Reserving exactly this (rather than a coarse fixed headroom) lets an
+    event just under the ceiling still fit instead of being needlessly quarantined.
+    """
+    empty_wrapper = len(json.dumps({"device_id": device_id, "events": []}).encode("utf-8"))
+    inter_event_separators = max(0, max_events - 1)  # ", " → 1 comma each; ", " space is inside
+    return empty_wrapper + inter_event_separators
+
+
+def max_batch_bytes(
+    device_id: str | None, message_ceiling: int = MAX_MESSAGE_BYTES, max_events: int = 1
+) -> int:
+    """Cap for the events in one POST, leaving room for the real wrapper."""
+    return message_ceiling - envelope_overhead_bytes(device_id, max_events)
+
+
+# Conservative default for the pure helpers when a caller does not know the
+# device_id (sync passes the precise, device-specific cap at runtime).
+DEFAULT_MAX_BATCH_BYTES = max_batch_bytes(None)
+
+
 def partition_oversized(
-    events: list[dict[str, Any]], max_bytes: int = MAX_BATCH_BYTES
+    events: list[dict[str, Any]], max_bytes: int = DEFAULT_MAX_BATCH_BYTES
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Split events into (fittable, oversized), preserving order in each.
 
@@ -62,7 +84,7 @@ def batch_events(
 
 
 def split_log(
-    compressed: bytes, sha256: str, max_chunk_bytes: int = MAX_BATCH_BYTES
+    compressed: bytes, sha256: str, max_chunk_bytes: int = DEFAULT_MAX_BATCH_BYTES
 ) -> list[dict[str, Any]]:
     """Split a gzipped log into ordered chunk payloads sharing one sha256.
 

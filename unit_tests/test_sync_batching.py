@@ -7,6 +7,7 @@ against a single oversized event, and split an over-limit gzipped log into
 ordered chunks sharing one sha256.
 """
 import base64
+import json
 
 from aquila_web import sync_batching
 
@@ -77,6 +78,25 @@ class TestSizeGuard:
 
         assert [e["id"] for e in ok] == [1, 3]        # healthy events, order kept
         assert [e["id"] for e in oversized] == [2]    # poison quarantined out
+
+
+class TestEnvelopeOverhead:
+    def test_overhead_is_the_measured_wrapper_not_a_coarse_reserve(self):
+        # The reserve must be the actual {device_id, events:[]} wrapper (tens of
+        # bytes), never a fat fixed headroom that quarantines near-ceiling events.
+        overhead = sync_batching.envelope_overhead_bytes("dev-abc-123", max_events=1)
+        empty = {"device_id": "dev-abc-123", "events": []}
+        assert overhead == len(json.dumps(empty).encode("utf-8"))
+        assert overhead < 100  # far tighter than the old 4096-byte reserve
+
+    def test_overhead_reserves_one_separator_per_extra_event(self):
+        one = sync_batching.envelope_overhead_bytes("d", max_events=1)
+        many = sync_batching.envelope_overhead_bytes("d", max_events=10)
+        assert many - one == 9  # 9 commas between 10 events
+
+    def test_max_batch_bytes_leaves_the_ceiling_minus_overhead(self):
+        cap = sync_batching.max_batch_bytes("d", message_ceiling=1000, max_events=1)
+        assert cap == 1000 - sync_batching.envelope_overhead_bytes("d", 1)
 
 
 class TestSplitLog:

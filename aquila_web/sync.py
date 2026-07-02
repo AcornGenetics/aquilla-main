@@ -4,21 +4,32 @@ from typing import Any
 
 import requests
 
-from aquila_web.local_db import get_pending_events, mark_event_synced
+from aquila_web.local_db import (
+    get_pending_events,
+    mark_event_quarantined,
+    mark_event_synced,
+)
 from aquila_web.sync_batching import (
-    MAX_BATCH_BYTES,
+    MAX_MESSAGE_BYTES,
     batch_events,
     event_size_bytes,
+    max_batch_bytes,
     partition_oversized,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_max_batch_bytes() -> int:
-    """Byte cap for the events in one POST body, overridable for tests/tuning."""
+def _resolve_max_batch_bytes(device_id: str | None, max_events: int) -> int:
+    """Byte cap for the events in one POST body.
+
+    Reserves only the actual {device_id, events:[...]} wrapper (measured, not a
+    coarse fixed headroom), so an event just under the ceiling still fits. The
+    SQS message ceiling is overridable for tests/tuning via env.
+    """
     override = os.getenv("AQ_SYNC_MAX_MESSAGE_BYTES")
-    return int(override) if override else MAX_BATCH_BYTES
+    ceiling = int(override) if override else MAX_MESSAGE_BYTES
+    return max_batch_bytes(device_id, ceiling, max_events)
 
 
 def sync_pending_events(
@@ -46,23 +57,29 @@ def sync_pending_events(
         cert = (client_cert, client_key)
 
     # Size guard (#289): an event too large to fit even alone is quarantined —
-    # left pending, never truncated — so one poison payload cannot silently
-    # corrupt the queue or block healthy events behind it.
-    max_batch_bytes = _resolve_max_batch_bytes()
-    fittable, oversized = partition_oversized(pending_events, max_batch_bytes)
-    for event in oversized:
-        logger.error(
-            "Oversized event id=%s (%d bytes) exceeds cap %d — quarantined "
-            "(left pending, not truncated)",
-            event["id"],
-            event_size_bytes(event),
-            max_batch_bytes,
+    # kept in the DB (never truncated or dropped) but taken out of the flushable
+    # set, so one poison payload cannot silently corrupt the queue, block healthy
+    # events behind it, or be re-fetched and re-logged on every flush.
+    batch_cap = _resolve_max_batch_bytes(device_id, resolved_batch_size)
+    fittable, oversized = partition_oversized(pending_events, batch_cap)
+    if oversized:
+        for event in oversized:
+            logger.error(
+                "Oversized event id=%s (%d bytes) exceeds cap %d — quarantined "
+                "(retained in DB, not truncated)",
+                event["id"],
+                event_size_bytes(event),
+                batch_cap,
+            )
+        mark_event_quarantined(
+            [event["id"] for event in oversized],
+            reason=f"exceeds Sync message cap of {batch_cap} bytes",
         )
 
     # Byte-capped batching (#289): a large optics payload lands alone in its own
     # POST rather than pushing a shared batch past the SQS 256 KB message limit.
     synced_count = 0
-    for batch in batch_events(fittable, max_batch_bytes):
+    for batch in batch_events(fittable, batch_cap):
         payload: dict[str, Any] = {"device_id": device_id, "events": batch}
         try:
             response = requests.post(
