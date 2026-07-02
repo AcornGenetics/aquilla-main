@@ -318,6 +318,10 @@ prompt_if_unset AQ_SYNC_ENDPOINT  "Enter AQ_SYNC_ENDPOINT (AWS ingest URL, leave
 
 WATCHTOWER_TOKEN="${WATCHTOWER_TOKEN:-$(openssl rand -hex 32)}"
 
+# acorn-ca renew front for automatic Device Certificate renewal (#279). Defaults
+# to prod; override by exporting AQ_RENEW_ENDPOINT before running (e.g. dev CA).
+AQ_RENEW_ENDPOINT="${AQ_RENEW_ENDPOINT:-https://renew.cloud.acorngenetics.com/renew}"
+
 # Device ID is the Pi hardware serial (CONTEXT.md / ADR-014), NOT the hostname:
 # the Device Certificate's CN must equal what the platform treats as the Device
 # ID. Mirrors aq_lib/device_id.read_rpi_serial (the host has no app deps until
@@ -341,6 +345,7 @@ GHCR_TOKEN=${GHCR_TOKEN}
 GHCR_TOKEN_2=${GHCR_TOKEN_2:-}
 AQ_SRC_BASEDIR=/opt/aquila
 AQ_SYNC_ENDPOINT=${AQ_SYNC_ENDPOINT}
+AQ_RENEW_ENDPOINT=${AQ_RENEW_ENDPOINT}
 EOF
 chown root:root /opt/aquila/config/device.env
 chmod 600 /opt/aquila/config/device.env
@@ -595,11 +600,22 @@ chmod +x /opt/fleet/update.sh
 # is later submitted to acorn-ca /enroll (#240). Runs in the app image, which
 # carries the crypto deps; the host does not. The container reads the same
 # /proc/cpuinfo serial, so its CN matches DEVICE_ID written above.
-docker run --rm \
-    -v /opt/aquila/config:/config \
-    -v /proc/cpuinfo:/proc/cpuinfo:ro \
-    "ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG}" \
-    python -m aq_lib.device_csr /config
+#
+# IDEMPOTENT: only generate on first provisioning. Re-running deployment2.sh must
+# NOT regenerate the keypair — doing so overwrites device.key while the already
+# enrolled device.crt stays put, orphaning the cert (cert/key mismatch → mTLS,
+# Sync and renewal all break, requiring re-enrollment). If a key already exists,
+# keep it (and its matching cert). To intentionally re-key, delete device.key +
+# device.crt first, then re-run and re-enroll.
+if [[ -s /opt/aquila/config/device.key ]]; then
+    echo "  ℹ device.key already present — keeping existing keypair/CSR (not regenerating)."
+else
+    docker run --rm \
+        -v /opt/aquila/config:/config \
+        -v /proc/cpuinfo:/proc/cpuinfo:ro \
+        "ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG}" \
+        python -m aq_lib.device_csr /config
+fi
 
 run_test "docker-compose.yml downloaded"   "test -f /opt/fleet/docker-compose.yml"
 run_test "compose file non-empty"          "test -s /opt/fleet/docker-compose.yml"
@@ -608,6 +624,10 @@ run_test "ui image pulled"                 "docker images | grep -q 'aquilla-mai
 run_test "update.sh exists and executable" "test -x /opt/fleet/update.sh"
 run_test "device CSR generated"            "test -s /opt/aquila/config/device.csr"
 run_test "device key owner-only (0600)"    "test \"\$(stat -c '%a' /opt/aquila/config/device.key)\" = 600"
+# If a cert is already installed (device previously enrolled), it MUST still match
+# the key — catches the orphaned-cert failure a non-idempotent keygen would cause.
+run_test "device cert/key match (if enrolled)" \
+    "! test -s /opt/aquila/config/device.crt || diff -q <(openssl x509 -in /opt/aquila/config/device.crt -noout -pubkey) <(openssl pkey -in /opt/aquila/config/device.key -pubout)"
 
 phase_pass "docker-compose.yml downloaded, all images pulled"
 
@@ -729,6 +749,58 @@ run_test "service file exists" "test -f /etc/systemd/system/aquila-stack.service
 run_test "service enabled"     "systemctl is-enabled aquila-stack.service | grep -q enabled"
 
 phase_pass "aquila-stack.service registered and enabled"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 10b — Device Certificate Auto-Renewal Timer (#279)
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "10b" "Device Certificate Auto-Renewal Timer"
+
+# The renewer runs in the app image (which carries the crypto + requests deps the
+# host lacks), mounting /opt/aquila/config so it reads the current cert/key +
+# device.env and installs the rotated pair in place. It presents the current cert
+# to acorn-ca /renew over mTLS — no operator, no AWS creds. renewal_due() no-ops
+# until the cert is past ~2/3 of its life, so a daily run is cheap.
+cat > /etc/systemd/system/aquila-cert-renew.service <<EOF
+[Unit]
+Description=Renew Sentri Device Certificate (acorn-ca /renew)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker run --rm \\
+    -v /opt/aquila/config:/config \\
+    ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG} \\
+    python -m aq_lib.renew /config
+EOF
+
+# Daily, but with a large randomized delay so a batch of devices enrolled the same
+# day does NOT stampede /renew at the same instant (and their renewed certs then
+# expire together). Persistent=true catches up a missed run after downtime.
+cat > /etc/systemd/system/aquila-cert-renew.timer <<'EOF'
+[Unit]
+Description=Daily Device Certificate renewal check
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now aquila-cert-renew.timer
+
+run_test "renew service file exists" "test -f /etc/systemd/system/aquila-cert-renew.service"
+run_test "renew timer file exists"   "test -f /etc/systemd/system/aquila-cert-renew.timer"
+run_test "renew timer enabled"       "systemctl is-enabled aquila-cert-renew.timer | grep -q enabled"
+run_test "renew timer active"        "systemctl is-active aquila-cert-renew.timer | grep -q active"
+run_test "AQ_RENEW_ENDPOINT set"     "grep -q 'AQ_RENEW_ENDPOINT=' /opt/aquila/config/device.env"
+
+phase_pass "aquila-cert-renew.timer registered and enabled"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 11 — Fleet Device Configuration (Start Stack)

@@ -19,7 +19,10 @@ services:
       - /opt/aquila/logs:/opt/aquila/logs
       - /opt/aquila/profiles:/opt/aquila/profiles
       - /opt/aquila/config:/opt/aquila/config
-      - /opt/fleet/.env:/opt/fleet/.env
+      # Mount the whole fleet dir (not just .env) so the OTA reboot sentinel
+      # /opt/fleet/last_update.json is host-backed and survives the Watchtower
+      # container swap. See specs/backend/spec_ota_sentinel_persistent_volume.md.
+      - /opt/fleet:/opt/fleet
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
       - "/dev/i2c-1:/dev/i2c-1"
