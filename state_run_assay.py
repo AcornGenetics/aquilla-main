@@ -32,6 +32,9 @@ from aq_lib.motor_class import Axis, Drawer
 from aq_curve.main import results_to_json
 from aq_lib.fan_class import Fan
 from aq_lib.adc_class import OpticalRead
+from aq_lib.thermal_parser import count_optics_passes
+from aq_lib.optics_read_plan import READS_PER_CYCLE, optics_read_tasks
+from aquila_web.optics_readings import expected_lines
 
 logging.config.dictConfig( LOGGING_CONFIG )
 logger = logging.getLogger( "aquila" )
@@ -125,22 +128,13 @@ class AssayInterface():
 
     def read_wells( self, args ):
         cycle = args[1]  # name, n, last_temp...
+        # One optical read pass per read_wells call; the capture pattern (and
+        # thus READS_PER_CYCLE) lives in aq_lib.optics_read_plan so completeness
+        # math can't drift from the blinks actually fired (#288).
+        self._optics_pass_count += 1
 
-        for task in [ 
-            { "goto_position":0 }, { "capture":"rox", "cycle":cycle, "position":0 },
-            { "goto_position":1 }, { "capture":"rox", "cycle":cycle, "position":1 },
-            { "goto_position":2 }, { "capture":"rox", "cycle":cycle, "position":2 },
-                                   { "capture":"fam", "cycle":cycle, "position":2 },
-            { "goto_position":3 }, { "capture":"rox", "cycle":cycle, "position":3 },
-                                   { "capture":"fam", "cycle":cycle, "position":3 },
-            { "goto_position":4 }, { "capture":"fam", "cycle":cycle, "position":4 },
-            { "goto_position":5 }, { "capture":"fam", "cycle":cycle, "position":5 },
-                      ]:
-            self.queue_task ( task )
-
-        # prepare for next
-        self.queue_task( {"home":0})
-        self.queue_task( {"goto_position":0})
+        for task in optics_read_tasks(cycle):
+            self.queue_task( task )
 
     def callback( self, args ):
         logger.info( "Callback" )
@@ -176,6 +170,11 @@ class AssayInterface():
         # Shared by run_complete and the forthcoming optics_readings event so the
         # cloud derives the same run_id = uuid5(device_id : run_timestamp).
         self.run_timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        # Optical read passes for the optics_readings completeness check (#288).
+        # _planned_optics_passes is the profile's intended total (set once steps
+        # are loaded, below); _optics_pass_count is the runtime fallback.
+        self._optics_pass_count = 0
+        self._planned_optics_passes = 0
         logger.info("RUN START index=%d run_timestamp=%s", self._run_index, self.run_timestamp)
         sr.change_screen("2")
         time.sleep(1)
@@ -215,6 +214,9 @@ class AssayInterface():
         logger.info("Optics log absolute: %s", Path(optics_log).resolve())
 
         steps = load_json( self.thermal_profile )["steps"]
+        # Planned optical passes for the whole run, from the profile — so optics
+        # expected_lines reflects the intended total even on an early abort (#288).
+        self._planned_optics_passes = count_optics_passes(steps)
         execution_thread = Thread( target = self.executor )
 
         execution_thread.daemon = True
@@ -276,6 +278,14 @@ class AssayInterface():
                 stop_thread.join(timeout=2)
             sr.update_drawer_state(is_open=True, is_closed=False)
             if self.run_aborted:
+                # Emit whatever optics were captured, labeled aborted; an
+                # aborted run with no capture emits no event (#288).
+                sr.emit_optics_readings(
+                    str(optics_log),
+                    run_timestamp=self.run_timestamp,
+                    expected_lines=self._optics_expected_lines(),
+                    aborted=True,
+                )
                 sr.change_screen("1")
             else:
                 try:
@@ -297,9 +307,24 @@ class AssayInterface():
                     self.run_name, profile_name, str(results_json),
                     run_timestamp=self.run_timestamp,
                 )
+                # Capture the exact optics file just consumed onto the same
+                # outbox, sharing run_timestamp (#288).
+                sr.emit_optics_readings(
+                    str(optics_log),
+                    run_timestamp=self.run_timestamp,
+                    expected_lines=self._optics_expected_lines(),
+                    aborted=False,
+                )
                 sr.advance_run_name()
                 sr.change_screen("3")
 
+
+    def _optics_expected_lines(self) -> int:
+        # Prefer the profile's planned pass count so an aborted run's
+        # expected_lines is the intended total (complete=false, honest coverage);
+        # fall back to the runtime count if the profile couldn't be parsed (#288).
+        passes = self._planned_optics_passes or self._optics_pass_count
+        return expected_lines(passes, READS_PER_CYCLE)
 
     def hw_deinitialize(self):
         self.meer.setTargetObjectTemperature ( 25.0 )
