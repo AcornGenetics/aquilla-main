@@ -52,6 +52,14 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 RESULTS_DIR = BASE_DIR / "logs" / "results"
 PLOTS_DIR = BASE_DIR / "logs" / "plots"
+# The only directory /events/optics_readings may read from. The device writes
+# optics logs to logs/optics/*.log (LogFileName.get_optics_log_filename); confining
+# to this dir stops the endpoint being an unauthenticated arbitrary-file read that
+# base64s any readable file into the cloud-synced outbox (#288 review).
+OPTICS_LOG_DIR = (BASE_DIR / "logs" / "optics").resolve()
+# Cap the raw file read into memory (a normal run is ~1 MB); bounds a
+# huge-file / device.env-style read and the per-request memory spike.
+MAX_OPTICS_BYTES = 16 * 1024 * 1024
 HISTORY_PATH = BASE_DIR / "logs" / "history.json"
 # Durable run state so the running profile survives a backend restart (#272
 # follow-up). run_name is re-derived from history on startup; selected_profile
@@ -876,15 +884,29 @@ class _OpticsReadingsEventRequest(BaseModel):
     aborted: bool = False
 
 
+# Plain def (not async): read + sha256 + gzip + base64 of a ~1 MB file is
+# blocking CPU work; Starlette runs sync handlers in a threadpool so it doesn't
+# freeze the single-threaded Pi backend's SSE/polling at run completion.
 @app.post("/events/optics_readings")
-async def events_optics_readings(req: _OpticsReadingsEventRequest):
+def events_optics_readings(req: _OpticsReadingsEventRequest):
     # Capture the exact optics file the run just consumed onto the same outbox
     # as run_complete, sharing its run_timestamp (#288). An aborted run with no
     # capture yields no payload -> no event, so the coverage view shows it as
     # genuinely missing rather than an empty-but-present capture.
     init_local_db()
+    # Confine the caller-supplied path to the optics log dir before reading it.
+    # Relative paths (the device sends logs/optics/*.log) resolve against BASE_DIR,
+    # not the request. Anything resolving outside logs/optics, or not a .log, is
+    # rejected so this endpoint can't be used to read arbitrary files (#288 review).
+    raw_path = Path(req.optics_path)
+    candidate = (raw_path if raw_path.is_absolute() else BASE_DIR / raw_path).resolve()
+    if candidate.suffix != ".log" or not candidate.is_relative_to(OPTICS_LOG_DIR):
+        raise HTTPException(status_code=400, detail="optics_path outside optics log dir")
+    if candidate.exists() and candidate.stat().st_size > MAX_OPTICS_BYTES:
+        raise HTTPException(status_code=413, detail="optics log too large")
+
     payload = build_optics_readings(
-        req.optics_path,
+        str(candidate),
         run_timestamp=req.run_timestamp,
         expected_lines=req.expected_lines,
         aborted=req.aborted,

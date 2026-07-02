@@ -72,5 +72,6 @@ def build_optics_readings(
         "aborted": aborted,
         "chunk_index": 0,
         "chunk_count": 1,
-        "data_b64": base64.b64encode(gzip.compress(raw)).decode("ascii"),
+        # level 6: ADR-0007 only stores the blob, so max compression is wasted CPU.
+        "data_b64": base64.b64encode(gzip.compress(raw, compresslevel=6)).decode("ascii"),
     }

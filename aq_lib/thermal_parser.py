@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger("aquila")
+
 
 def thermal_parser(steps, last_temp = 25, last_time = 0, n = "-1", ramp_rate = 10.0):
     setpoint = 25# Initialization of setpoint
@@ -70,5 +74,7 @@ def count_optics_passes(steps) -> int:
             if action and action[0] == "optics":
                 count += 1
     except Exception:
-        pass
+        # Malformed/edge profile: undercounts expected_lines but must not break
+        # the run. Log so the miscount is diagnosable rather than silent.
+        logger.debug("count_optics_passes: stopped early on malformed profile", exc_info=True)
     return count

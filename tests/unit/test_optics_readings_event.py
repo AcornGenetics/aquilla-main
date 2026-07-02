@@ -5,8 +5,11 @@ Behaviors tested:
   1. POST /events/optics_readings enqueues one optics_readings event whose
      payload is the frozen contract, carrying the supplied run_timestamp
   2. An aborted-with-no-capture request enqueues no event
-  3. state_requests.emit_optics_readings() posts to the correct endpoint
+  3. A path outside the optics log dir is rejected and enqueues no event
+     (the endpoint is not an arbitrary-file read -> cloud exfil, #288 review)
+  4. state_requests.emit_optics_readings() posts to the correct endpoint
 """
+import shutil
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -28,16 +31,21 @@ def db_client(tmp_path, monkeypatch):
     db_path = tmp_path / "test_events.db"
     monkeypatch.setenv("AQ_LOCAL_DB_PATH", str(db_path))
     from aquila_web import local_db, main as web_main
+    # Confine reads to a temp optics dir and drop the shared fixture inside it.
+    optics_dir = tmp_path / "logs" / "optics"
+    optics_dir.mkdir(parents=True)
+    monkeypatch.setattr(web_main, "OPTICS_LOG_DIR", optics_dir.resolve())
+    shutil.copy(SAMPLE_LOG, optics_dir / "sample.log")
     local_db.init_local_db()
     with TestClient(web_main.app) as c:
-        yield c, local_db
+        yield c, local_db, optics_dir
 
 
 class TestOpticsReadingsEndpoint:
     def test_enqueues_optics_readings_with_run_timestamp(self, db_client):
-        client, local_db = db_client
+        client, local_db, optics_dir = db_client
         response = client.post("/events/optics_readings", json={
-            "optics_path": str(SAMPLE_LOG),
+            "optics_path": str(optics_dir / "sample.log"),
             "run_timestamp": "2026-07-02T14:03:11Z",
             "expected_lines": 960,
             "aborted": False,
@@ -52,16 +60,30 @@ class TestOpticsReadingsEndpoint:
         assert payload["line_count"] == 960
         assert payload["complete"] is True
 
-    def test_aborted_with_no_capture_enqueues_no_event(self, db_client, tmp_path):
-        client, local_db = db_client
+    def test_aborted_with_no_capture_enqueues_no_event(self, db_client):
+        client, local_db, optics_dir = db_client
         response = client.post("/events/optics_readings", json={
-            "optics_path": str(tmp_path / "never_written.log"),
+            "optics_path": str(optics_dir / "never_written.log"),
             "run_timestamp": "2026-07-02T14:03:11Z",
             "expected_lines": 960,
             "aborted": True,
         })
         assert response.status_code == 200
         assert response.json()["event_id"] is None
+        assert local_db.get_pending_events() == []
+
+    def test_rejects_path_outside_optics_dir(self, db_client, tmp_path):
+        # The exfil case: a secret file outside logs/optics must not be read.
+        client, local_db, _ = db_client
+        secret = tmp_path / "device.env"
+        secret.write_text("AQ_SYNC_CLIENT_KEY=super-secret")
+        response = client.post("/events/optics_readings", json={
+            "optics_path": str(secret),
+            "run_timestamp": "2026-07-02T14:03:11Z",
+            "expected_lines": 960,
+            "aborted": False,
+        })
+        assert response.status_code == 400
         assert local_db.get_pending_events() == []
 
 
