@@ -29,6 +29,11 @@ _SQS_MESSAGE_CEILING_BYTES = 256 * 1024
 # extra digits chunk_index/chunk_count grow by as the chunk count climbs.
 _CHUNK_SIZING_MARGIN_BYTES = 16
 
+# A configured cap must leave at least this much room beyond the envelope for a
+# real event; a cap barely above the envelope would mark every event oversized
+# and quarantine the whole queue, so such a value is rejected as misconfiguration.
+_MIN_EVENT_BUDGET_BYTES = 512
+
 
 def _resolve_device_id() -> str | None:
     return os.getenv("AQ_SYNC_DEVICE_ID") or os.getenv("DEVICE_ID")
@@ -49,9 +54,9 @@ def _resolve_max_message_bytes(device_id: str | None) -> int:
     """The per-message byte cap, defaulting to the SQS ceiling.
 
     A misconfigured ``AQ_SYNC_MAX_MESSAGE_BYTES`` (non-numeric, or too small to
-    hold even the envelope) falls back to the real ceiling with a warning --
-    never crashes the flush, and never drives the cap to a value that leaves no
-    room for any event and would quarantine the whole queue.
+    leave real room beyond the envelope) falls back to the real ceiling with a
+    warning -- never crashes the flush, and never honours a cap so tight that
+    every event is marked oversized and the whole queue is quarantined.
     """
     raw = os.getenv("AQ_SYNC_MAX_MESSAGE_BYTES")
     if raw is None:
@@ -64,10 +69,11 @@ def _resolve_max_message_bytes(device_id: str | None) -> int:
             raw, _SQS_MESSAGE_CEILING_BYTES,
         )
         return _SQS_MESSAGE_CEILING_BYTES
-    if value <= envelope_overhead_bytes(device_id):
+    minimum = envelope_overhead_bytes(device_id) + _MIN_EVENT_BUDGET_BYTES
+    if value < minimum:
         logger.warning(
-            "AQ_SYNC_MAX_MESSAGE_BYTES=%d leaves no room for events; using %d",
-            value, _SQS_MESSAGE_CEILING_BYTES,
+            "AQ_SYNC_MAX_MESSAGE_BYTES=%d leaves too little room (min %d); using %d",
+            value, minimum, _SQS_MESSAGE_CEILING_BYTES,
         )
         return _SQS_MESSAGE_CEILING_BYTES
     return value

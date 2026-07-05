@@ -32,6 +32,26 @@ def test_quarantined_event_is_excluded_from_pending_but_retained(local_db):
     assert quarantined[0]["quarantine_reason"] == "exceeds SQS ceiling alone"
 
 
+def test_requeue_returns_a_quarantined_event_to_the_pending_queue(local_db):
+    # A recovery seam so an event quarantined by transient misconfiguration is
+    # not stuck forever short of manual SQL.
+    event = local_db.enqueue_event("optics_readings", {"line_count": 1})
+    local_db.mark_event_quarantined(event, reason="cap misconfigured")
+    assert local_db.get_pending_events() == []
+
+    changed = local_db.requeue_quarantined_event(event)
+
+    assert changed == 1
+    assert [e["id"] for e in local_db.get_pending_events()] == [event]  # back in the queue
+    assert local_db.get_quarantined_events() == []                      # no longer quarantined
+
+
+def test_requeue_is_a_noop_for_an_event_that_is_not_quarantined(local_db):
+    event = local_db.enqueue_event("run_complete", {"ok": True})
+    assert local_db.requeue_quarantined_event(event) == 0     # nothing to clear
+    assert [e["id"] for e in local_db.get_pending_events()] == [event]
+
+
 def test_migration_upgrades_a_pre_quarantine_db_without_data_loss(tmp_path, monkeypatch):
     import sqlite3
 

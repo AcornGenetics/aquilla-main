@@ -115,6 +115,23 @@ def mark_event_quarantined(event_id: int, reason: str) -> None:
         )
 
 
+def requeue_quarantined_event(event_id: int) -> int:
+    """Clear an Event's quarantine so it re-enters the pending queue.
+
+    The recovery seam for the size guard: an event quarantined by a transient
+    misconfiguration (e.g. a too-tight cap) can be returned to the flush path
+    instead of being stuck forever short of manual SQL. Returns the number of
+    rows changed (0 if the event was not quarantined).
+    """
+    with _connect() as connection:
+        cursor = connection.execute(
+            "UPDATE events SET quarantined_at = NULL, quarantine_reason = NULL "
+            "WHERE id = ? AND quarantined_at IS NOT NULL",
+            (event_id,),
+        )
+        return int(cursor.rowcount or 0)
+
+
 def get_quarantined_events() -> list[dict[str, Any]]:
     """Quarantined Events, oldest first -- discoverable for diagnosis."""
     with _connect() as connection:

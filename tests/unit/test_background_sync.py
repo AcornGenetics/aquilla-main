@@ -136,6 +136,7 @@ class TestMaxMessageBytesValidation:
         ("abc", CEILING),         # non-numeric -> fall back, don't crash int()
         ("0", CEILING),           # zero leaves no room -> fall back
         ("-100", CEILING),        # negative would invert the guard -> fall back
+        ("4096", 4096),           # a sane small cap is honoured
     ])
     def test_falls_back_to_ceiling_on_a_bad_value(self, monkeypatch, raw, expected):
         from aquila_web import sync
@@ -144,6 +145,16 @@ class TestMaxMessageBytesValidation:
         else:
             monkeypatch.setenv("AQ_SYNC_MAX_MESSAGE_BYTES", raw)
         assert sync._resolve_max_message_bytes("sentri-01") == expected
+
+    def test_cap_just_above_the_envelope_falls_back_instead_of_quarantining_all(self, monkeypatch):
+        # A cap only a few bytes above the envelope leaves near-zero room, so
+        # every event would be marked oversized and the whole queue quarantined.
+        # It must fall back to the ceiling, not be honoured.
+        from aquila_web import sync
+        from aquila_web.sync_batching import envelope_overhead_bytes
+        tiny = envelope_overhead_bytes("sentri-01") + 1
+        monkeypatch.setenv("AQ_SYNC_MAX_MESSAGE_BYTES", str(tiny))
+        assert sync._resolve_max_message_bytes("sentri-01") == self.CEILING
 
 
 class TestSizeAwareBatching:
