@@ -42,6 +42,23 @@ def init_local_db() -> None:
             )
             """
         )
+        _add_missing_columns(connection)
+
+
+# Additive quarantine columns for the size guard (#289). Applied as ALTER TABLE
+# so an existing device DB upgrades in place without data loss; idempotent
+# because each column is only added when absent.
+_QUARANTINE_COLUMNS = {
+    "quarantined_at": "TEXT",
+    "quarantine_reason": "TEXT",
+}
+
+
+def _add_missing_columns(connection: sqlite3.Connection) -> None:
+    existing = {row["name"] for row in connection.execute("PRAGMA table_info(events)")}
+    for column, column_type in _QUARANTINE_COLUMNS.items():
+        if column not in existing:
+            connection.execute(f"ALTER TABLE events ADD COLUMN {column} {column_type}")
 
 
 def enqueue_event(event_type: str, payload: dict[str, Any], device_id: str | None = None) -> int:
@@ -63,7 +80,7 @@ def get_pending_events(limit: int = 100) -> list[dict[str, Any]]:
             """
             SELECT id, event_type, payload, device_id, created_at
             FROM events
-            WHERE synced_at IS NULL
+            WHERE synced_at IS NULL AND quarantined_at IS NULL
             ORDER BY id ASC
             LIMIT ?
             """,
@@ -82,6 +99,63 @@ def get_pending_events(limit: int = 100) -> list[dict[str, Any]]:
             }
         )
     return results
+
+
+def mark_event_quarantined(event_id: int, reason: str) -> None:
+    """Quarantine one Event that can't Sync even alone (the #289 size guard).
+
+    The row is retained -- never dropped or truncated -- but excluded from
+    :func:`get_pending_events` so it can't hold a batch slot or be re-fetched
+    every interval. ``reason`` records why for diagnosis.
+    """
+    with _connect() as connection:
+        connection.execute(
+            "UPDATE events SET quarantined_at = ?, quarantine_reason = ? WHERE id = ?",
+            (_utc_now(), reason, event_id),
+        )
+
+
+def requeue_quarantined_event(event_id: int) -> int:
+    """Clear an Event's quarantine so it re-enters the pending queue.
+
+    The recovery seam for the size guard: an event quarantined by a transient
+    misconfiguration (e.g. a too-tight cap) can be returned to the flush path
+    instead of being stuck forever short of manual SQL. Returns the number of
+    rows changed (0 if the event was not quarantined).
+    """
+    with _connect() as connection:
+        cursor = connection.execute(
+            "UPDATE events SET quarantined_at = NULL, quarantine_reason = NULL "
+            "WHERE id = ? AND quarantined_at IS NOT NULL",
+            (event_id,),
+        )
+        return int(cursor.rowcount or 0)
+
+
+def get_quarantined_events() -> list[dict[str, Any]]:
+    """Quarantined Events, oldest first -- discoverable for diagnosis."""
+    with _connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, event_type, payload, device_id, created_at,
+                   quarantined_at, quarantine_reason
+            FROM events
+            WHERE quarantined_at IS NOT NULL
+            ORDER BY id ASC
+            """
+        ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "event_type": row["event_type"],
+            "payload": json.loads(row["payload"]),
+            "device_id": row["device_id"],
+            "created_at": row["created_at"],
+            "quarantined_at": row["quarantined_at"],
+            "quarantine_reason": row["quarantine_reason"],
+        }
+        for row in rows
+    ]
 
 
 def mark_event_synced(event_ids: list[int]) -> None:
