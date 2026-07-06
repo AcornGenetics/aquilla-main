@@ -82,6 +82,66 @@ class TestClientCertificate:
 
         assert "x-api-key" not in captured.get("headers", {})
 
+    def test_falls_back_to_enrolled_cert_when_env_vars_missing(self, db_client, tmp_path, monkeypatch):
+        # If device.env lacks AQ_SYNC_CLIENT_CERT/KEY (enrollment predating #241, or
+        # a device.env rewrite that dropped them), Sync must still present the cert
+        # from its standard enrolled location — not POST unauthenticated and get
+        # TLS-reset by the mTLS ingest edge.
+        client, local_db = db_client
+        _seed_event(local_db, tmp_path)
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        (config_dir / "device.crt").write_text("cert-pem")
+        (config_dir / "device.key").write_text("key-pem")
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        monkeypatch.delenv("AQ_SYNC_CLIENT_CERT", raising=False)
+        monkeypatch.delenv("AQ_SYNC_CLIENT_KEY", raising=False)
+        monkeypatch.setenv("CONFIG_DIR", str(config_dir))
+
+        captured = {}
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            captured.update(kw)
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        client.post("/sync/flush")
+
+        assert captured["cert"] == (
+            str(config_dir / "device.crt"),
+            str(config_dir / "device.key"),
+        )
+
+    def test_no_cert_when_env_unset_and_no_enrolled_cert_on_disk(self, db_client, tmp_path, monkeypatch):
+        # With neither the env vars nor an on-disk cert, Sync presents no cert
+        # (cert=None) rather than crashing — the POST still fails at the mTLS edge,
+        # but the flush degrades gracefully.
+        client, local_db = db_client
+        _seed_event(local_db, tmp_path)
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+        monkeypatch.delenv("AQ_SYNC_CLIENT_CERT", raising=False)
+        monkeypatch.delenv("AQ_SYNC_CLIENT_KEY", raising=False)
+        monkeypatch.setenv("CONFIG_DIR", str(tmp_path / "empty-config"))
+
+        captured = {}
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            captured.update(kw)
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        client.post("/sync/flush")
+
+        assert captured["cert"] is None
+
 
 class TestSyncFlushEndpoint:
     """POST /sync/flush behaviour."""

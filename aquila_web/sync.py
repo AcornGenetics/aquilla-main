@@ -47,6 +47,15 @@ def _resolve_cert() -> tuple[str, str] | None:
     client_key = os.getenv("AQ_SYNC_CLIENT_KEY")
     if client_cert and client_key:
         return (client_cert, client_key)
+    # Fallback: if device.env is missing the cert vars (e.g. an enrollment that
+    # predates #241, or a device.env rewrite that dropped them), present the cert
+    # from its standard enrolled location. Without this, Sync silently POSTs
+    # unauthenticated and the mTLS ingest edge resets the connection every flush.
+    config_dir = os.getenv("CONFIG_DIR", "/opt/aquila/config")
+    fallback_cert = os.path.join(config_dir, "device.crt")
+    fallback_key = os.path.join(config_dir, "device.key")
+    if os.path.exists(fallback_cert) and os.path.exists(fallback_key):
+        return (fallback_cert, fallback_key)
     return None
 
 
