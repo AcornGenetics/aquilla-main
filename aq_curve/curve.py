@@ -11,6 +11,80 @@ from config import get_src_basedir
 
 logger = logging.getLogger("aquila")
 
+# Opaque algo_version stamped onto the call_evidence event (#297). Its real
+# derivation (the algo git-subtree sha vs a semantic tag) is deliberately
+# deferred to #298; for #297 we only need the field to be present and stable.
+ALGO_VERSION = "0.0.0-dev"
+
+_ROX_UNAVAILABLE = "ROX Unavailable"
+
+# ADR-017: the engine's internal verdicts ("detected"/"undetected"/
+# "inconclusive") must be mapped to the canonical Call vocabulary before they
+# leave the device. In particular "undetected" is NEVER emitted -> "Not Detected".
+_CANONICAL_CALL = {
+    "detected": "Detected",
+    "undetected": "Not Detected",
+    "inconclusive": "Inconclusive",
+}
+
+# Values that are already canonical pass through unchanged (idempotent).
+_CANONICAL_VALUES = frozenset(
+    {"Detected", "Not Detected", "Inconclusive", "ROX Unavailable"}
+)
+
+
+def canonical_call(status):
+    """Map an engine curve status to the canonical Call vocabulary (ADR-017).
+
+    ``evaluate_curve`` returns the raw engine status; the frozen call_evidence
+    contract (acorn-analytics#61) only accepts "Detected"/"Not Detected"/
+    "Inconclusive". Already-canonical values (incl. the ROX-Unavailable sentinel)
+    pass through unchanged, so this is safe to apply idempotently. Any *other*
+    engine status maps to "Inconclusive" — preserving the original resolve_status
+    catch-all (anything not detected/undetected is Inconclusive).
+    """
+    if status in _CANONICAL_CALL:
+        return _CANONICAL_CALL[status]
+    if status in _CANONICAL_VALUES:
+        return status
+    return "Inconclusive"
+
+
+def summarize_call_evidence(fam_status, rox_status, rox_raw_status, rox_unavailable):
+    """Build the summary call_evidence records for one Run (#297).
+
+    One record per EVALUATED Call (Well x Channel), each carrying both the
+    per-curve engine verdict (``raw_status``) and the final post-suppression
+    ``call``. All values are canonical (never "undetected").
+
+    - fam has no suppression step, so raw_status == call for every fam record.
+    - rox raw_status is the verdict *before* ROX suppression; ``call`` is the
+      final rox status. They diverge exactly where suppression fired (raw
+      "Detected" -> call "Not Detected").
+    - A ROX-Unavailable channel ran no curve, so it produces NO record and no
+      record is ever emitted whose call is "ROX Unavailable".
+    """
+    evidence = []
+    for well in sorted(fam_status):
+        call = fam_status[well]
+        evidence.append(
+            {"well": well, "channel": "fam", "raw_status": call, "call": call}
+        )
+    if not rox_unavailable:
+        for well in sorted(rox_status):
+            call = rox_status[well]
+            if call == _ROX_UNAVAILABLE:
+                continue
+            evidence.append(
+                {
+                    "well": well,
+                    "channel": "rox",
+                    "raw_status": rox_raw_status[well],
+                    "call": call,
+                }
+            )
+    return evidence
+
 
 class Curve:
     """
@@ -219,12 +293,9 @@ class Curve:
 
         def resolve_status(_, dye_name, well):
             evaluation = evaluate_curve(self, src, dye_name, well)
-            status = evaluation["status"]
-            if status == "detected":
-                return "Detected"
-            if status == "undetected":
-                return "Not Detected"
-            return "Inconclusive"
+            # ADR-017: canonicalize once here so the engine's "undetected" never
+            # escapes to either the results file or the call_evidence summary.
+            return canonical_call(evaluation["status"])
 
         def resolve_cq(dye_name, well):
             xdata, y_corrected, _ = get_curve_data(self, src, dye_name, well)
@@ -235,7 +306,6 @@ class Curve:
                 return None
             return round(float(cq), 2)
 
-        _ROX_UNAVAILABLE = "ROX Unavailable"
         _WELLS = [1, 2, 3, 4]
 
         fam_status = {w: resolve_status(0, "fam", w) for w in _WELLS}
@@ -244,9 +314,15 @@ class Curve:
         if rox_unavailable:
             rox_status = {w: _ROX_UNAVAILABLE for w in _WELLS}
             rox_cq = {w: None for w in _WELLS}
+            rox_raw_status = dict(rox_status)
         else:
             rox_status = {w: resolve_status(1, "rox", w) for w in _WELLS}
             rox_cq = {w: resolve_cq("rox", w) for w in _WELLS}
+
+            # Per-curve engine verdict captured BEFORE ROX suppression, so the
+            # call_evidence summary can report the raw_status the evaluator saw
+            # even where suppression later flips the final call (#297).
+            rox_raw_status = dict(rox_status)
 
             # FAM undetected + late ROX Cq → suppress ROX.
             # A late-rising ROX with no FAM signal is non-specific; treat as undetected.
@@ -265,6 +341,13 @@ class Curve:
                 "1": {str(w): fam_cq[w] for w in _WELLS},
                 "2": {str(w): rox_cq[w] for w in _WELLS},
             },
+            # Summary call_evidence records (#297): one per evaluated Call,
+            # carrying raw_status (pre-suppression) and the final call. The
+            # device-side emit reads this back off the results file, mirroring
+            # how run_complete derives its "calls".
+            "evidence": summarize_call_evidence(
+                fam_status, rox_status, rox_raw_status, rox_unavailable
+            ),
         }
 
         base_dir = Path(self.src_basedir).resolve()
