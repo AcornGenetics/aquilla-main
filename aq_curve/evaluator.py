@@ -60,15 +60,22 @@ def check_baseline_length(curve_data, curve):
 
 
 def check_baseline_stability(curve_data, curve):
+    # Composite Check: passes only if BOTH baseline std and slope are in range. Both
+    # values are emitted as their own Metric rows; the check's own verdict is the AND.
     xdata, y_corrected, _ = curve_data
     start, end = curve.baseline_slice
     baseline_values = y_corrected[start:end]
     max_std = config.get_float("PCR_BASELINE_STD_MAX")
-    if float(np.std(baseline_values)) > max_std:
-        return False
-    slope = np.polyfit(xdata[start:end], baseline_values, 1)[0]
     max_slope = config.get_float("PCR_BASELINE_SLOPE_MAX")
-    return abs(float(slope)) <= max_slope
+    std = float(np.std(baseline_values))
+    slope = abs(float(np.polyfit(xdata[start:end], baseline_values, 1)[0]))
+    std_ok = std <= max_std
+    slope_ok = slope <= max_slope
+    rows = [
+        {"name": "baseline_std", "value": std, "threshold": max_std, "passed": std_ok},
+        {"name": "baseline_slope", "value": slope, "threshold": max_slope, "passed": slope_ok},
+    ]
+    return std_ok and slope_ok, rows
 
 
 def check_cycle_location(curve_data, curve):
@@ -93,7 +100,7 @@ def check_log_phase_linearity(curve_data, curve):
     floor = trough_index(y_corrected)
     start = sustained_rise_index(y_corrected, threshold, min_consecutive, floor=floor)
     if start is None:
-        return False
+        return False, []
     end = _find_log_phase_end(y_corrected, start)
     x_segment = xdata[start:end + 1]
     y_segment = y_corrected[start:end + 1]
@@ -101,7 +108,7 @@ def check_log_phase_linearity(curve_data, curve):
     x_segment = x_segment[mask]
     log_segment = np.log(y_segment[mask])
     if len(log_segment) < 2:
-        return True
+        return True, []
     r2 = compute_r2(x_segment, log_segment)
     late_threshold = config.get_float("PCR_LATE_CQ_THRESHOLD")
     if cq is not None and cq >= late_threshold:
@@ -110,7 +117,8 @@ def check_log_phase_linearity(curve_data, curve):
         min_r2 = config.get_float("PCR_LOG_PHASE_R2_MID")
     else:
         min_r2 = config.get_float("PCR_LOG_PHASE_R2_MIN")
-    return r2 >= min_r2
+    passed = r2 >= min_r2
+    return passed, [{"name": "log_phase_r2", "value": float(r2), "threshold": float(min_r2), "passed": bool(passed)}]
 
 
 def check_monotonic_rise(curve_data, curve):
@@ -136,7 +144,9 @@ def check_no_late_drift(curve_data, curve):
         1,
     )[0]
     neg_drift_min = config.get_float("PCR_LATE_NEGATIVE_DRIFT_MIN")
-    return float(slope) >= -neg_drift_min
+    terminal_slope = float(slope)
+    passed = terminal_slope >= -neg_drift_min
+    return passed, [{"name": "terminal_slope", "value": terminal_slope, "threshold": -neg_drift_min, "passed": bool(passed)}]
 
 
 def check_negative_drop(curve_data, curve):
@@ -154,13 +164,13 @@ def check_no_mountain_shape(curve_data, curve):
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
     rise_index = sustained_rise_index(y_corrected, threshold, min_consecutive)
     if rise_index is None:
-        return True
+        return True, []
     rise_segment = y_corrected[rise_index:]
     peak_offset = int(np.argmax(rise_segment))
     peak_signal = float(rise_segment[peak_offset])
     end_signal = float(np.mean(y_corrected[-3:]))
     if peak_signal <= 0:
-        return True
+        return True, []
     drop_ratio = (peak_signal - end_signal) / peak_signal
     peak_cycle = rise_index + peak_offset
     total_cycles = len(y_corrected)
@@ -170,7 +180,8 @@ def check_no_mountain_shape(curve_data, curve):
         threshold_ratio = config.get_float("PCR_MOUNTAIN_DROP_RATIO_LATE")
     else:
         threshold_ratio = config.get_float("PCR_MOUNTAIN_DROP_RATIO")
-    return not (drop_ratio > threshold_ratio and peak_cycle < total_cycles - 8)
+    passed = not (drop_ratio > threshold_ratio and peak_cycle < total_cycles - 8)
+    return passed, [{"name": "drop_ratio", "value": float(drop_ratio), "threshold": float(threshold_ratio), "passed": bool(passed)}]
 
 
 def check_end_above_midpoint(curve_data, curve):
@@ -221,18 +232,24 @@ def check_signal_range(curve_data, curve):
     baseline_values = y_raw[start:end]
     baseline_mean = float(np.mean(baseline_values))
     if baseline_mean <= 0:
-        return False
+        return False, []
     peak = float(np.max(y_raw))
     min_peak_fraction = config.get_float("PCR_SIGNAL_RANGE_PEAK_FRACTION")
     min_fold = config.get_float("PCR_MIN_FOLD")
     if peak <= 0:
-        return False
+        return False, []
     amplitude_fraction = (peak - baseline_mean) / peak
     fold_change = peak / baseline_mean
     relative_ok = amplitude_fraction >= min_peak_fraction or fold_change >= min_fold
     min_abs_signal = config.get_float("PCR_MIN_ABS_SIGNAL")
-    abs_ok = float(np.max(y_corrected)) >= min_abs_signal
-    return relative_ok and abs_ok
+    abs_signal = float(np.max(y_corrected))
+    abs_ok = abs_signal >= min_abs_signal
+    rows = [
+        {"name": "amplitude_fraction", "value": float(amplitude_fraction), "threshold": float(min_peak_fraction), "passed": bool(amplitude_fraction >= min_peak_fraction)},
+        {"name": "fold_change", "value": float(fold_change), "threshold": float(min_fold), "passed": bool(fold_change >= min_fold)},
+        {"name": "abs_signal", "value": abs_signal, "threshold": float(min_abs_signal), "passed": bool(abs_ok)},
+    ]
+    return relative_ok and abs_ok, rows
 
 
 def check_single_transition(curve_data, curve):
@@ -241,14 +258,14 @@ def check_single_transition(curve_data, curve):
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
     start = sustained_rise_index(y_corrected, threshold, min_consecutive)
     if start is None:
-        return False
+        return False, []
     deriv = np.diff(y_corrected)
     rise_deriv = deriv[start:]
     if len(rise_deriv) < 2:
-        return True
+        return True, []
     max_deriv = float(np.max(rise_deriv))
     if max_deriv <= 0:
-        return True
+        return True, []
     peak_fraction = config.get_float("PCR_PEAK_FRACTION")
     peak_threshold = max_deriv * peak_fraction
     dip_tolerance = config.get_float("PCR_TRANSITION_DIP_TOLERANCE")
@@ -264,7 +281,8 @@ def check_single_transition(curve_data, curve):
             in_peak = False
         # values in [dip_threshold, peak_threshold): maintain current state
     max_transitions = config.get_int("PCR_MAX_TRANSITIONS")
-    return transitions <= max_transitions
+    passed = transitions <= max_transitions
+    return passed, [{"name": "transition_count", "value": float(transitions), "threshold": float(max_transitions), "passed": bool(passed)}]
 
 
 def check_no_rapid_terminal_rise(curve_data, curve):
@@ -314,10 +332,14 @@ def check_smooth_features(curve_data, curve):
 
 def check_stable_slope(curve_data, curve):
     slope_cv = _compute_stable_slope_cv(curve_data, curve)
-    if slope_cv is None:
-        return True
     max_cv = config.get_float("PCR_LOG_PHASE_SLOPE_CV_MAX")
-    return slope_cv <= max_cv
+    passed = True if slope_cv is None else slope_cv <= max_cv
+    rows = (
+        []
+        if slope_cv is None
+        else [{"name": "slope_cv", "value": float(slope_cv), "threshold": max_cv, "passed": bool(passed)}]
+    )
+    return passed, rows
 
 
 def check_biphasic_stable_slope(curve_data, curve):
@@ -512,26 +534,57 @@ def check_late_cq_tier(curve_data, curve, cq):
     cq_idx = max(0, int(round(cq)) - 1)
     window_before = y_corrected[max(0, cq_idx - 2):cq_idx + 1]
     if len(window_before) == 0:
-        return False
+        return False, []
     base_signal = float(np.max(window_before))
     if base_signal <= 0:
-        return False
+        return False, []
     # Per-cycle fold from Cq to Cq+2: genuine amplification doubles each cycle
     # (~4× over 2 cycles), while background noise shows ~1.1×/cycle (~2.2× over 2)
     after_idx = min(cq_idx + 2, len(y_corrected) - 1)
     if after_idx <= cq_idx:
-        return False
+        return False, []
     fold_2 = float(y_corrected[after_idx]) / base_signal
     cycles_elapsed = after_idx - cq_idx
     per_cycle_fold = fold_2 ** (1.0 / cycles_elapsed)
-    return per_cycle_fold >= config.get_float("PCR_LATE_PER_CYCLE_FOLD_MIN")
+    min_fold = config.get_float("PCR_LATE_PER_CYCLE_FOLD_MIN")
+    passed = per_cycle_fold >= min_fold
+    return passed, [{"name": "per_cycle_fold", "value": float(per_cycle_fold), "threshold": float(min_fold), "passed": bool(passed)}]
 
 
 def _run_check(check, curve_data, curve):
+    """Run a check, normalizing its return to ``(passed, value_rows)``.
+
+    A check returns either a bare bool (legacy) or ``(passed, [metric rows])`` — the
+    Metric value row(s) it computed. The value is computed *before* the pass/fail
+    inside the check, so a curve that fails still logs its numbers. On exception the
+    check fails closed with no rows.
+    """
     try:
-        return bool(check(curve_data, curve))
+        out = check(curve_data, curve)
     except Exception:
-        return False
+        return False, []
+    if isinstance(out, tuple):
+        passed, rows = out
+        return bool(passed), list(rows)
+    return bool(out), []
+
+
+def _collect_checks(checks, curve_data, curve, prefix=""):
+    """Run a list of checks -> (``{name: passed}`` dict, all Metric rows).
+
+    The dict is exactly what ``evaluate_curve``'s cascade consumes (so the decision
+    logic is unchanged); the rows carry each check's value(s) plus a passed-only row
+    for the check verdict itself.
+    """
+    passes = {}
+    rows = []
+    for check in checks:
+        name = prefix + check.__name__
+        passed, value_rows = _run_check(check, curve_data, curve)
+        passes[name] = passed
+        rows.extend(value_rows)
+        rows.append({"name": name, "value": None, "threshold": None, "passed": passed})
+    return passes, rows
 
 
 def check_signal_basics(curve_data, curve):
@@ -554,7 +607,7 @@ def check_signal_basics(curve_data, curve):
         check_sustained_increase,
         check_threshold_oscillation,
     ]
-    return {check.__name__: _run_check(check, curve_data, curve) for check in checks}
+    return _collect_checks(checks, curve_data, curve)
 
 
 def check_biphasic_basics(curve_data, curve):
@@ -568,26 +621,23 @@ def check_biphasic_basics(curve_data, curve):
         check_negative_drop,
         check_biphasic_stable_slope,
     ]
-    return {
-        f"biphasic_{check.__name__}": _run_check(check, curve_data, curve)
-        for check in checks
-    }
+    return _collect_checks(checks, curve_data, curve, prefix="biphasic_")
 
 
 def evaluate_curve(curve, log_name, dye, well):
     curve_data = get_curve_data(curve, log_name, dye, well)
     xdata, y_corrected, _ = curve_data
-    results = {
-        "check_threshold_crossing": _run_check(
-            check_threshold_crossing,
-            curve_data,
-            curve,
-        )
-    }
-    typical_results = check_signal_basics(curve_data, curve)
+    tc_passed, metric_rows = _run_check(check_threshold_crossing, curve_data, curve)
+    metric_rows.append(
+        {"name": "check_threshold_crossing", "value": None, "threshold": None, "passed": tc_passed}
+    )
+    results = {"check_threshold_crossing": tc_passed}
+    typical_results, typical_rows = check_signal_basics(curve_data, curve)
     results.update(typical_results)
-    biphasic_results = check_biphasic_basics(curve_data, curve)
+    metric_rows.extend(typical_rows)
+    biphasic_results, biphasic_rows = check_biphasic_basics(curve_data, curve)
     results.update(biphasic_results)
+    metric_rows.extend(biphasic_rows)
 
     threshold_pass = results["check_threshold_crossing"]
     mountain_shape_detected = not (
@@ -613,17 +663,19 @@ def evaluate_curve(curve, log_name, dye, well):
     late_threshold = config.get_float("PCR_LATE_CQ_THRESHOLD")
 
     signal_range_pass = typical_results.get("check_signal_range", True)
-    if threshold_pass and _spike_only_crossings(y_corrected, threshold_val):
+    spike_only_crossings = threshold_pass and _spike_only_crossings(y_corrected, threshold_val)
+    if spike_only_crossings:
         threshold_pass = False
 
     # Evaluate late-Cq confidence up-front so it can override strict shape checks
     # that are inherently harder to pass for a signal that barely emerged near run-end.
     if cq is not None and cq >= late_threshold:
-        late_ok = _run_check(
+        late_ok, late_rows = _run_check(
             lambda cd, c: check_late_cq_tier(cd, c, cq),
             curve_data,
             curve,
         )
+        metric_rows.extend(late_rows)
         late_confident = (
             late_ok
             and threshold_pass
@@ -637,25 +689,67 @@ def evaluate_curve(curve, log_name, dye, well):
 
     if late_confident:
         status = "detected"
+        decision_reason = "late_cq_confident"
     elif not threshold_pass or not signal_range_pass:
         status = "undetected"
+        decision_reason = "threshold_fail" if not threshold_pass else "signal_range_fail"
     elif mountain_shape_detected or rapid_rise_detected:
         status = "undetected"
+        decision_reason = "mountain_shape" if mountain_shape_detected else "rapid_rise"
     elif cq is None and not typical_results.get("check_sustained_increase", True):
         # No Cq and no sustained increase: threshold was crossed by noise or a spike
         status = "undetected"
+        decision_reason = "no_cq_no_increase"
     elif cq is not None and cq >= late_threshold:
         if late_ok and (typical_pass or biphasic_pass):
             status = "detected"
+            decision_reason = "typical_or_biphasic_pass"
         else:
             status = "inconclusive"
+            decision_reason = "late_cq_not_confident"
     elif typical_pass or biphasic_pass:
         status = "detected"
+        decision_reason = "typical_or_biphasic_pass"
     else:
         status = "inconclusive"
+        decision_reason = "test_run" if curve.test_run else "both_paths_failed"
+
+    # Shared pure measures, emitted once (checks emit their own specific values).
+    metric_rows.extend([
+        {"name": "cq", "value": None if cq is None else float(cq), "threshold": None, "passed": None},
+        {"name": "threshold", "value": float(threshold_val), "threshold": None, "passed": None},
+        {"name": "n_cycles", "value": float(len(y_corrected)), "threshold": None, "passed": None},
+        {"name": "signal_range", "value": float(np.max(y_corrected)) - float(np.min(y_corrected)), "threshold": None, "passed": None},
+    ])
+    # Dedup by name (first wins): a check reused across typical/biphasic emits its
+    # value once; a shared measure is not overwritten by a later duplicate.
+    seen, metrics = set(), []
+    for row in metric_rows:
+        if row["name"] in seen:
+            continue
+        seen.add(row["name"])
+        metrics.append(row)
 
     return {
         "status": status,
         "threshold_pass": threshold_pass,
         "results": results,
+        "metrics": metrics,
+        # Derived decision layer (#299): the flags evaluate_curve already computed and
+        # the cascade branch that produced the status. Records *why* the Call came out
+        # as it did; the cascade logic itself is unchanged.
+        "decision_reason": decision_reason,
+        "flags": {
+            "threshold_pass": bool(threshold_pass),
+            "spike_only_crossings": bool(spike_only_crossings),
+            "test_run": bool(curve.test_run),
+            "typical_pass": bool(typical_pass),
+            "biphasic_pass": bool(biphasic_pass),
+            "baseline_fail": bool(baseline_fail),
+            "mountain_shape_detected": bool(mountain_shape_detected),
+            "rapid_rise_detected": bool(rapid_rise_detected),
+            "late_ok": bool(late_ok),
+            "late_confident": bool(late_confident),
+            "signal_range_pass": bool(signal_range_pass),
+        },
     }
