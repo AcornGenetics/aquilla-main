@@ -302,10 +302,18 @@ class AssayInterface():
                 except Exception as e:
                     logger.error("Failed to generate plot: %s", e)
                 profile_name = self.thermal_profile.replace("profiles/", "")
-                sr.log_history(profile_name, self.run_name, results_json, graph_path)
+                # Snapshot the operator's tube names once at completion so history
+                # and the run_complete event carry the SAME labels captured with
+                # this run, not two independent re-reads of the mutable global (#296).
+                tube_names = sr.get_tube_names()
+                sr.log_history(
+                    profile_name, self.run_name, results_json, graph_path,
+                    tube_names=tube_names,
+                )
                 sr.emit_run_complete(
                     self.run_name, profile_name, str(results_json),
                     run_timestamp=self.run_timestamp,
+                    tube_names=tube_names,
                 )
                 # Capture the exact optics file just consumed onto the same
                 # outbox, sharing run_timestamp (#288).
