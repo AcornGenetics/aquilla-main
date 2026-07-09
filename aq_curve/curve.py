@@ -50,7 +50,9 @@ def canonical_call(status):
     return "Inconclusive"
 
 
-def summarize_call_evidence(fam_status, rox_status, rox_raw_status, rox_unavailable):
+def summarize_call_evidence(
+    fam_status, rox_status, rox_raw_status, rox_unavailable, metrics_by_curve=None
+):
     """Build the summary call_evidence records for one Run (#297).
 
     One record per EVALUATED Call (Well x Channel), each carrying both the
@@ -63,26 +65,27 @@ def summarize_call_evidence(fam_status, rox_status, rox_raw_status, rox_unavaila
       "Detected" -> call "Not Detected").
     - A ROX-Unavailable channel ran no curve, so it produces NO record and no
       record is ever emitted whose call is "ROX Unavailable".
+
+    When ``metrics_by_curve`` (a ``{(channel, well): [metric rows]}`` map) is
+    given, each record gains a ``metrics`` list — the Checks and Metric values for
+    that Call (#298). Omitting it leaves records metric-free (the #297 shape).
     """
+    def _record(well, channel, raw_status, call):
+        rec = {"well": well, "channel": channel, "raw_status": raw_status, "call": call}
+        if metrics_by_curve is not None:
+            rec["metrics"] = metrics_by_curve.get((channel, well), [])
+        return rec
+
     evidence = []
     for well in sorted(fam_status):
         call = fam_status[well]
-        evidence.append(
-            {"well": well, "channel": "fam", "raw_status": call, "call": call}
-        )
+        evidence.append(_record(well, "fam", call, call))
     if not rox_unavailable:
         for well in sorted(rox_status):
             call = rox_status[well]
             if call == _ROX_UNAVAILABLE:
                 continue
-            evidence.append(
-                {
-                    "well": well,
-                    "channel": "rox",
-                    "raw_status": rox_raw_status[well],
-                    "call": call,
-                }
-            )
+            evidence.append(_record(well, "rox", rox_raw_status[well], call))
     return evidence
 
 
@@ -291,8 +294,14 @@ class Curve:
         #         return "Not Detected"
         #     return "Inconclusive"
 
+        # Per-curve Metric/Check rows for the call_evidence records (#298). The rows
+        # come straight from evaluate_curve — each Check emits the value it computed —
+        # so the emitted numbers are exactly what the engine saw (no recomputation).
+        evidence_metrics = {}
+
         def resolve_status(_, dye_name, well):
             evaluation = evaluate_curve(self, src, dye_name, well)
+            evidence_metrics[(dye_name, well)] = evaluation.get("metrics", [])
             # ADR-017: canonicalize once here so the engine's "undetected" never
             # escapes to either the results file or the call_evidence summary.
             return canonical_call(evaluation["status"])
@@ -346,7 +355,8 @@ class Curve:
             # device-side emit reads this back off the results file, mirroring
             # how run_complete derives its "calls".
             "evidence": summarize_call_evidence(
-                fam_status, rox_status, rox_raw_status, rox_unavailable
+                fam_status, rox_status, rox_raw_status, rox_unavailable,
+                metrics_by_curve=evidence_metrics,
             ),
         }
 
