@@ -109,13 +109,13 @@ class TestRunCompleteEndpoint:
             "tube_names": ["Patient A", "Patient B", "NTC", "Positive Ctrl"],
         })
         payload = local_db.get_pending_events()[0]["payload"]
-        assert payload["sample_names"] == {
+        assert payload["tube_names"] == {
             "1": "Patient A",
             "2": "Patient B",
             "3": "NTC",
             "4": "Positive Ctrl",
         }
-        # No regression: run_name still travels alongside the sample names.
+        # No regression: run_name still travels alongside the tube names.
         assert payload["run_name"] == "Run 1"
 
     def test_request_tube_names_win_over_live_global(self, db_client):
@@ -131,10 +131,10 @@ class TestRunCompleteEndpoint:
             "tube_names": ["Patient A", "Patient B", "NTC", "Positive Ctrl"],
         })
         payload = local_db.get_pending_events()[0]["payload"]
-        assert payload["sample_names"]["1"] == "Patient A"
-        assert payload["sample_names"]["3"] == "NTC"
+        assert payload["tube_names"]["1"] == "Patient A"
+        assert payload["tube_names"]["3"] == "NTC"
 
-    def test_defaults_sample_names_when_tube_names_omitted(self, db_client):
+    def test_defaults_tube_names_when_tube_names_omitted(self, db_client):
         client, local_db = db_client
         # Legacy/sim callers that don't send a snapshot fall back to the live
         # global, which defaults to "Tube 1".."Tube 4".
@@ -145,7 +145,7 @@ class TestRunCompleteEndpoint:
             "results_path": str(DETECTED_RESULTS),
         })
         payload = local_db.get_pending_events()[0]["payload"]
-        assert payload["sample_names"] == {
+        assert payload["tube_names"] == {
             "1": "Tube 1",
             "2": "Tube 2",
             "3": "Tube 3",

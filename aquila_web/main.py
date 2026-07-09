@@ -352,8 +352,8 @@ def _normalize_tube_names(names: list | None) -> list[str]:
             resolved.append(fallback)
     return resolved
 
-def _sample_names_by_well(names: list | None = None) -> dict[str, str]:
-    # Per-Well sample names for the run_complete event, keyed to well 1-4 (#296).
+def _tube_names_by_well(names: list | None = None) -> dict[str, str]:
+    # Per-Well tube names for the run_complete event, keyed to well 1-4 (#296).
     # The device snapshots the operator's tube names at run completion and passes
     # them here, mirroring how run_name/run_timestamp are captured with the run
     # rather than re-read from the mutable global. Legacy/sim callers pass nothing
@@ -739,7 +739,7 @@ async def _simulate_run(profile_name: str) -> None:
             "profile": profile_name,
             "result": detected_summary,
             "run_timestamp": run_timestamp,
-            "sample_names": _sample_names_by_well(),
+            "tube_names": _tube_names_by_well(),
             "calls": _calls_from_file(results_file),
         },
     )
@@ -927,7 +927,7 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "profile": req.profile,
             "result": result,
             "run_timestamp": run_timestamp,
-            "sample_names": _sample_names_by_well(req.tube_names),
+            "tube_names": _tube_names_by_well(req.tube_names),
             "calls": _calls_from_file(results_file) if results_file else [],
         },
     )
@@ -2275,21 +2275,31 @@ async def _background_update_poller() -> None:
 _SYNC_INTERVAL_SECONDS = int(os.getenv("AQ_SYNC_INTERVAL_SECONDS", "900"))
 
 
+def _run_sync_cycle() -> int:
+    """One outbox reconciliation: push pending Events, then prune long-since-synced
+    ones (ADR-020). Cleanup runs only after a flush -- never on an independent
+    clock -- and only touches synced Events past the retention window; pending and
+    quarantined Events are always retained. Returns the number of Events synced."""
+    from aquila_web.sync import sync_pending_events
+    from aquila_web.local_db import cleanup_synced_events
+    synced = sync_pending_events()
+    cleanup_synced_events()
+    return synced
+
+
 async def _background_sync_poller() -> None:
     """Flush SQLite event queue to AWS ingest endpoint every AQ_SYNC_INTERVAL_SECONDS."""
     while True:
         await asyncio.sleep(_SYNC_INTERVAL_SECONDS)
         try:
-            from aquila_web.sync import sync_pending_events
-            sync_pending_events()
+            _run_sync_cycle()
         except Exception as exc:
             logger.warning("Background sync error: %s", exc)
 
 
 @app.post("/sync/flush")
 async def sync_flush():
-    from aquila_web.sync import sync_pending_events
-    synced = sync_pending_events()
+    synced = _run_sync_cycle()
     return {"synced": synced}
 
 
