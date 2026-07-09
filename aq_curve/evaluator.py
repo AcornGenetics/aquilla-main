@@ -663,7 +663,8 @@ def evaluate_curve(curve, log_name, dye, well):
     late_threshold = config.get_float("PCR_LATE_CQ_THRESHOLD")
 
     signal_range_pass = typical_results.get("check_signal_range", True)
-    if threshold_pass and _spike_only_crossings(y_corrected, threshold_val):
+    spike_only_crossings = threshold_pass and _spike_only_crossings(y_corrected, threshold_val)
+    if spike_only_crossings:
         threshold_pass = False
 
     # Evaluate late-Cq confidence up-front so it can override strict shape checks
@@ -688,22 +689,30 @@ def evaluate_curve(curve, log_name, dye, well):
 
     if late_confident:
         status = "detected"
+        decision_reason = "late_cq_confident"
     elif not threshold_pass or not signal_range_pass:
         status = "undetected"
+        decision_reason = "threshold_fail" if not threshold_pass else "signal_range_fail"
     elif mountain_shape_detected or rapid_rise_detected:
         status = "undetected"
+        decision_reason = "mountain_shape" if mountain_shape_detected else "rapid_rise"
     elif cq is None and not typical_results.get("check_sustained_increase", True):
         # No Cq and no sustained increase: threshold was crossed by noise or a spike
         status = "undetected"
+        decision_reason = "no_cq_no_increase"
     elif cq is not None and cq >= late_threshold:
         if late_ok and (typical_pass or biphasic_pass):
             status = "detected"
+            decision_reason = "typical_or_biphasic_pass"
         else:
             status = "inconclusive"
+            decision_reason = "late_cq_not_confident"
     elif typical_pass or biphasic_pass:
         status = "detected"
+        decision_reason = "typical_or_biphasic_pass"
     else:
         status = "inconclusive"
+        decision_reason = "test_run" if curve.test_run else "both_paths_failed"
 
     # Shared pure measures, emitted once (checks emit their own specific values).
     metric_rows.extend([
@@ -726,4 +735,21 @@ def evaluate_curve(curve, log_name, dye, well):
         "threshold_pass": threshold_pass,
         "results": results,
         "metrics": metrics,
+        # Derived decision layer (#299): the flags evaluate_curve already computed and
+        # the cascade branch that produced the status. Records *why* the Call came out
+        # as it did; the cascade logic itself is unchanged.
+        "decision_reason": decision_reason,
+        "flags": {
+            "threshold_pass": bool(threshold_pass),
+            "spike_only_crossings": bool(spike_only_crossings),
+            "test_run": bool(curve.test_run),
+            "typical_pass": bool(typical_pass),
+            "biphasic_pass": bool(biphasic_pass),
+            "baseline_fail": bool(baseline_fail),
+            "mountain_shape_detected": bool(mountain_shape_detected),
+            "rapid_rise_detected": bool(rapid_rise_detected),
+            "late_ok": bool(late_ok),
+            "late_confident": bool(late_confident),
+            "signal_range_pass": bool(signal_range_pass),
+        },
     }

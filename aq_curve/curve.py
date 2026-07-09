@@ -51,7 +51,8 @@ def canonical_call(status):
 
 
 def summarize_call_evidence(
-    fam_status, rox_status, rox_raw_status, rox_unavailable, metrics_by_curve=None
+    fam_status, rox_status, rox_raw_status, rox_unavailable,
+    metrics_by_curve=None, decision_by_curve=None,
 ):
     """Build the summary call_evidence records for one Run (#297).
 
@@ -74,6 +75,10 @@ def summarize_call_evidence(
         rec = {"well": well, "channel": channel, "raw_status": raw_status, "call": call}
         if metrics_by_curve is not None:
             rec["metrics"] = metrics_by_curve.get((channel, well), [])
+        if decision_by_curve is not None:
+            detail = decision_by_curve.get((channel, well), {})
+            rec["decision_reason"] = detail.get("decision_reason")
+            rec["flags"] = detail.get("flags", {})
         return rec
 
     evidence = []
@@ -298,10 +303,17 @@ class Curve:
         # come straight from evaluate_curve — each Check emits the value it computed —
         # so the emitted numbers are exactly what the engine saw (no recomputation).
         evidence_metrics = {}
+        # Derived decision layer per curve (#299): the flags + the cascade branch
+        # (Decision Reason) evaluate_curve produced. Explains *why* each Call came out.
+        evidence_decision = {}
 
         def resolve_status(_, dye_name, well):
             evaluation = evaluate_curve(self, src, dye_name, well)
             evidence_metrics[(dye_name, well)] = evaluation.get("metrics", [])
+            evidence_decision[(dye_name, well)] = {
+                "decision_reason": evaluation.get("decision_reason"),
+                "flags": evaluation.get("flags", {}),
+            }
             # ADR-017: canonicalize once here so the engine's "undetected" never
             # escapes to either the results file or the call_evidence summary.
             return canonical_call(evaluation["status"])
@@ -357,6 +369,7 @@ class Curve:
             "evidence": summarize_call_evidence(
                 fam_status, rox_status, rox_raw_status, rox_unavailable,
                 metrics_by_curve=evidence_metrics,
+                decision_by_curve=evidence_decision,
             ),
         }
 
