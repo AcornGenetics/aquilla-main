@@ -82,6 +82,22 @@ def test_failing_curve_still_logs_its_check_values(monkeypatch):
     assert by_name["baseline_slope"]["value"] is not None
 
 
+def test_empty_curve_emits_zero_signal_range_without_crashing(monkeypatch):
+    # A well/channel with no signal (ROX Unavailable, or an aborted/truncated read)
+    # yields an empty corrected curve. The metric emission must not call np.max on it
+    # and sink the whole Run's results -- an empty curve has no range, so 0.0.
+    monkeypatch.setattr(
+        evaluator, "get_curve_data",
+        lambda *a: (np.array([]), np.array([]), np.array([])),
+    )
+
+    ev = evaluate_curve(Curve(), "log", "rox", 1)
+    by_name = {m["name"]: m for m in ev["metrics"]}
+
+    assert by_name["signal_range"]["value"] == 0.0
+    assert by_name["n_cycles"]["value"] == 0.0
+
+
 def test_results_to_json_evidence_records_carry_the_metrics(tmp_path, monkeypatch):
     import json
     from aq_curve import curve as curve_module

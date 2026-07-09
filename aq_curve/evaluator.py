@@ -719,7 +719,10 @@ def evaluate_curve(curve, log_name, dye, well):
         {"name": "cq", "value": None if cq is None else float(cq), "threshold": None, "passed": None},
         {"name": "threshold", "value": float(threshold_val), "threshold": None, "passed": None},
         {"name": "n_cycles", "value": float(len(y_corrected)), "threshold": None, "passed": None},
-        {"name": "signal_range", "value": float(np.max(y_corrected)) - float(np.min(y_corrected)), "threshold": None, "passed": None},
+        # Guard against a well/channel with no signal (e.g. ROX Unavailable, or an
+        # aborted/truncated read): np.max on an empty array raises and would sink the
+        # entire Run's results. An empty curve has no range -> 0.0.
+        {"name": "signal_range", "value": (float(np.max(y_corrected)) - float(np.min(y_corrected))) if len(y_corrected) else 0.0, "threshold": None, "passed": None},
     ])
     # Dedup by name (first wins): a check reused across typical/biphasic emits its
     # value once; a shared measure is not overwritten by a later duplicate.
