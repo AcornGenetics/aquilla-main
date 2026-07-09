@@ -2,6 +2,7 @@ from fastapi import FastAPI, Form, Body, HTTPException, Query
 from aq_lib.device_id import inject_hw_serial_env
 from aquila_web.local_db import enqueue_event, init_local_db, _utc_now
 from aquila_web.optics_readings import build_optics_readings, count_data_lines
+from aq_curve.curve import ALGO_VERSION
 from aquila_web.profile_assembly import assemble_steps, validate_stages
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -561,6 +562,45 @@ def _calls_from_file(path: Path) -> list[dict]:
     return calls
 
 
+def _evidence_from_file(path: Path) -> list[dict]:
+    """Read the summary call_evidence records the analysis wrote (#297).
+
+    ``Curve.results_to_json`` stamps one summary record per evaluated Call onto
+    the results file (raw_status + final call, ROX-Unavailable channels omitted).
+    The device emit reads them straight back rather than re-deriving them, so the
+    raw-vs-call divergence computed during suppression is preserved verbatim.
+    """
+    try:
+        with path.open() as f:
+            data = json.load(f)
+    except Exception:
+        return []
+    evidence = data.get("evidence")
+    return evidence if isinstance(evidence, list) else []
+
+
+def _emit_call_evidence(results_file: Path, run_timestamp: str) -> None:
+    """Enqueue the summary call_evidence event alongside run_complete (#297).
+
+    A separate event type sharing the Run's run_timestamp (as optics_readings
+    is separate from run_complete). Skipped when the Run evaluated no Calls, so
+    a run with no evidence enqueues no empty event (mirrors optics_readings).
+    """
+    evidence = _evidence_from_file(results_file) if results_file else []
+    if not evidence:
+        return
+    enqueue_event(
+        "call_evidence",
+        {
+            "run_timestamp": run_timestamp,
+            # #298 will derive algo_version from the algo subtree; a placeholder
+            # for now so the frozen contract field is always present.
+            "algo_version": ALGO_VERSION,
+            "evidence": evidence,
+        },
+    )
+
+
 def _plot_filename(profile_slug: str, run_slug: str) -> str:
     return f"{profile_slug}_{run_slug}.png"
 
@@ -691,6 +731,9 @@ async def _simulate_run(profile_name: str) -> None:
             "calls": _calls_from_file(results_file),
         },
     )
+
+    # Summary call_evidence rides alongside run_complete on the same run_id (#297).
+    _emit_call_evidence(results_file, run_timestamp)
 
     # Capture the exact optics file process_run() just consumed onto the same
     # outbox, sharing run_timestamp (#288). The simulated run consumes a complete
@@ -874,6 +917,8 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "calls": _calls_from_file(results_file) if results_file else [],
         },
     )
+    # Summary call_evidence rides alongside run_complete on the same run_id (#297).
+    _emit_call_evidence(results_file, run_timestamp)
     return {"ok": True, "event_id": event_id}
 
 
