@@ -82,7 +82,7 @@ The fractional PCR cycle at which a Well's fluorescence crosses the detection th
 The fraction of Calls with outcome `Inconclusive`, grouped by Protocol. The primary analytics metric for v1. Denominator excludes `ROX Unavailable` calls.
 
 **Event**
-A structured JSON record enqueued in the local SQLite database (`data/db/app.db`) when a Run completes. Event type: `run_complete`. Payload contains: protocol name, run name, run timestamp, duration, per-Well sample names (keyed to Wells 1–4, defaulting to "Tube 1".."Tube 4"), and all 8 Well × Channel Calls with Cq values. Events queue offline and flush on the next successful Sync.
+A structured JSON record enqueued in the local SQLite database (`data/db/app.db`) when a Run completes. A Run emits up to three Event types, all sharing its `run_timestamp`: `run_complete` (protocol name, run name, run timestamp, per-Well `tube_names` keyed to Wells 1–4 defaulting to "Tube 1".."Tube 4", and all 8 Well × Channel Calls with Cq values), `optics_readings` (the raw optics log captured whole, ADR-0007), and `call_evidence` (per-Call QC telemetry, ADR-0008). Events queue offline and flush on the next successful Sync. The full payload shapes and their warehouse facts are the [Device Event Contract](docs/local-db-schema.md).
 
 **Sync**
 The background process (asyncio task in the FastAPI app, 15-minute interval) that batches pending Events from the local SQLite queue and POSTs them to the AWS Ingest Endpoint. Also triggered on WiFi reconnect. On success, marks events `synced_at` in SQLite. Events accumulate indefinitely if offline.
