@@ -43,6 +43,16 @@ def init_local_db() -> None:
             """
         )
         _add_missing_columns(connection)
+        # Stamp the schema version, bumping forward only so a newer device DB
+        # (a future migration) is never regressed by an older build.
+        current_version = connection.execute("PRAGMA user_version").fetchone()[0]
+        if current_version < _SCHEMA_VERSION:
+            connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+
+
+# The current on-device schema version, stamped into the DB header via
+# PRAGMA user_version (#305) so future non-additive migrations can gate on it.
+_SCHEMA_VERSION = 1
 
 
 # Additive quarantine columns for the size guard (#289). Applied as ALTER TABLE
