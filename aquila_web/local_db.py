@@ -168,7 +168,7 @@ def mark_event_synced(event_ids: list[int]) -> None:
         connection.execute(query, values)
 
 
-def cleanup_synced_events(retain_days: int = 7) -> int:
+def cleanup_synced_events(retain_days: int = 30) -> int:
     with _connect() as connection:
         cursor = connection.execute(
             """

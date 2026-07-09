@@ -2275,21 +2275,31 @@ async def _background_update_poller() -> None:
 _SYNC_INTERVAL_SECONDS = int(os.getenv("AQ_SYNC_INTERVAL_SECONDS", "900"))
 
 
+def _run_sync_cycle() -> int:
+    """One outbox reconciliation: push pending Events, then prune long-since-synced
+    ones (ADR-020). Cleanup runs only after a flush -- never on an independent
+    clock -- and only touches synced Events past the retention window; pending and
+    quarantined Events are always retained. Returns the number of Events synced."""
+    from aquila_web.sync import sync_pending_events
+    from aquila_web.local_db import cleanup_synced_events
+    synced = sync_pending_events()
+    cleanup_synced_events()
+    return synced
+
+
 async def _background_sync_poller() -> None:
     """Flush SQLite event queue to AWS ingest endpoint every AQ_SYNC_INTERVAL_SECONDS."""
     while True:
         await asyncio.sleep(_SYNC_INTERVAL_SECONDS)
         try:
-            from aquila_web.sync import sync_pending_events
-            sync_pending_events()
+            _run_sync_cycle()
         except Exception as exc:
             logger.warning("Background sync error: %s", exc)
 
 
 @app.post("/sync/flush")
 async def sync_flush():
-    from aquila_web.sync import sync_pending_events
-    synced = sync_pending_events()
+    synced = _run_sync_cycle()
     return {"synced": synced}
 
 
