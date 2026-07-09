@@ -352,8 +352,8 @@ def _normalize_tube_names(names: list | None) -> list[str]:
             resolved.append(fallback)
     return resolved
 
-def _sample_names_by_well(names: list | None = None) -> dict[str, str]:
-    # Per-Well sample names for the run_complete event, keyed to well 1-4 (#296).
+def _tube_names_by_well(names: list | None = None) -> dict[str, str]:
+    # Per-Well tube names for the run_complete event, keyed to well 1-4 (#296).
     # The device snapshots the operator's tube names at run completion and passes
     # them here, mirroring how run_name/run_timestamp are captured with the run
     # rather than re-read from the mutable global. Legacy/sim callers pass nothing
@@ -739,7 +739,7 @@ async def _simulate_run(profile_name: str) -> None:
             "profile": profile_name,
             "result": detected_summary,
             "run_timestamp": run_timestamp,
-            "sample_names": _sample_names_by_well(),
+            "tube_names": _tube_names_by_well(),
             "calls": _calls_from_file(results_file),
         },
     )
@@ -927,7 +927,7 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "profile": req.profile,
             "result": result,
             "run_timestamp": run_timestamp,
-            "sample_names": _sample_names_by_well(req.tube_names),
+            "tube_names": _tube_names_by_well(req.tube_names),
             "calls": _calls_from_file(results_file) if results_file else [],
         },
     )
