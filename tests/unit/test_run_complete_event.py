@@ -97,6 +97,43 @@ class TestRunCompleteEndpoint:
         payload = local_db.get_pending_events()[0]["payload"]
         assert payload.get("result")
 
+    def test_event_payload_includes_default_sample_names_keyed_to_well(self, db_client):
+        client, local_db = db_client
+        # No operator rename: clear resets tube names to the defaults.
+        client.post("/results/clear")
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload["sample_names"] == {
+            "1": "Tube 1",
+            "2": "Tube 2",
+            "3": "Tube 3",
+            "4": "Tube 4",
+        }
+
+    def test_event_payload_carries_operator_renamed_sample_names(self, db_client):
+        client, local_db = db_client
+        client.post("/tube_names", json={
+            "names": ["Patient A", "Patient B", "NTC", "Positive Ctrl"],
+        })
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload["sample_names"] == {
+            "1": "Patient A",
+            "2": "Patient B",
+            "3": "NTC",
+            "4": "Positive Ctrl",
+        }
+        # No regression: run_name still travels alongside the sample names.
+        assert payload["run_name"] == "Run 1"
+
 
 class TestEmitRunComplete:
     """state_requests.emit_run_complete() calls the correct HTTP endpoint."""

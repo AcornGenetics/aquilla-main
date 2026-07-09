@@ -351,6 +351,14 @@ def _normalize_tube_names(names: list | None) -> list[str]:
             resolved.append(fallback)
     return resolved
 
+def _sample_names_by_well() -> dict[str, str]:
+    # Per-Well sample names for the run_complete event, keyed to well 1-4 (#296).
+    # Sourced from the operator's current tube names, which default to
+    # "Tube 1".."Tube 4" until renamed. Keys are strings because the payload is
+    # serialized to JSON, matching the integer well numbering used in calls[].
+    names = _normalize_tube_names(current_tube_names)
+    return {str(well): names[well - 1] for well in range(1, len(DEFAULT_TUBE_NAMES) + 1)}
+
 def _next_run_info(history: list[dict] | None = None) -> tuple[str, int]:
     if history is None:
         history = _load_history()
@@ -688,6 +696,7 @@ async def _simulate_run(profile_name: str) -> None:
             "profile": profile_name,
             "result": detected_summary,
             "run_timestamp": run_timestamp,
+            "sample_names": _sample_names_by_well(),
             "calls": _calls_from_file(results_file),
         },
     )
@@ -871,6 +880,7 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "profile": req.profile,
             "result": result,
             "run_timestamp": run_timestamp,
+            "sample_names": _sample_names_by_well(),
             "calls": _calls_from_file(results_file) if results_file else [],
         },
     )
