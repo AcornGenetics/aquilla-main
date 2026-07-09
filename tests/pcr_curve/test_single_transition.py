@@ -4,7 +4,7 @@ from aq_curve.evaluator import check_single_transition
 
 
 def test_single_transition(curve_data, curve):
-    assert check_single_transition(curve_data, curve)
+    assert check_single_transition(curve_data, curve)[0]
 
 
 class _Curve:
@@ -53,7 +53,7 @@ def test_minor_dip_within_tolerance_passes(monkeypatch):
     # Depress index 23 (cycle 24) so the derivative from index 22→23 = 0.034.
     # The following step compensates upward, keeping the rest of the curve intact.
     y[23] = y[22] + 0.034
-    assert check_single_transition(_curve_data(y), _Curve())
+    assert check_single_transition(_curve_data(y), _Curve())[0]
 
 
 def test_large_dip_outside_tolerance_counts_as_new_transition(monkeypatch):
@@ -78,4 +78,4 @@ def test_large_dip_outside_tolerance_counts_as_new_transition(monkeypatch):
     y = _pcr_sigmoid()
     # Depress index 23 (cycle 24) so the derivative from index 22→23 = 0.030.
     y[23] = y[22] + 0.030
-    assert not check_single_transition(_curve_data(y), _Curve())
+    assert not check_single_transition(_curve_data(y), _Curve())[0]
