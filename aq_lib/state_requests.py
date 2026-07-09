@@ -62,17 +62,24 @@ def mark_results_ready(path: str | Path) -> None:
     except requests.exceptions.RequestException as e:
         logger.exception("Error marking results ready: %s", e)
 
-def log_history(profile, run_name, results_path, graph_path=None):
-    url = f"{BACKEND_URL}/history/append"
-    resolved_results_path = None
-    tube_names = None
+def get_tube_names():
+    # Snapshot the operator's current tube names once, so history and the
+    # run_complete event can be fed the SAME labels captured with the run
+    # rather than each re-reading the mutable server global (#296). Returns
+    # None on failure; callers fall back to their own defaults.
     try:
         response = requests.get(f"{BACKEND_URL}/tube_names", timeout=5)
         if response.ok:
-            data = response.json()
-            tube_names = data.get("names")
+            return response.json().get("names")
     except requests.exceptions.RequestException:
-        tube_names = None
+        pass
+    return None
+
+def log_history(profile, run_name, results_path, graph_path=None, tube_names=None):
+    url = f"{BACKEND_URL}/history/append"
+    resolved_results_path = None
+    if tube_names is None:
+        tube_names = get_tube_names()
     if results_path:
         base_dir = Path(get_src_basedir())
         candidate_path = Path(results_path)
@@ -111,11 +118,14 @@ def emit_run_complete(
     profile: str,
     results_path: str,
     run_timestamp: str | None = None,
+    tube_names: list | None = None,
 ) -> None:
     url = f"{BACKEND_URL}/events/run_complete"
     payload = {"run_name": run_name, "profile": profile, "results_path": results_path}
     if run_timestamp is not None:
         payload["run_timestamp"] = run_timestamp
+    if tube_names is not None:
+        payload["tube_names"] = tube_names
     try:
         requests.post(url, json=payload, timeout=5)
     except requests.exceptions.RequestException as e:

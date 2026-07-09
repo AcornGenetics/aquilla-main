@@ -351,13 +351,16 @@ def _normalize_tube_names(names: list | None) -> list[str]:
             resolved.append(fallback)
     return resolved
 
-def _sample_names_by_well() -> dict[str, str]:
+def _sample_names_by_well(names: list | None = None) -> dict[str, str]:
     # Per-Well sample names for the run_complete event, keyed to well 1-4 (#296).
-    # Sourced from the operator's current tube names, which default to
-    # "Tube 1".."Tube 4" until renamed. Keys are strings because the payload is
-    # serialized to JSON, matching the integer well numbering used in calls[].
-    names = _normalize_tube_names(current_tube_names)
-    return {str(well): names[well - 1] for well in range(1, len(DEFAULT_TUBE_NAMES) + 1)}
+    # The device snapshots the operator's tube names at run completion and passes
+    # them here, mirroring how run_name/run_timestamp are captured with the run
+    # rather than re-read from the mutable global. Legacy/sim callers pass nothing
+    # and fall back to the live global (defaulting to "Tube 1".."Tube 4"). Keys
+    # are strings because the payload is JSON, matching the integer well numbering
+    # used in calls[].
+    resolved = _normalize_tube_names(names if names is not None else current_tube_names)
+    return {str(index + 1): name for index, name in enumerate(resolved)}
 
 def _next_run_info(history: list[dict] | None = None) -> tuple[str, int]:
     if history is None:
@@ -861,6 +864,7 @@ class _RunCompleteEventRequest(BaseModel):
     profile: str
     results_path: Optional[str] = None
     run_timestamp: Optional[str] = None
+    tube_names: Optional[list] = None
 
 
 @app.post("/events/run_complete")
@@ -880,7 +884,7 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "profile": req.profile,
             "result": result,
             "run_timestamp": run_timestamp,
-            "sample_names": _sample_names_by_well(),
+            "sample_names": _sample_names_by_well(req.tube_names),
             "calls": _calls_from_file(results_file) if results_file else [],
         },
     )

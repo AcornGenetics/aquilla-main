@@ -97,9 +97,47 @@ class TestRunCompleteEndpoint:
         payload = local_db.get_pending_events()[0]["payload"]
         assert payload.get("result")
 
-    def test_event_payload_includes_default_sample_names_keyed_to_well(self, db_client):
+    def test_event_payload_carries_request_tube_names_keyed_to_well(self, db_client):
         client, local_db = db_client
-        # No operator rename: clear resets tube names to the defaults.
+        # The device snapshots tube names at run completion and sends them with
+        # the event (#296), mirroring how run_name/run_timestamp are captured
+        # with the run rather than re-read from live server state.
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+            "tube_names": ["Patient A", "Patient B", "NTC", "Positive Ctrl"],
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload["sample_names"] == {
+            "1": "Patient A",
+            "2": "Patient B",
+            "3": "NTC",
+            "4": "Positive Ctrl",
+        }
+        # No regression: run_name still travels alongside the sample names.
+        assert payload["run_name"] == "Run 1"
+
+    def test_request_tube_names_win_over_live_global(self, db_client):
+        client, local_db = db_client
+        # The run's snapshot must win even if the shared global mutates between
+        # run completion and enqueue (e.g. another client edits names, or a
+        # reset fires). The event must ship the labels captured with the run.
+        client.post("/tube_names", json={"names": ["STALE 1", "STALE 2", "STALE 3", "STALE 4"]})
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+            "tube_names": ["Patient A", "Patient B", "NTC", "Positive Ctrl"],
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload["sample_names"]["1"] == "Patient A"
+        assert payload["sample_names"]["3"] == "NTC"
+
+    def test_defaults_sample_names_when_tube_names_omitted(self, db_client):
+        client, local_db = db_client
+        # Legacy/sim callers that don't send a snapshot fall back to the live
+        # global, which defaults to "Tube 1".."Tube 4".
         client.post("/results/clear")
         client.post("/events/run_complete", json={
             "run_name": "Run 1",
@@ -113,26 +151,6 @@ class TestRunCompleteEndpoint:
             "3": "Tube 3",
             "4": "Tube 4",
         }
-
-    def test_event_payload_carries_operator_renamed_sample_names(self, db_client):
-        client, local_db = db_client
-        client.post("/tube_names", json={
-            "names": ["Patient A", "Patient B", "NTC", "Positive Ctrl"],
-        })
-        client.post("/events/run_complete", json={
-            "run_name": "Run 1",
-            "profile": "basic_pcr.json",
-            "results_path": str(DETECTED_RESULTS),
-        })
-        payload = local_db.get_pending_events()[0]["payload"]
-        assert payload["sample_names"] == {
-            "1": "Patient A",
-            "2": "Patient B",
-            "3": "NTC",
-            "4": "Positive Ctrl",
-        }
-        # No regression: run_name still travels alongside the sample names.
-        assert payload["run_name"] == "Run 1"
 
 
 class TestEmitRunComplete:
@@ -176,3 +194,24 @@ class TestEmitRunComplete:
             run_timestamp="2026-07-02T14:03:11Z",
         )
         assert calls[0]["json"]["run_timestamp"] == "2026-07-02T14:03:11Z"
+
+    def test_forwards_tube_names_snapshot(self, monkeypatch):
+        import aq_lib.state_requests as sr
+
+        calls = []
+
+        class _FakeResponse:
+            status_code = 200
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append({"url": url, "json": json})
+            return _FakeResponse()
+
+        monkeypatch.setattr("aq_lib.state_requests.requests.post", fake_post)
+        sr.emit_run_complete(
+            "Run 1", "basic_pcr.json", "/logs/results/run1.json",
+            tube_names=["Patient A", "Patient B", "NTC", "Positive Ctrl"],
+        )
+        assert calls[0]["json"]["tube_names"] == [
+            "Patient A", "Patient B", "NTC", "Positive Ctrl",
+        ]
