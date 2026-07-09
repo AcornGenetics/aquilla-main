@@ -24,7 +24,7 @@ def test_mountain_passes_early_cq_at_0_35():
     y = [0.0] * 5 + list(np.linspace(0.0, 1.0, 15)) + list(np.linspace(1.0, 0.70, 20))
     cd = _curve_data(y)
     curve = _make_curve()
-    assert check_no_mountain_shape(cd, curve) is True
+    assert check_no_mountain_shape(cd, curve)[0] is True
 
 
 def test_mountain_rejected_late_cq_drop_ratio_above_0_25():
@@ -38,7 +38,7 @@ def test_mountain_rejected_late_cq_drop_ratio_above_0_25():
     cd = _curve_data(y)
     curve = _make_curve()
     with patch("aq_curve.evaluator.compute_cq", return_value=36.0):
-        result = check_no_mountain_shape(cd, curve)
+        result = check_no_mountain_shape(cd, curve)[0]
     assert result is False
 
 
@@ -52,7 +52,7 @@ def test_mountain_rejected_early_cq_drop_ratio_above_0_35():
     cd = _curve_data(y)
     curve = _make_curve()
     with patch("aq_curve.evaluator.compute_cq", return_value=20.0):
-        result = check_no_mountain_shape(cd, curve)
+        result = check_no_mountain_shape(cd, curve)[0]
     # drop_ratio ~0.38 > 0.35 → rejected at early Cq too
     assert result is False
 
@@ -65,7 +65,7 @@ def test_late_cq_tier_rejects_bg_fam_like_curve():
     cd = _curve_data(y)
     curve = _make_curve()
     cq = 36.0  # 0-based index 35, 1-based cycle 36 ≈ Cq
-    result = check_late_cq_tier(cd, curve, cq)
+    result = check_late_cq_tier(cd, curve, cq)[0]
     assert result is False
 
 
@@ -75,7 +75,7 @@ def test_late_cq_tier_passes_genuine_doubling():
     cd = _curve_data(y)
     curve = _make_curve()
     cq = 36.0
-    result = check_late_cq_tier(cd, curve, cq)
+    result = check_late_cq_tier(cd, curve, cq)[0]
     assert result is True
 
 
@@ -85,6 +85,6 @@ def test_late_cq_tier_uses_two_cycle_window_not_five():
     cd = _curve_data(y)
     curve = _make_curve()
     cq = 36.0
-    result = check_late_cq_tier(cd, curve, cq)
+    result = check_late_cq_tier(cd, curve, cq)[0]
     # fold at +2: 0.13/0.10 = 1.3 → fails (confirms 2-cycle window is used)
     assert result is False
