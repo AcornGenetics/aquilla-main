@@ -1829,7 +1829,11 @@ async def profile_details(id: str | None = Query(default=None), name: str | None
         if not profile_path.exists():
             raise HTTPException(status_code=404, detail="Profile not found")
     else:
-        for path in profile_dir.glob("*.json"):
+        # Recurse into subdirs (bundled/, local/) — profiles do not live at the
+        # root. Mirrors _resolve_profile_display_name, which produces the very
+        # name searched here; a non-recursive glob would 404 every bundled/local
+        # profile looked up by name (#312).
+        for path in profile_dir.rglob("*.json"):
             try:
                 with path.open() as f:
                     data = json.load(f)
