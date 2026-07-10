@@ -148,6 +148,25 @@ class TestFleetCompose:
             f"swap. Mounting only /opt/fleet/.env is not enough. Volumes: {volumes}"
         )
 
+    def test_backend_persists_sync_outbox(self):
+        """
+        The sync outbox (/opt/aquila/data/db/app.db) holds completed runs not yet
+        pushed to the cloud. It must sit on a host-backed bind mount so it
+        survives a container recreate (update / --force-recreate); otherwise
+        every update silently discards unsynced runs.
+
+        enqueue_event + the sync poller live only in the backend (aquila_web), so
+        the backend is the sole owner of the queue and the one to persist it.
+        """
+        backend = _load(FLEET_COMPOSE)["services"]["backend"]
+        volumes = backend.get("volumes", [])
+        targets = [str(v).split(":")[1] for v in volumes if ":" in str(v)]
+        assert "/opt/aquila/data" in targets, (
+            "backend service must bind-mount /opt/aquila/data so the sync outbox "
+            "(app.db) survives container recreation; otherwise unsynced runs are "
+            f"lost on every update. Volumes: {volumes}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Container DNS resilience (#314): the containers that make outbound calls must
