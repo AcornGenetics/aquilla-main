@@ -28,6 +28,11 @@ services:
       - /opt/aquila/logs:/opt/aquila/logs
       - /opt/aquila/profiles:/opt/aquila/profiles
       - /opt/aquila/config:/opt/aquila/config
+      # Persist the sync outbox (/opt/aquila/data/db/app.db): it queues completed
+      # runs not yet pushed to the cloud. Without a host-backed mount it lives in
+      # the container and every recreate (update / --force-recreate) silently
+      # discards unsynced runs. The on-device schema migrates in place (#305).
+      - /opt/aquila/data:/opt/aquila/data
       # Mount the whole fleet dir (not just .env) so the OTA reboot sentinel
       # /opt/fleet/last_update.json is host-backed and survives the Watchtower
       # container swap. See specs/backend/spec_ota_sentinel_persistent_volume.md.
