@@ -3,6 +3,15 @@ services:
     image: ghcr.io/${GHCR_REPO:-acorngenetics/aquilla-main}-api:${IMAGE_TAG}
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     container_name: aquila-backend
+    # Forward DNS to the host-side resolver (dnsmasq on the fleet_default bridge
+    # gateway) so name resolution follows the host instead of the stale upstream
+    # Docker freezes at network-creation time. See #314 / the sn06 sync outage.
+    # Public resolvers are backups: if the host forwarder is briefly down, the
+    # resolver falls through to 1.1.1.1 then 8.8.8.8 so sync/OTA never blackhole.
+    dns:
+      - 172.18.0.1
+      - 1.1.1.1
+      - 8.8.8.8
     ports:
       - "8090:8090"
     environment:
@@ -50,6 +59,12 @@ services:
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     container_name: aquila-app
     hostname: ${DEVICE_HOSTNAME}
+    # See backend: host forwarder first, public backups. Cert renewal resolves
+    # renew.cloud.acorngenetics.com from here (#314).
+    dns:
+      - 172.18.0.1
+      - 1.1.1.1
+      - 8.8.8.8
     command: ["python3", "application.py"]
     environment:
       DATA_DIR: "/opt/aquila"
@@ -114,6 +129,12 @@ services:
   watchtower:
     image: nickfedor/watchtower
     container_name: aquila-watchtower
+    # Watchtower pulls from ghcr.io; the broken container DNS that stopped Sync
+    # also blocks OTA. Host forwarder first, public backups (#314).
+    dns:
+      - 172.18.0.1
+      - 1.1.1.1
+      - 8.8.8.8
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     ports:
       - "8081:8080"
@@ -132,3 +153,15 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+networks:
+  # Pin the default network's subnet/gateway so the host-side DNS forwarder is
+  # reachable at a deterministic address (172.18.0.1 == the gateway) on every
+  # device. Docker otherwise auto-assigns bridge subnets in creation order, so
+  # the gateway would vary device-to-device and the pinned dns: entry would be
+  # wrong. See #314.
+  default:
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+          gateway: 172.18.0.1
