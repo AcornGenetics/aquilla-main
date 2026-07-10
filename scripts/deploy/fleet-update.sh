@@ -44,6 +44,10 @@ _upsert_env() {
 _upsert_env RUNNING_IMAGE_DIGEST    "${_DIGEST:-}"    "${FLEET_ENV}"
 _upsert_env RUNNING_IMAGE_DIGEST_UI "${_DIGEST_UI:-}" "${FLEET_ENV}"
 
-docker compose --env-file "${FLEET_ENV}" -f /opt/fleet/docker-compose.yml up -d
+# --force-recreate: a same-tag digest change (e.g. pilot->new pilot) otherwise
+#   leaves the old container running; force it so the pulled image is swapped in.
+# --remove-orphans: clear any half-finished Watchtower swap leftovers
+#   (<hash>_aquila-backend) so they don't linger and fight for the same ports.
+docker compose --env-file "${FLEET_ENV}" -f /opt/fleet/docker-compose.yml up -d --force-recreate --remove-orphans
 
 mkdir -p /opt/aquila/tests
