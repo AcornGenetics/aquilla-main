@@ -177,6 +177,33 @@ run_test "NM dispatcher installed" "test -x /etc/NetworkManager/dispatcher.d/99-
 phase_pass "NetworkManager BSSID dispatcher installed"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3c — Fleet DNS forwarder (dnsmasq)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Docker freezes each container's DNS upstream at network-creation time; when a
+# device moves networks (or Tailscale changes host DNS) that captured resolver
+# becomes unreachable and in-container sync/OTA silently break (#314). A dnsmasq
+# forwarder on the docker bridge gateway lets containers follow the host's own
+# live resolver instead — the compose dns: entries point at 172.18.0.1.
+phase_start "3c" "Fleet DNS forwarder (dnsmasq)"
+
+DEBIAN_FRONTEND=noninteractive apt-get install -y dnsmasq
+
+# Drop-in so we don't clobber the packaged /etc/dnsmasq.conf. Serve only the
+# docker bridge gateway and forward to the host's own upstreams (dnsmasq reads
+# /etc/resolv.conf by default). Loop-safe: never point upstream at ourselves
+# (172.18.0.1) or Docker's embedded resolver (127.0.0.11).
+cat > /etc/dnsmasq.d/aquila-fleet.conf <<'DNSMASQ'
+# Aquila fleet DNS forwarder — serves the docker bridge, follows host DNS (#314).
+listen-address=172.18.0.1
+bind-dynamic
+DNSMASQ
+
+systemctl enable dnsmasq
+systemctl restart dnsmasq
+
+phase_pass "dnsmasq forwarder installed on 172.18.0.1"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 4 — Autologin (X11/Openbox)
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 4 "Autologin (X11/Openbox)"

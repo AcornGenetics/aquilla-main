@@ -66,14 +66,33 @@ class TestFleetCompose:
 
     def test_no_hardcoded_bridge_ips(self):
         """
-        Compose files must not contain hardcoded Docker bridge IPs (172.x.x.x).
-        Use host.docker.internal or service names instead.
+        Compose files must not contain hardcoded Docker bridge IPs (172.16–31.x.x)
+        — use host.docker.internal or service names — EXCEPT the fleet DNS
+        forwarder gateway. That one must be a literal IP because Docker's `dns:`
+        field cannot take a hostname (the resolver can't resolve itself), so it
+        is exempted here (#314).
         """
         import re
+        data = _load(FLEET_COMPOSE)
+        # IPs legitimately allowed to be literal bridge addresses: the DNS
+        # forwarder gateway referenced from each service's dns: list, plus the
+        # subnet/gateway of a network we intentionally pin so that gateway is
+        # deterministic (#314).
+        allowed = set()
+        for svc in data.get("services", {}).values():
+            allowed.update(str(x) for x in (svc.get("dns") or []))
+        for net in (data.get("networks") or {}).values():
+            for cfg in ((net or {}).get("ipam") or {}).get("config", []) or []:
+                if "gateway" in cfg:
+                    allowed.add(str(cfg["gateway"]))
+                if "subnet" in cfg:
+                    allowed.add(str(cfg["subnet"]).split("/")[0])
         content = FLEET_COMPOSE.read_text()
-        matches = re.findall(r"172\.(1[6-9]|2\d|3[01])\.\d+\.\d+", content)
-        assert not matches, (
-            f"fleet-config/docker-compose.yml contains hardcoded bridge IPs: {matches}"
+        found = re.findall(r"172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+", content)
+        offenders = [ip for ip in found if ip not in allowed]
+        assert not offenders, (
+            "fleet-config/docker-compose.yml contains hardcoded bridge IPs "
+            f"(not the DNS forwarder): {offenders}"
         )
 
     def test_watchtower_label_on_all_app_services(self):
@@ -127,4 +146,113 @@ class TestFleetCompose:
             "backend service must bind-mount the /opt/fleet directory so the OTA "
             "reboot sentinel (/opt/fleet/last_update.json) survives the container "
             f"swap. Mounting only /opt/fleet/.env is not enough. Volumes: {volumes}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Container DNS resilience (#314): the containers that make outbound calls must
+# forward DNS to a resolver that FOLLOWS the host, not the stale upstream Docker
+# freezes at network-creation time. Without this, in-container name resolution
+# silently dies when host DNS changes (e.g. Tailscale MagicDNS takeover) — the
+# sn06 sync/OTA outage where the backend could not resolve ingest/renew/ghcr.
+# ---------------------------------------------------------------------------
+
+# The fleet_default bridge gateway — the address at which the host-side DNS
+# forwarder (dnsmasq) is reachable from inside the containers.
+FLEET_FORWARDER_IP = "172.18.0.1"
+
+
+def _dns(service: str) -> list[str]:
+    svc = _load(FLEET_COMPOSE)["services"][service]
+    return [str(x) for x in svc.get("dns", [])]
+
+
+class TestFleetContainerDns:
+
+    def test_backend_forwards_dns_to_host_first(self):
+        """
+        The backend (which runs Sync + cert renew) must forward DNS to the
+        host-side forwarder first, so resolution follows the host instead of a
+        frozen upstream. Regression guard for the sn06 sync outage (#314).
+        """
+        dns = _dns("backend")
+        assert dns, (
+            "backend has no dns: — container DNS will drift from the host "
+            "resolver and silently fail when host DNS changes (sn06 outage)"
+        )
+        assert dns[0] == FLEET_FORWARDER_IP, (
+            f"backend dns must forward to the host bridge gateway "
+            f"{FLEET_FORWARDER_IP} first; got {dns}"
+        )
+
+    def test_backend_has_public_dns_fallback(self):
+        """
+        If the host forwarder is briefly unavailable, the backend must still
+        resolve via public DNS — so a down forwarder never blackholes sync/OTA.
+        Public fallbacks must come AFTER the host forwarder (#314).
+        """
+        dns = _dns("backend")
+        assert dns[0] == FLEET_FORWARDER_IP, (
+            f"host forwarder must be first so it is preferred; got {dns}"
+        )
+        fallback = dns[1:]
+        assert "1.1.1.1" in fallback and "8.8.8.8" in fallback, (
+            "backend dns must include public fallbacks 1.1.1.1 and 8.8.8.8 after "
+            f"the host forwarder; got {dns}"
+        )
+
+    def test_fleet_network_pins_forwarder_gateway(self):
+        """
+        The bridge gateway must be PINNED so the forwarder address is
+        deterministic on every device. Docker otherwise auto-assigns bridge
+        subnets in creation order, so 172.18.0.1 is not guaranteed fleet-wide.
+        A compose network must declare an explicit gateway == FLEET_FORWARDER_IP
+        (#314).
+        """
+        data = _load(FLEET_COMPOSE)
+        gateways = []
+        for net in (data.get("networks") or {}).values():
+            for cfg in ((net or {}).get("ipam") or {}).get("config", []) or []:
+                if "gateway" in cfg:
+                    gateways.append(str(cfg["gateway"]))
+        assert FLEET_FORWARDER_IP in gateways, (
+            f"No compose network pins gateway {FLEET_FORWARDER_IP}; the forwarder "
+            "address would be non-deterministic across devices. Declared "
+            f"gateways: {gateways}"
+        )
+
+    def test_app_forwards_dns_with_fallback(self):
+        """
+        The app container (cert renewal via aq_lib.renew, outbound calls) must
+        use the same policy: host forwarder first, public fallbacks after (#314).
+        """
+        dns = _dns("app")
+        assert dns[:1] == [FLEET_FORWARDER_IP], (
+            f"app dns must forward to the host gateway first; got {dns}"
+        )
+        assert "1.1.1.1" in dns[1:] and "8.8.8.8" in dns[1:], (
+            f"app dns must include public fallbacks after the forwarder; got {dns}"
+        )
+
+    def test_watchtower_forwards_dns_with_fallback(self):
+        """
+        Watchtower pulls images from ghcr.io; the same broken container DNS that
+        stopped Sync also blocks OTA. It must use the host forwarder first with
+        public fallbacks (#314).
+        """
+        dns = _dns("watchtower")
+        assert dns[:1] == [FLEET_FORWARDER_IP], (
+            f"watchtower dns must forward to the host gateway first; got {dns}"
+        )
+        assert "1.1.1.1" in dns[1:] and "8.8.8.8" in dns[1:], (
+            f"watchtower dns must include public fallbacks after the forwarder; got {dns}"
+        )
+
+    def test_ui_has_no_dns_override(self):
+        """
+        The ui service serves static assets and makes no outbound calls, so it is
+        intentionally left on default DNS (#314 scope).
+        """
+        assert _dns("ui") == [], (
+            f"ui was not expected to override dns; got {_dns('ui')}"
         )
