@@ -68,6 +68,40 @@ def test_evaluate_curve_emits_checks_values_and_pure_measures(monkeypatch):
         assert by_name[name]["passed"] in (True, False)
 
 
+def test_evaluate_curve_emits_baseline_rfu_as_pure_measure(monkeypatch):
+    # baseline_rfu (the raw baseline floor) feeds the upstream Baseline Increase
+    # metric. It is a pure measure -- a number, with no per-curve pass/fail (the
+    # 10%/20% banding lives in the acorn-analytics view, not on the device).
+    monkeypatch.setattr(evaluator, "get_curve_data", lambda *a: _sigmoid())
+
+    ev = evaluate_curve(Curve(), "log", "fam", 1)
+    by_name = {m["name"]: m for m in ev["metrics"]}
+
+    assert "baseline_rfu" in by_name
+    assert by_name["baseline_rfu"]["threshold"] is None
+    assert by_name["baseline_rfu"]["passed"] is None
+
+
+def test_baseline_rfu_reports_the_raw_floor_not_the_corrected_baseline(monkeypatch):
+    # The raw curve sits on a 500-count floor; baseline correction flattens that
+    # region to ~0. baseline_rfu must report the RAW floor (the drift signal),
+    # NOT the corrected ~0 -- otherwise the upstream % -increase metric never moves.
+    xdata = np.arange(1, 41)
+    sig = 100.0 / (1.0 + np.exp(-(xdata - 20) / 2.0))
+    y_corrected = sig - sig[5:15].mean()          # baseline slice (5,15) -> mean 0
+    floor = 500.0
+    y_raw = y_corrected + floor
+    monkeypatch.setattr(evaluator, "get_curve_data", lambda *a: (xdata, y_corrected, y_raw))
+
+    ev = evaluate_curve(Curve(), "log", "fam", 1)
+    by_name = {m["name"]: m for m in ev["metrics"]}
+
+    # Curve default baseline_slice = (5, 15); value is the mean raw fluorescence there.
+    assert by_name["baseline_rfu"]["value"] == pytest.approx(float(np.mean(y_raw[5:15])))
+    # And it clearly reflects the raw floor (~500), not the corrected ~0.
+    assert by_name["baseline_rfu"]["value"] == pytest.approx(floor, abs=1.0)
+
+
 def test_failing_curve_still_logs_its_check_values(monkeypatch):
     # Pure noise, no amplification -> Checks fail, but the numbers are still computed
     # (baseline std/slope are computed before the pass/fail).
@@ -96,6 +130,8 @@ def test_empty_curve_emits_zero_signal_range_without_crashing(monkeypatch):
 
     assert by_name["signal_range"]["value"] == 0.0
     assert by_name["n_cycles"]["value"] == 0.0
+    # baseline_rfu over an empty raw curve has no floor -> 0.0 (np.mean([]) is nan).
+    assert by_name["baseline_rfu"]["value"] == 0.0
 
 
 def test_results_to_json_evidence_records_carry_the_metrics(tmp_path, monkeypatch):

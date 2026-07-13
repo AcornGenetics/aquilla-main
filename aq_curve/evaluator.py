@@ -4,6 +4,7 @@ from aq_curve.pcr_curve_helpers import (
     compute_cq,
     compute_r2,
     count_threshold_crossings,
+    get_baseline_values,
     get_curve_data,
     get_threshold,
     sustained_rise_index,
@@ -626,7 +627,7 @@ def check_biphasic_basics(curve_data, curve):
 
 def evaluate_curve(curve, log_name, dye, well):
     curve_data = get_curve_data(curve, log_name, dye, well)
-    xdata, y_corrected, _ = curve_data
+    xdata, y_corrected, y_raw = curve_data
     tc_passed, metric_rows = _run_check(check_threshold_crossing, curve_data, curve)
     metric_rows.append(
         {"name": "check_threshold_crossing", "value": None, "threshold": None, "passed": tc_passed}
@@ -723,6 +724,11 @@ def evaluate_curve(curve, log_name, dye, well):
         # aborted/truncated read): np.max on an empty array raises and would sink the
         # entire Run's results. An empty curve has no range -> 0.0.
         {"name": "signal_range", "value": (float(np.max(y_corrected)) - float(np.min(y_corrected))) if len(y_corrected) else 0.0, "threshold": None, "passed": None},
+        # The RAW baseline floor (mean fluorescence over the baseline cycles of the
+        # uncorrected curve) -- the level that drifts up as optics age. Feeds the
+        # upstream Baseline Increase metric. Read from y_raw, NOT the baseline-
+        # corrected curve (whose baseline is ~0 by construction). Empty curve -> 0.0.
+        {"name": "baseline_rfu", "value": float(np.mean(get_baseline_values(y_raw, curve.baseline_slice))) if len(y_raw) else 0.0, "threshold": None, "passed": None},
     ])
     # Dedup by name (first wins): a check reused across typical/biphasic emits its
     # value once; a shared measure is not overwritten by a later duplicate.
