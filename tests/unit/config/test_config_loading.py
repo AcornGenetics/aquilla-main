@@ -11,13 +11,18 @@ from pathlib import Path
 
 import pytest
 
-# serial is a C-extension that may not be present in every CI environment.
-# Mock it before importing config_module so collection never fails due to
-# a missing pyserial wheel.
+# serial (pyserial) is a C-extension that may not be present in every CI
+# environment. Prefer the REAL module; only fall back to a stub when pyserial is
+# genuinely missing. The old guard (`if "serial" not in sys.modules`) stubbed on
+# every fresh session -- even with pyserial installed -- and that incomplete stub
+# (no `Serial` class) leaked into sys.modules for the whole run, breaking any
+# later test that does `from serial import Serial` (e.g. meerstetter).
 import sys
 import types
 
-if "serial" not in sys.modules:
+try:
+    import serial  # noqa: F401  (real pyserial, when installed)
+except ImportError:
     _serial_stub = types.ModuleType("serial")
     _serial_tools = types.ModuleType("serial.tools")
     _list_ports_mod = types.ModuleType("serial.tools.list_ports")

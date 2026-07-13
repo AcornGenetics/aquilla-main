@@ -228,6 +228,7 @@ class TestWifiConnect:
         side_effects = self._no_profiles() + [
             _nmcli_result(0, ""),  # connection add
             _nmcli_result(0, ""),  # connection up
+            _nmcli_result(0, ""),  # connection modify (clear pinned BSSID)
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
             kc._wifi_connect("HomeNet", "secret")
@@ -242,25 +243,34 @@ class TestWifiConnect:
         side_effects = self._no_profiles() + [
             _nmcli_result(0, ""),  # connection add
             _nmcli_result(0, ""),  # connection up
+            _nmcli_result(0, ""),  # connection modify (clear pinned BSSID)
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
             kc._wifi_connect("HomeNet", "secret")
         calls = [c[0] for c in mock_nmcli.call_args_list]
         assert not any(c[:3] == ("device", "wifi", "connect") for c in calls)
 
-    def test_connect_without_password_uses_device_wifi_connect(self):
+    def test_connect_without_password_creates_explicit_open_profile(self):
+        # Open networks use an explicit `connection add` + `up` (same as the
+        # passworded path, minus the wpa-psk secrets), NOT `device wifi connect` --
+        # the latter can auto-create a profile pinned to a stale BSSID (see the
+        # _wifi_connect docstring), which is exactly what this path avoids.
         side_effects = self._no_profiles() + [
-            _nmcli_result(0, ""),  # device wifi connect
+            _nmcli_result(0, ""),  # connection add
+            _nmcli_result(0, ""),  # connection up
+            _nmcli_result(0, ""),  # connection modify (clear pinned BSSID)
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
             kc._wifi_connect("OpenNet", "")
         calls = [c[0] for c in mock_nmcli.call_args_list]
-        assert any(c[:3] == ("device", "wifi", "connect") for c in calls)
+        assert any(c[:2] == ("connection", "add") for c in calls)
+        assert not any(c[:3] == ("device", "wifi", "connect") for c in calls)
 
     def test_returns_ok_true_on_success(self):
         side_effects = self._no_profiles() + [
             _nmcli_result(0, ""),  # connection add
             _nmcli_result(0, ""),  # connection up
+            _nmcli_result(0, ""),  # connection modify (clear pinned BSSID)
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects):
             result = kc._wifi_connect("HomeNet", "secret")
@@ -293,6 +303,7 @@ class TestWifiConnect:
             _nmcli_result(0, ""),                         # delete stale profile
             _nmcli_result(0, ""),                         # connection add
             _nmcli_result(0, ""),                         # connection up
+            _nmcli_result(0, ""),                         # connection modify (clear pinned BSSID)
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects) as mock_nmcli:
             result = kc._wifi_connect("HomeNet", "newpass")
