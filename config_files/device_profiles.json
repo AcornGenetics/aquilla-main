@@ -17,7 +17,8 @@
         "profile_group": "duke"
     },
     "sn06": {
-        "profile_group": "classic"
+        "profile_group": "breweries",
+        "profile_editing_disabled": true
     },
     "sn07": {
         "profile_group": "classic"
