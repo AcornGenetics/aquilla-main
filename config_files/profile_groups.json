@@ -15,5 +15,8 @@
     ],
     "breweries": [
         "Beer_Spoilers_Bacteria.json"
+    ],
+    "sn06 brewery": [
+        "ABBA_ramp1.75_EA30_sn006.json"
     ]
 }
