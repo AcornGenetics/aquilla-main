@@ -23,7 +23,7 @@ scripts/setup_fleet_device.sh
 Edit `/opt/aquila/config/device.env`:
 
 - `DEVICE_ID=...`
-- `IMAGE_TAG=dev|pilot|prod`
+- `IMAGE_TAG=sandbox|dev|pilot|prod`
 - `WATCHTOWER_HTTP_API_TOKEN=...` (or keep the generated one)
 - `GHCR_USERNAME=...`
 - `GHCR_TOKEN=...`

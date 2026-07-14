@@ -146,7 +146,7 @@ Each phase asks for what it needs, when it needs it. Example flow:
 
 ```
 [Phase 8] Enter device hostname (e.g. sn04): _
-[Phase 8] Enter IMAGE_TAG (dev/pilot/prod): _
+[Phase 8] Enter IMAGE_TAG (sandbox/dev/pilot/prod): _
 [Phase 8] Enter lid heater upper bound voltage (e.g. 0.34): _
 [Phase 8] Enter lid heater lower bound voltage (e.g. 0.20): _
 [Phase 8] Enter drawer read_steps for this device (e.g. 160): _
@@ -426,7 +426,7 @@ mkdir -p /opt/fleet
 
 Prompts for device-specific values at this point:
 - `DEVICE_HOSTNAME` — device serial (e.g. `sn04`)
-- `IMAGE_TAG` — release ring (`dev`/`pilot`/`prod`)
+- `IMAGE_TAG` — release ring (`sandbox`/`dev`/`pilot`/`prod`)
 - `LID_HEATER_UPPER_BOUND` — voltage upper bound (e.g. `0.34`)
 - `LID_HEATER_LOWER_BOUND` — voltage lower bound (e.g. `0.20`)
 - `DRAWER_READ_STEPS` — drawer close distance in steps, varies per physical device (e.g. `160`)
@@ -600,7 +600,7 @@ print("Meerstetter tuning applied")
 PY
 ```
 
-Watchtower will watch the running containers and automatically pull new images for the same tag (dev/pilot/prod) whenever they are pushed to GHCR.
+Watchtower will watch the running containers and automatically pull new images for the same tag (sandbox/dev/pilot/prod) whenever they are pushed to GHCR.
 
 #### Verification (runs automatically at end of phase)
 > Full test definitions: [deployment2_tests.md — Phase 11](deployment2_tests.md#phase-11--fleet-device-configuration)

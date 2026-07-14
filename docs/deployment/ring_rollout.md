@@ -1,17 +1,21 @@
-# Ring Rollout Guide (dev / pilot / prod)
+# Ring Rollout Guide (sandbox / dev / pilot / prod)
 
 This guide explains how ring tags work and how to promote images safely.
 
 ## Rings
 
-- `dev`: internal devices (fastest updates)
-- `pilot`: near‑prod devices (small rollout)
+Promotion flows lowest-to-highest: `sandbox` → `dev` → `pilot` → `prod`.
+
+- `sandbox`: throwaway / breakable units (bench, local compose) — experiment freely
+- `dev`: in-house devices in real daily use (must work, but eat updates first)
+- `pilot`: soak/hold gate — promote here, then let it bake before customers
 - `prod`: customer devices (full rollout)
 
 Devices pick a ring with `IMAGE_TAG` in their env file:
 
 ```bash
-IMAGE_TAG=dev
+IMAGE_TAG=sandbox
+# or IMAGE_TAG=dev
 # or IMAGE_TAG=pilot
 # or IMAGE_TAG=prod
 ```
@@ -19,7 +23,7 @@ IMAGE_TAG=dev
 ## How Updates Flow
 
 1. Push to `main` → CI builds `:latest` + `:<sha>`
-2. Manually tag a ring (`dev`, `pilot`, or `prod`)
+2. Manually tag a ring (`sandbox`, `dev`, `pilot`, or `prod`)
 3. Devices on that ring pull the new tag (Watchtower or manual `pull`)
 
 ## Build and Tag Images
@@ -28,6 +32,7 @@ IMAGE_TAG=dev
 
 Run the GitHub Action **build-and-push-images** and set `ring_tag`:
 
+- `ring_tag=sandbox` → publishes `:sandbox`
 - `ring_tag=dev` → publishes `:dev`
 - `ring_tag=pilot` → publishes `:pilot`
 - `ring_tag=prod` → publishes `:prod`
@@ -37,7 +42,7 @@ Run the GitHub Action **build-and-push-images** and set `ring_tag`:
 Run **promote-images** with:
 
 - `source_tag=<sha>`
-- `target_tag=dev|pilot|prod`
+- `target_tag=sandbox|dev|pilot|prod`
 
 This retags the existing image without rebuilding.
 
@@ -59,6 +64,7 @@ DEVICE_ID=pi-001
 You can use the helper scripts under `scripts/setup/` to stamp the ring and
 device metadata after running the fleet setup:
 
+- `scripts/setup/device_sandbox.sh`
 - `scripts/setup/device_dev.sh`
 - `scripts/setup/device_pilot.sh`
 - `scripts/setup/device_prod.sh`

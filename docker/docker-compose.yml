@@ -1,5 +1,5 @@
 # NOTE: This file is NOT used in any deployment.
-# All devices (dev, pilot, prod) download and run fleet-config/docker-compose.yml
+# All devices (sandbox, dev, pilot, prod) download and run fleet-config/docker-compose.yml
 # via deployment2.sh. This file is a legacy leftover and can be ignored.
 
 services:

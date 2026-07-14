@@ -187,7 +187,7 @@ Pass = `✓`, Fail = `✗` with reason. A failed test stops the script.
 | Test | Command | Pass Condition |
 |---|---|---|
 | DEVICE_ID set in device.env | `grep -q "DEVICE_ID=" /opt/aquila/config/device.env` | exits 0 |
-| IMAGE_TAG is valid ring | `grep -E "IMAGE_TAG=(dev\|pilot\|prod)" /opt/aquila/config/device.env` | exits 0 |
+| IMAGE_TAG is valid ring | `grep -E "IMAGE_TAG=(sandbox\|dev\|pilot\|prod)" /opt/aquila/config/device.env` | exits 0 |
 | aquila-backend running | `docker ps --filter name=aquila-backend --format '{{.Status}}' \| grep -q Up` | exits 0 |
 | aquila-app running | `docker ps --filter name=aquila-app --format '{{.Status}}' \| grep -q Up` | exits 0 |
 | aquila-ui running | `docker ps --filter name=aquila-ui --format '{{.Status}}' \| grep -q Up` | exits 0 |
