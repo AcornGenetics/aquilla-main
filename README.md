@@ -107,7 +107,7 @@ Hardware-only behavior that cannot be tested in CI should be documented with `@p
 ## Deployment Scripts
 - Base setup: `deployment1.sh`
 - Fleet setup: `scripts/setup_fleet_device.sh`
-- Ring helpers: `scripts/setup/device_dev.sh`, `scripts/setup/device_pilot.sh`, `scripts/setup/device_prod.sh`
+- Ring helpers: `scripts/setup/device_sandbox.sh`, `scripts/setup/device_dev.sh`, `scripts/setup/device_pilot.sh`, `scripts/setup/device_prod.sh`
 
 ## Device Enrollment (Device Certificate)
 

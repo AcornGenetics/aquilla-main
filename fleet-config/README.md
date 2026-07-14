@@ -11,7 +11,7 @@ templates intended to live on each device (or in a fleet-config repo).
 4. On each device, edit `/opt/aquila/config/device.env` with:
    - `DEVICE_ID`
    - `RUN_MODE`
-   - `IMAGE_TAG` (`dev`, `pilot`, or `prod`)
+   - `IMAGE_TAG` (`sandbox`, `dev`, `pilot`, or `prod`)
    - `WATCHTOWER_HTTP_API_TOKEN`
    - `GHCR_USERNAME`
    - `GHCR_TOKEN`
@@ -38,6 +38,7 @@ envsubst < /opt/fleet/vector.yaml.template > /opt/fleet/vector.yaml
 
 Optional: use the helper scripts to stamp the ring on a device after setup:
 
+- `scripts/setup/device_sandbox.sh`
 - `scripts/setup/device_dev.sh`
 - `scripts/setup/device_pilot.sh`
 - `scripts/setup/device_prod.sh`
@@ -54,7 +55,7 @@ docker compose --env-file /opt/aquila/config/device.env -f /opt/fleet/docker-com
 
 Use the GitHub Actions workflows:
 
-- `build-and-push-images`: optional `ring_tag` input to publish `dev/pilot/prod`
+- `build-and-push-images`: optional `ring_tag` input to publish `sandbox/dev/pilot/prod`
 - `promote-images`: retag `source_tag` to `target_tag`
 
 ## Watchtower API Example

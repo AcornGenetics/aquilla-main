@@ -12,6 +12,14 @@ A single physical Aquilla PCR instrument — a Raspberry Pi running the Aquilla 
 **Fleet**
 The collection of all deployed Sentri units. Analytics queries span the fleet; device-level queries scope to a single Sentri. There is one prod fleet; there is no separate physical "dev fleet."
 
+**Ring**
+A deployment tier a Sentri belongs to, selected by the `IMAGE_TAG` in its `device.env` and rolled out via Watchtower pulling the matching GHCR image tag. Every ring uses the identical mechanism (image tag + Watchtower); rings differ only in audience and update cadence. Ordered lowest-to-highest, promotion flows **sandbox → dev → pilot → prod**:
+- **sandbox** — throwaway / breakable units (bench, local compose); experiment freely, nothing here is relied on.
+- **dev** — in-house Sentri products in real daily use by the team; must work, but eat updates first.
+- **pilot** — the soak/hold gate: promote here, then let it bake before customers ("stop pushing" ring).
+- **prod** — customer devices; full rollout.
+See `docs/deployment/ring_rollout.md`; promotion is manual via the `promote-images` workflow (ADR-002).
+
 **Sentri Analytics Platform** _(being split — see ADR-015)_
 Historically "the separate system (repo `Acorn/sentri-analytics`) that owns cloud ingest and the analytics/query surface over Aurora." Under the six-repository split (`sentri-analytics/specs/six-repo-architecture.md`, ADR-015) this single "platform" is **decomposed**, so prefer the specific repo:
 - **`acorn-analytics`** — owns cloud **ingest** (the serverless Lambda pipeline) and the **analytics warehouse**. This is what the device POSTs to.

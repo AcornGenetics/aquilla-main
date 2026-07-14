@@ -132,7 +132,7 @@ test_phase_11() {
     local token
     token=$(grep WATCHTOWER_HTTP_API_TOKEN /opt/aquila/config/device.env | cut -d= -f2)
     check 11 "DEVICE_ID set"             "grep -q 'DEVICE_ID=' /opt/aquila/config/device.env"
-    check 11 "IMAGE_TAG is valid ring"   "grep -E 'IMAGE_TAG=(dev|pilot|prod)' /opt/aquila/config/device.env"
+    check 11 "IMAGE_TAG is valid ring"   "grep -E 'IMAGE_TAG=(sandbox|dev|pilot|prod)' /opt/aquila/config/device.env"
     check 11 "aquila-backend running"    \
         "docker ps --filter name=aquila-backend --format '{{.Status}}' | grep -q Up"
     check 11 "aquila-app running"        \

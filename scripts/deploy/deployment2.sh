@@ -329,7 +329,7 @@ phase_pass "all persistent directories created"
 phase_start 8 "Device Identity and Config Files"
 
 prompt_if_unset DEVICE_HOSTNAME "Enter device hostname (e.g. sn04)"
-prompt_if_unset IMAGE_TAG       "Enter IMAGE_TAG (dev/pilot/prod)"
+prompt_if_unset IMAGE_TAG       "Enter IMAGE_TAG (sandbox/dev/pilot/prod)"
 prompt_if_unset GHCR_USER       "Enter GHCR username"
 prompt_if_unset GHCR_TOKEN      "Enter GHCR personal access token"
 # Optional: second token for zero-downtime rotation (leave blank to skip)
@@ -886,7 +886,7 @@ fi
 WATCHTOWER_TOKEN=$(grep WATCHTOWER_HTTP_API_TOKEN /opt/aquila/config/device.env | cut -d= -f2)
 
 run_test "DEVICE_ID set"            "grep -q 'DEVICE_ID=' /opt/aquila/config/device.env"
-run_test "IMAGE_TAG is valid ring"   "grep -E 'IMAGE_TAG=(dev|pilot|prod)' /opt/aquila/config/device.env"
+run_test "IMAGE_TAG is valid ring"   "grep -E 'IMAGE_TAG=(sandbox|dev|pilot|prod)' /opt/aquila/config/device.env"
 run_test "aquila-backend running"    \
     "docker ps --filter name=aquila-backend --format '{{.Status}}' | grep -q Up"
 run_test "aquila-app running"        \

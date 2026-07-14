@@ -291,7 +291,7 @@ KIOSK_CONTROL_URL=http://host.docker.internal:9191
 - [ ] Create `docker/docker-compose.proxy.yml` (aquila-proxy)
 - [ ] Create `docker/nginx.proxy-a.conf` and `docker/nginx.proxy-b.conf`
 - [ ] Initialize state files: `active_slot=A`, `current_good_api_tag`, `current_good_ui_tag`
-- [ ] Update `scripts/setup/device_prod.sh` (and dev/pilot) to write initial `active_slot=A`
+- [ ] Update `scripts/setup/device_prod.sh` (and sandbox/dev/pilot) to write initial `active_slot=A`
 
 ### Phase 2 — Scripts
 
