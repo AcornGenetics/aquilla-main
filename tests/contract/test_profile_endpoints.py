@@ -104,6 +104,28 @@ def test_profile_details_nonexistent_returns_404(client):
     assert resp.status_code == 404
 
 
+@pytest.mark.contract
+def test_profile_details_by_name_resolves_profile_in_subdir(client):
+    """GET /profiles/details?name=<name> resolves a profile that lives in a
+    subdirectory (local/ or bundled/), not just the profiles root.
+
+    Regression for #312: the countdown race guard re-fetches the active profile's
+    estimate by name at run start (it only has the display name from the WS panel,
+    not the id). Profiles live in bundled/ and local/ subdirs, so a non-recursive
+    lookup 404s and the timer silently stays on the stopwatch.
+    """
+    name = "Name Lookup Subdir"
+    pid = _create_profile(client, name=name, estimated_minutes=45)
+    # a created profile lands under local/ — i.e. a subdirectory of the profiles root
+    assert pid.replace("\\", "/").startswith("local/")
+    try:
+        resp = client.get(f"/profiles/details?name={name}")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["estimated_completion_seconds"] == 45 * 60
+    finally:
+        _delete_profile(client, pid)
+
+
 # ---------------------------------------------------------------------------
 # POST /profiles/delete
 # ---------------------------------------------------------------------------

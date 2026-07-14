@@ -220,18 +220,56 @@ function setTimerLabel(text) {
   }
 }
 
-// Decide countdown vs. stopwatch for the active run and update the timer label.
-// Called when the running screen is entered; locks in the selected profile's estimate.
-function beginTimerMode() {
+// Monotonic token identifying the current run's timer session. Bumped on every
+// run-start and every reset so an estimate fetch that resolves late (after Reset
+// or a subsequent run) can detect it is stale and abstain (#312 race guard).
+let timerModeToken = 0;
+
+// Apply countdown-vs-stopwatch from an estimate value (null / non-positive =>
+// stopwatch) and update the timer label.
+function applyTimerMode(estimateSeconds) {
   countdownSeconds =
-    typeof cachedEstimateSeconds === "number" && cachedEstimateSeconds > 0
-      ? cachedEstimateSeconds
-      : null;
+    typeof estimateSeconds === "number" && estimateSeconds > 0 ? estimateSeconds : null;
   setTimerLabel(countdownSeconds != null ? TIMER_LABEL_REMAINING : TIMER_LABEL_ELAPSED);
 }
 
-// Reset timer to default stopwatch mode (run ended / stopped).
+// Decide countdown vs. stopwatch for the active run and update the timer label.
+// Called when the running screen is entered.
+//
+// The selection-warmed cache (`cachedEstimateSeconds`) is only a fast path: it is
+// populated solely by loadProfileLabels() on a UI selection, so after a run
+// completes and Reset clears the selected profile server-side (#275), a re-run of
+// the same profile re-enters `running` with a cold/stale cache and would wrongly
+// fall back to the stopwatch (#312). So we re-derive the mode from the
+// authoritative active profile (activeRunProfileName, set from the server panel)
+// via /profiles/details. This also covers runs started by the device's physical
+// button, which bypass notifyRun().
+function beginTimerMode() {
+  const token = ++timerModeToken;
+  applyTimerMode(cachedEstimateSeconds); // fast path: no flash when the cache is warm
+  const profileRef = activeRunProfileName;
+  if (!profileRef) {
+    return;
+  }
+  fetch(`/profiles/details?name=${encodeURIComponent(profileRef)}`)
+    .then((resp) => (resp.ok ? resp.json() : null))
+    .then((data) => {
+      // Ignore a late fetch: a Reset or a newer run has moved on (#312 race guard).
+      if (data == null || token !== timerModeToken || lastScreen !== "running") {
+        return;
+      }
+      setCachedEstimate(data.estimated_completion_seconds);
+      applyTimerMode(cachedEstimateSeconds);
+    })
+    .catch(() => {
+      /* keep the fast-path decision on network error (fall back to stopwatch) */
+    });
+}
+
+// Reset timer to default stopwatch mode (run ended / stopped). Also invalidates the
+// run token so any in-flight beginTimerMode() estimate fetch is ignored (#312).
 function resetTimerMode() {
+  timerModeToken++;
   countdownSeconds = null;
   setTimerLabel(TIMER_LABEL_ELAPSED);
 }
