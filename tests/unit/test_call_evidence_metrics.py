@@ -130,8 +130,11 @@ def test_empty_curve_emits_zero_signal_range_without_crashing(monkeypatch):
 
     assert by_name["signal_range"]["value"] == 0.0
     assert by_name["n_cycles"]["value"] == 0.0
-    # baseline_rfu over an empty raw curve has no floor -> 0.0 (np.mean([]) is nan).
-    assert by_name["baseline_rfu"]["value"] == 0.0
+    # baseline_rfu over an empty raw curve is UNKNOWN, not 0: emit None (like cq).
+    # A 0 would pool into the upstream all-time-median reference and drag it to 0,
+    # NULLing out the increase for every real run on the device (#319 follow-up).
+    assert by_name["baseline_rfu"]["value"] is None
+    assert by_name["cq"]["value"] is None
 
 
 def test_results_to_json_evidence_records_carry_the_metrics(tmp_path, monkeypatch):
