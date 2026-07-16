@@ -727,8 +727,11 @@ def evaluate_curve(curve, log_name, dye, well):
         # The RAW baseline floor (mean fluorescence over the baseline cycles of the
         # uncorrected curve) -- the level that drifts up as optics age. Feeds the
         # upstream Baseline Increase metric. Read from y_raw, NOT the baseline-
-        # corrected curve (whose baseline is ~0 by construction). Empty curve -> 0.0.
-        {"name": "baseline_rfu", "value": float(np.mean(get_baseline_values(y_raw, curve.baseline_slice))) if len(y_raw) else 0.0, "threshold": None, "passed": None},
+        # corrected curve (whose baseline is ~0 by construction). An empty curve's
+        # baseline is UNKNOWN, not 0: emit None (like cq), never 0.0. A 0 gets pooled
+        # into the upstream all-time-median reference and drags it to 0, which NULLs
+        # out the increase for every real run on the device (#319 follow-up).
+        {"name": "baseline_rfu", "value": float(np.mean(get_baseline_values(y_raw, curve.baseline_slice))) if len(y_raw) else None, "threshold": None, "passed": None},
     ])
     # Dedup by name (first wins): a check reused across typical/biphasic emits its
     # value once; a shared measure is not overwritten by a later duplicate.
