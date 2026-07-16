@@ -37,6 +37,10 @@ from aq_lib.optics_read_plan import READS_PER_CYCLE, optics_read_tasks
 from aquila_web.optics_readings import expected_lines
 
 logging.config.dictConfig( LOGGING_CONFIG )
+# Attach the dedicated homing log (its own rotated JSON-lines file, kept out of
+# logger.log). Motors home from this process, so wire it up here (ADR-021, #325).
+from aq_lib.homing_log import configure_homing_logger
+configure_homing_logger()
 logger = logging.getLogger( "aquila" )
 config = Config()
 
