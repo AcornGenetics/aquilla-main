@@ -43,6 +43,14 @@ def init_local_db() -> None:
             """
         )
         _add_missing_columns(connection)
+        # Dedup index for exactly-once Event loading (#326): a UNIQUE index on
+        # dedup_key backs INSERT OR IGNORE so re-parsing a source (e.g. the
+        # homing log) never double-enqueues. Nullable + UNIQUE lets existing
+        # Events keep dedup_key NULL -- SQLite allows many NULLs under UNIQUE.
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_dedup_key "
+            "ON events(dedup_key)"
+        )
         # Stamp the schema version, bumping forward only so a newer device DB
         # (a future migration) is never regressed by an older build.
         current_version = connection.execute("PRAGMA user_version").fetchone()[0]
@@ -52,7 +60,8 @@ def init_local_db() -> None:
 
 # The current on-device schema version, stamped into the DB header via
 # PRAGMA user_version (#305) so future non-additive migrations can gate on it.
-_SCHEMA_VERSION = 1
+# v2 (#326): additive dedup_key column + UNIQUE index.
+_SCHEMA_VERSION = 2
 
 
 # Additive quarantine columns for the size guard (#289). Applied as ALTER TABLE
@@ -63,24 +72,41 @@ _QUARANTINE_COLUMNS = {
     "quarantine_reason": "TEXT",
 }
 
+# Additive dedup column for exactly-once loading (#326). Added as ALTER TABLE so
+# an existing device DB upgrades in place; the UNIQUE index is created in
+# init_local_db once the column exists.
+_DEDUP_COLUMNS = {
+    "dedup_key": "TEXT",
+}
+
 
 def _add_missing_columns(connection: sqlite3.Connection) -> None:
     existing = {row["name"] for row in connection.execute("PRAGMA table_info(events)")}
-    for column, column_type in _QUARANTINE_COLUMNS.items():
+    for column, column_type in {**_QUARANTINE_COLUMNS, **_DEDUP_COLUMNS}.items():
         if column not in existing:
             connection.execute(f"ALTER TABLE events ADD COLUMN {column} {column_type}")
 
 
-def enqueue_event(event_type: str, payload: dict[str, Any], device_id: str | None = None) -> int:
+def enqueue_event(event_type: str, payload: dict[str, Any], device_id: str | None = None,
+                  dedup_key: str | None = None) -> int | None:
+    """Enqueue an Event on the outbox. Returns the new row id.
+
+    When ``dedup_key`` is given, the insert is idempotent: a repeat with the same
+    key is a no-op (INSERT OR IGNORE against the UNIQUE dedup index) and returns
+    ``None``. A ``None`` dedup_key never conflicts, so existing callers are
+    unaffected and always get a row id.
+    """
     resolved_device_id = device_id or os.getenv("AQ_SYNC_DEVICE_ID") or os.getenv("DEVICE_ID")
     with _connect() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO events (event_type, payload, device_id, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT OR IGNORE INTO events (event_type, payload, device_id, created_at, dedup_key)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (event_type, json.dumps(payload), resolved_device_id, _utc_now()),
+            (event_type, json.dumps(payload), resolved_device_id, _utc_now(), dedup_key),
         )
+        if cursor.rowcount == 0:
+            return None  # dedup_key already present -- already enqueued
         return int(cursor.lastrowid)
 
 

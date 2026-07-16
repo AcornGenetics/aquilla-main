@@ -20,14 +20,16 @@ One append-only queue. One row per Event.
 ```sql
 CREATE TABLE events (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type        TEXT NOT NULL,   -- run_complete | optics_readings | call_evidence
+    event_type        TEXT NOT NULL,   -- run_complete | optics_readings | call_evidence | homing_sample
     payload           TEXT NOT NULL,   -- the Event body, as a JSON string
     device_id         TEXT,            -- Sentri Device ID (Pi serial)
     created_at        TEXT NOT NULL,   -- when enqueued (UTC ISO-8601)
     synced_at         TEXT,            -- when the Ingest Endpoint accepted it; NULL = pending
     quarantined_at    TEXT,            -- set only if the Event can't be synced even alone
-    quarantine_reason TEXT
+    quarantine_reason TEXT,
+    dedup_key         TEXT             -- optional idempotency key; UNIQUE index, NULL for most Events
 );
+CREATE UNIQUE INDEX idx_events_dedup_key ON events(dedup_key);
 ```
 
 - **`synced_at`** means *"accepted by the Ingest Endpoint (HTTP 2xx)"* — i.e.
@@ -35,6 +37,10 @@ CREATE TABLE events (
   archive is the source of truth; see **ADR-020**.
 - **Pending** = `synced_at IS NULL`. **Quarantined** = `quarantined_at IS NOT NULL`
   (retained for diagnosis, never synced, never auto-pruned — the #289 size guard).
+- **`dedup_key`** is an optional idempotency key backing `INSERT OR IGNORE`, so a
+  parser that re-reads its source never double-enqueues (#326). Most Events leave
+  it `NULL` (many NULLs coexist under the UNIQUE index); `homing_sample` sets it
+  to the Sample `id`.
 - Retention (prune synced Events past a window) lives in **ADR-020**, not here.
 
 ---
@@ -96,6 +102,29 @@ Metric/Check: `name`, `value`, `threshold`, `passed`).
 
 **→ warehouse:** `fact_call_evidence` (summary, one row per Call) +
 `fact_call_evidence_metric` (long, one row per Metric name).
+
+### `homing_sample`
+
+One [Homing Sample](../CONTEXT.md#glossary) per motor homing operation (ADR-021).
+**Not** Run-scoped: homing recurs within and between Runs, so a Sample carries no
+`run_timestamp` — the warehouse correlates it to a Run (or "idle") by timestamp.
+The device is a dumb sampler; drift and miss-rate are derived downstream.
+
+Written by `motor_class` as JSON lines to the dedicated homing log (#325), then
+loaded into this table by the backend parser (#326) with `dedup_key` = the
+Sample `id`, so re-parsing the log (or a rotation) is idempotent.
+
+| Field | Meaning |
+|---|---|
+| `id` | Unique per-Sample id (UUID); also the `dedup_key` |
+| `ts` | When the homing occurred (device UTC ISO-8601) |
+| `motor` | `"drawer"` or `"axis"` |
+| `steps_to_flag` | Steps taken to reach the home flag |
+| `residual` | Position error at homing, before it is zeroed |
+| `reached_home` | Home sensor after the move; `false` = a missed homing |
+
+**→ warehouse:** `fact_homing_sample` (one row per Sample; miss-rate and drift are
+derived views — acorn-analytics, issues #327–#328).
 
 ---
 
