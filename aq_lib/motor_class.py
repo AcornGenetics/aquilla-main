@@ -6,6 +6,7 @@ import logging
 import RPi.GPIO as GPIO
 from RPi.GPIO import HIGH, LOW, IN, OUT, BCM
 from aq_lib.config_module import Config
+from aq_lib.homing_log import emit_homing_sample
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger( "aquila.motor" )
@@ -37,11 +38,19 @@ class Motor():
 
         logger.info("Homing using %d steps", steps)
         ret = self.move_w_home_flag( -steps, 0.0020 )
-        if self.isHome():
+        residual = self.position
+        reached_home = bool( self.isHome() )
+        if reached_home:
             self.reset_position()
         else:
             logger.error("Did not reach home.")
 
+        emit_homing_sample(
+            self.motor_name,
+            steps_to_flag=ret,
+            residual=residual,
+            reached_home=reached_home,
+        )
         return ret
 
     def reset_position( self ):
@@ -132,7 +141,8 @@ class Motor():
 
 class Drawer ( Motor ):
 
-    EN_PIN = 12 
+    motor_name = "drawer"
+    EN_PIN = 12
     STEP_PIN = 5
     DIR_PIN = 25
     HME_PIN = 24
@@ -159,6 +169,7 @@ class Drawer ( Motor ):
 
 class Axis ( Motor ):
 
+    motor_name = "axis"
     EN_PIN = 26
     STEP_PIN = 19
     DIR_PIN = 13

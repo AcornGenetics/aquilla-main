@@ -11,7 +11,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @pytest.fixture
@@ -36,11 +36,11 @@ def test_init_does_not_regress_a_higher_version(db):
     # A DB already stamped at a future version must not be lowered by init.
     db.init_local_db()
     with sqlite3.connect(db.get_db_path()) as conn:
-        conn.execute("PRAGMA user_version = 2")
+        conn.execute("PRAGMA user_version = 3")
 
     db.init_local_db()
 
-    assert _user_version(db) == 2
+    assert _user_version(db) == 3
 
 
 def test_init_is_idempotent(db):

@@ -73,6 +73,7 @@ class MockGPIO:
         self.pins = {}
         self.mode = None
         self._home_pins = set()  # pins that simulate a home flag
+        self._trip_countdown = {}  # pin -> remaining input() reads that stay LOW
 
     def setmode(self, mode):
         self.mode = mode
@@ -89,6 +90,11 @@ class MockGPIO:
         self.pins[pin]["val"] = value
 
     def input(self, pin):
+        if pin in self._trip_countdown:
+            if self._trip_countdown[pin] > 0:
+                self._trip_countdown[pin] -= 1
+                return 0
+            return 1
         return self.pins.get(pin, {}).get("val", 0)
 
     def cleanup(self):
@@ -100,6 +106,14 @@ class MockGPIO:
             self.pins[pin] = {"dir": self.IN, "val": value}
         else:
             self.pins[pin]["val"] = value
+
+    def trip_home_flag_after(self, pin, low_reads):
+        """Home flag reads LOW for `low_reads` input() calls, then HIGH.
+
+        Lets a test drive the home flag to trip mid-travel: the motor polls the
+        pin once per step, so the flag catches after `low_reads` polls.
+        """
+        self._trip_countdown[pin] = low_reads
 
 
 # ---------------------------------------------------------------------------
