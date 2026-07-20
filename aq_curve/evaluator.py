@@ -294,7 +294,7 @@ def check_no_rapid_terminal_rise(curve_data, curve):
     left AND covers more than PCR_RAPID_RISE_FRACTION of the total signal range
     in the first three post-rise cycles is an unphysiologically fast artifact.
     """
-    _, y_corrected, _ = curve_data
+    xdata, y_corrected, _ = curve_data
     threshold, _ = get_threshold(y_corrected, curve.baseline_slice)
     min_consecutive = config.get_int("PCR_SUSTAINED_CYCLES")
     rise_idx = sustained_rise_index(y_corrected, threshold, min_consecutive)
@@ -304,7 +304,14 @@ def check_no_rapid_terminal_rise(curve_data, curve):
     n = len(y_corrected)
     cycles_remaining = n - rise_idx
     max_remaining = config.get_int("PCR_RAPID_RISE_MAX_REMAINING")
-    if cycles_remaining >= max_remaining:
+    onset_cycle = float(xdata[rise_idx]) if rise_idx < len(xdata) else float(n)
+    late_cycle = config.get_float("PCR_RAPID_RISE_LATE_CYCLE")
+    # A rise is "terminal" if it starts in the last few cycles OR its onset is
+    # after the late-cycle cutoff (35). The cycles-remaining test alone lets a
+    # steep rise that starts exactly at cycle 36 (5 cycles left) slip through as
+    # non-terminal; anchoring to the absolute cycle catches any rapid rise that
+    # first emerges after cycle 35.
+    if cycles_remaining >= max_remaining and onset_cycle <= late_cycle:
         return True
 
     signal_range = float(np.max(y_corrected)) - float(np.min(y_corrected))

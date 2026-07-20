@@ -29,6 +29,10 @@ DEFAULTS = {
     "PCR_MIN_ABS_SIGNAL": 0.25,
     "PCR_RAPID_RISE_MAX_REMAINING": 5,
     "PCR_RAPID_RISE_FRACTION": 0.65,
+    # A sustained rise that first emerges AFTER this cycle is treated as a
+    # terminal rise regardless of how many cycles remain: genuine amplification
+    # does not first appear this late, so a rapid rise past it is an artifact.
+    "PCR_RAPID_RISE_LATE_CYCLE": 35,
     "PCR_MIN_FOLD": 0.015,
     "PCR_MIN_PEAK_FRACTION": 0.35,
     "PCR_MIN_RISE_CYCLES": 3,

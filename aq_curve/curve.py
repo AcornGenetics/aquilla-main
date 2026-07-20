@@ -237,6 +237,17 @@ class Curve:
             # Fallback to original fit if too few points remain
             filtered_coeffs = coeffs
 
+        # Guardrail: never allow a downward-tilting baseline. A negative-slope
+        # baseline is the ONLY way linear correction can manufacture a rising
+        # curve from a flat/decaying raw signal — extrapolated past the fit
+        # window it sinks below a stationary signal and fabricates fake
+        # amplification (e.g. a bright photobleaching well read as Detected).
+        # Clamping to a flat baseline anchored at the window mean lets
+        # correction remove offset but never invent a rise; it can only ever
+        # lower an apparent signal, so it cannot create a false positive.
+        if filtered_coeffs[0] < 0:
+            filtered_coeffs = numpy.array([0.0, float(numpy.mean(ydata[start:end]))])
+
         return filtered_coeffs
 
     @staticmethod

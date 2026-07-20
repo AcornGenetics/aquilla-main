@@ -258,3 +258,50 @@ def test_unknown_evaluate_status_gives_inconclusive(tmp_path, monkeypatch):
     for row_key in ("1", "2"):
         for col_key in ("1", "2", "3", "4"):
             assert data[row_key][col_key] == "Inconclusive"
+
+
+# ---------------------------------------------------------------------------
+# baseline() slope clamp — a downward baseline may never be produced, because
+# a negative-slope baseline is what fabricates fake amplification out of a flat
+# photobleaching signal (see run7 tube 4).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_baseline_negative_slope_is_clamped_to_flat():
+    """A raw signal that decays over the baseline window must yield a flat
+    (zero-slope) baseline anchored at the window mean, not a downward line."""
+    curve = Curve(src_basedir=str(OPTICS_LOG.parent))
+    x = np.arange(1, 41, dtype=float)
+    y = 10.0 - 0.1 * x  # strictly decreasing -> negative fitted slope
+    start, end = curve.baseline_slice
+    slope, intercept = curve.baseline(x, y)
+    assert slope == 0.0
+    assert intercept == pytest.approx(float(np.mean(y[start:end])))
+
+
+@pytest.mark.unit
+def test_baseline_positive_slope_is_untouched():
+    """A genuinely rising baseline window keeps its fitted slope — the clamp
+    only removes downward tilt, so real positives are unaffected."""
+    curve = Curve(src_basedir=str(OPTICS_LOG.parent))
+    x = np.arange(1, 41, dtype=float)
+    y = 5.0 + 0.02 * x  # positive slope
+    slope, _ = curve.baseline(x, y)
+    assert slope > 0.0
+
+
+@pytest.mark.unit
+def test_baseline_clamp_kills_photobleach_artifact():
+    """Decay-then-flat trace (bleaching well, no real amplification): after the
+    clamp the baseline-corrected endpoint must not be a positive rise."""
+    curve = Curve(src_basedir=str(OPTICS_LOG.parent))
+    x = np.arange(1, 41, dtype=float)
+    # steep early decay that flattens by ~cycle 17, then dead flat (the run7
+    # tube-4 shape). Without the clamp the extrapolated line manufactures a
+    # large positive endpoint (~+1.7); with it the endpoint stays <= threshold.
+    y = np.concatenate([7.4 - 0.1 * np.arange(16), np.full(24, 5.9)])
+    slope, intercept = curve.baseline(x, y)
+    corrected_end = y[-1] - slope * x[-1] - intercept
+    assert slope == 0.0
+    assert corrected_end <= 0.2  # no fabricated amplification above threshold

@@ -108,6 +108,32 @@ def test_rapid_terminal_rise_fails_when_covers_full_range():
 # Edge cases
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Fails: rapid rise whose onset is after cycle 35 (absolute late-cycle cutoff),
+# even with exactly PCR_RAPID_RISE_MAX_REMAINING cycles left.
+# ---------------------------------------------------------------------------
+
+def test_rapid_rise_onset_after_cycle_35_fails():
+    """A steep rise starting at cycle 36 (index 35, 5 cycles remaining) is a
+    terminal artifact: the cycles-remaining test alone would pass it, but the
+    absolute cycle-35 cutoff flags it as rapid."""
+    baseline = [0.0] * 35
+    tail = [0.2, 0.6, 1.0, 1.0, 1.0]  # onset at cycle 36, jumps most of range in 3
+    y = baseline + tail  # 40 cycles
+    # remaining = 5 (== max_remaining, would early-pass), but onset cycle 36 > 35
+    # so steepness is evaluated: fraction = (1.0-0.2)/1.0 = 0.8 > 0.65 → fails
+    assert check_no_rapid_terminal_rise(_cd(y), _make_curve()) is False
+
+
+def test_gradual_rise_after_cycle_35_still_passes():
+    """A slow rise emerging after cycle 35 is a late-Cq signal, not rapid —
+    the cutoff only fails it when the rise is also steep."""
+    baseline = [0.0] * 35
+    gradual = [0.1, 0.2, 0.35, 0.55, 0.80]  # onset cycle 36 but shallow
+    y = baseline + gradual
+    assert check_no_rapid_terminal_rise(_cd(y), _make_curve()) is True
+
+
 def test_no_rise_passes():
     """Flat noise with no sustained rise passes the check."""
     y = [0.0 + 0.01 * np.sin(i) for i in range(40)]
