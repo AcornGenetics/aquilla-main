@@ -12,10 +12,14 @@ logger = logging.getLogger( "aquila_app" )
 def main():
     try:
         ai = AssayInterface()
+        run_armed = False
         while True:
-            ai.ready()
+            # When end() already armed a run from the results screen (#333),
+            # skip ready() so the operator's single Run press starts it.
+            if not run_armed:
+                ai.ready()
             ai.run()
-            ai.end()
+            run_armed = ai.end()
     except Exception as e:
         print("Exception caught in execution of application")
         print ( e )
