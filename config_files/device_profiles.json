@@ -10,11 +10,11 @@
         "profile_editing_disabled": true
     },
     "sn04": {
-        "profile_group": "breweries",
+        "profile_group": "sn04 brewery",
         "profile_editing_disabled": true
     },
     "sn05": {
-        "profile_group": "duke"
+        "profile_group": "sn05 brewery"
     },
     "sn06": {
         "profile_group": "sn06 brewery",

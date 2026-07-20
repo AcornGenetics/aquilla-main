@@ -16,7 +16,18 @@
     "breweries": [
         "Beer_Spoilers_Bacteria.json"
     ],
+    "sn04 brewery": [
+        "ABBA_sn004.json"
+        ],
+    "sn05 brewery": [
+        "ABBA_sn005.json",
+        "O157__ESBL_full.json",
+        "ryan_thermal_tests.json",
+        "STEC_and_EPEC_Hygiena1.75_no37Cstep.json",
+        "verification_profile.json"
+    ],
     "sn06 brewery": [
         "ABBA_ramp1.75_EA30_sn006.json"
     ]
+    
 }
