@@ -357,17 +357,28 @@ class AssayInterface():
 
     def end( self ):
         #End of run
+        # Returns True if the operator armed another run from the results
+        # screen (issue #333), so the caller can start it directly instead of
+        # falling back to ready() — which would silently eat the first press.
         if self.run_aborted:
             self.run_aborted = False
             sr.timer_control( "stop" )
             sr.timer_control( "reset" )
             sr.change_screen("1")
-            return
+            return False
         sr.timer_control( "stop" )
         time.sleep(2)
         sr.timer_control( "reset" )
         sr.change_screen("3")
-        self.button_logic( state = "end" ) 
+        profile, run_name = self.button_logic( state = "end" )
+        if profile is not None:
+            # Run pressed on the results screen: arm the next run here,
+            # mirroring ready() (self.run_name / self.thermal_profile), so the
+            # single press that got us out of button_logic actually runs.
+            self.run_name = run_name
+            self.thermal_profile = ("profiles/" + profile)
+            return True
+        return False
 
     def _monitor_stop_request(self, stop_event: Event, stop_monitor_event: Event) -> None:
         while not stop_monitor_event.is_set() and not stop_event.is_set():
