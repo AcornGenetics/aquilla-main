@@ -675,6 +675,14 @@ def evaluate_curve(curve, log_name, dye, well):
     if spike_only_crossings:
         threshold_pass = False
 
+    # Hard negative cutoff: any crossing after PCR_CQ_HARD_MAX is a negative, full
+    # stop. A genuine target does not first emerge this late; a crossing past it is
+    # non-specific (primer-dimer, contamination, terminal artifact spike). This
+    # overrides the late-Cq-confident rescue below — no shape or fold evidence can
+    # promote a too-late crossing to Detected.
+    hard_max_cq = config.get_float("PCR_CQ_HARD_MAX")
+    cq_after_hard_max = cq is not None and hard_max_cq is not None and cq > hard_max_cq
+
     # Evaluate late-Cq confidence up-front so it can override strict shape checks
     # that are inherently harder to pass for a signal that barely emerged near run-end.
     if cq is not None and cq >= late_threshold:
@@ -695,7 +703,10 @@ def evaluate_curve(curve, log_name, dye, well):
         late_ok = False
         late_confident = False
 
-    if late_confident:
+    if cq_after_hard_max:
+        status = "undetected"
+        decision_reason = "cq_after_hard_max"
+    elif late_confident:
         status = "detected"
         decision_reason = "late_cq_confident"
     elif not threshold_pass or not signal_range_pass:
@@ -770,5 +781,6 @@ def evaluate_curve(curve, log_name, dye, well):
             "late_ok": bool(late_ok),
             "late_confident": bool(late_confident),
             "signal_range_pass": bool(signal_range_pass),
+            "cq_after_hard_max": bool(cq_after_hard_max),
         },
     }

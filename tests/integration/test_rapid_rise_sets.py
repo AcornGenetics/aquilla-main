@@ -3,8 +3,8 @@ Integration tests: rapid terminal rise detection against real optics log files.
 
 Each test verifies one of four labeled testing sets:
 
-  Set 1  — Normal run. All tubes detected except rox2 which is a slow late-Cq
-            rise that SHOULD still be detected.
+  Set 1  — Normal run. All tubes detected except rox2, whose crossing is past the
+            hard Cq cutoff (PCR_CQ_HARD_MAX) and is therefore Not Detected.
   Set 2  — Tube 4 (fam + rox) has a rapid terminal rise and must be undetected.
   Set 3  — All tubes undetected (noise or rapid artifacts).
   Set 4  — Tube 1 (fam + rox) undetected due to rapid terminal rise.
@@ -54,9 +54,9 @@ class TestSet1:
     def setup_method(self):
         _skip_if_missing(SET1)
 
-    def test_rox2_slow_rise_detected(self, curve):
-        """Rox 2 in set 1 is a genuine slow late-Cq signal and must be detected."""
-        assert _status(curve, SET1, "rox", 2) == "detected"
+    def test_rox2_past_hard_cutoff_undetected(self, curve):
+        """Rox 2 in set 1 crosses past PCR_CQ_HARD_MAX (Cq ~38.8) — Not Detected."""
+        assert _status(curve, SET1, "rox", 2) == "undetected"
 
     def test_rox2_not_flagged_as_rapid(self, curve):
         """Rox 2 rises slowly — the rapid-rise check must pass (return False)."""

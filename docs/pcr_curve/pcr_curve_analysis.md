@@ -65,7 +65,8 @@ All constants can be overridden per-device via environment variables. Defaults a
 | Constant | Default | Meaning |
 |---|---|---|
 | `PCR_CQ_MIN` | 7 | Earliest acceptable Cq cycle |
-| `PCR_CQ_MAX` | 40 | Latest acceptable Cq cycle |
+| `PCR_CQ_MAX` | 40 | Latest acceptable Cq cycle (typical-path cycle-location check) |
+| `PCR_CQ_HARD_MAX` | 36 | Hard negative cutoff — any Cq strictly greater is Not Detected, overriding the late-Cq-confident path |
 
 ### Log-phase
 
@@ -173,7 +174,8 @@ Run in parallel with typical checks. All operate on the post-rise segment.
 ```
 compute Cq and evaluate late-Cq confidence upfront
 
-if late_confident                                        →  "detected"
+if cq > PCR_CQ_HARD_MAX                                   →  "undetected"
+elif late_confident                                      →  "detected"
 elif threshold_crossing fails OR signal_range fails      →  "undetected"
 elif mountain_shape OR rapid_terminal_rise               →  "undetected"
 elif cq is None AND no sustained_increase                →  "undetected"
@@ -185,6 +187,7 @@ else                                                     →  "inconclusive"
 ```
 
 Where:
+- `cq > PCR_CQ_HARD_MAX` = hard negative cutoff: a crossing later than cycle `PCR_CQ_HARD_MAX` (36) is Not Detected regardless of shape or fold evidence — a genuine target does not first emerge this late, so a later crossing is non-specific. This is checked first and overrides the late-Cq-confident rescue.
 - `typical_pass` = threshold passes AND no baseline check fails AND no other check fails AND not a test run
 - `biphasic_pass` = threshold passes AND all biphasic checks pass AND not a test run
 - `late_ok` = `check_late_cq_tier` passes (per-cycle fold ≥ `PCR_LATE_PER_CYCLE_FOLD_MIN`)
