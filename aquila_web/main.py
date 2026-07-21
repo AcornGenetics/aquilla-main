@@ -2279,13 +2279,33 @@ async def _background_update_poller() -> None:
 _SYNC_INTERVAL_SECONDS = int(os.getenv("AQ_SYNC_INTERVAL_SECONDS", "900"))
 
 
+def _import_homing_samples_safely() -> None:
+    """Load Homing Samples from the on-device homing log into the outbox before a
+    flush (ADR-021, issue #326). motor_class writes Samples to a dedicated homing
+    log but never enqueues them; the backend owns the outbox, so the import runs
+    here on the sync cadence. A parse failure must never block the flush of other
+    Events, so it is logged and swallowed -- the Samples retry next cycle."""
+    from aquila_web.homing_parser import import_homing_samples
+    from aq_lib.homing_log import DEFAULT_LOG_DIR
+    log_dir = os.getenv("AQ_HOMING_LOG_DIR", DEFAULT_LOG_DIR)
+    try:
+        imported = import_homing_samples(log_dir)
+        if imported:
+            logger.info("Imported %d Homing Sample(s) into the outbox", imported)
+    except Exception as exc:  # noqa: BLE001 - never block the flush on homing import
+        logger.warning("Homing import failed (will retry next cycle): %s", exc)
+
+
 def _run_sync_cycle() -> int:
-    """One outbox reconciliation: push pending Events, then prune long-since-synced
-    ones (ADR-020). Cleanup runs only after a flush -- never on an independent
-    clock -- and only touches synced Events past the retention window; pending and
-    quarantined Events are always retained. Returns the number of Events synced."""
+    """One outbox reconciliation: import new Homing Samples from the on-device
+    homing log into the outbox (ADR-021), push pending Events, then prune
+    long-since-synced ones (ADR-020). Cleanup runs only after a flush -- never on
+    an independent clock -- and only touches synced Events past the retention
+    window; pending and quarantined Events are always retained. Returns the number
+    of Events synced."""
     from aquila_web.sync import sync_pending_events
     from aquila_web.local_db import cleanup_synced_events
+    _import_homing_samples_safely()
     synced = sync_pending_events()
     cleanup_synced_events()
     return synced
