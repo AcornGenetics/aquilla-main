@@ -184,6 +184,81 @@ class TestSyncFlushEndpoint:
         assert len(local_db.get_pending_events()) == 1
 
 
+class TestNonFiniteFloats:
+    """A NaN/Infinity metric must not wedge the outbox. JSON has no NaN token, so
+    a single non-finite value (e.g. a fold-change over a zero baseline) otherwise
+    raises InvalidJSONError on serialize, fails the whole batch, and blocks every
+    event behind it indefinitely. Such values POST as null and the run still flows."""
+
+    def _seed_nan_event(self, local_db):
+        # A call_evidence event whose per-Well metrics came out non-finite.
+        local_db.enqueue_event(
+            "call_evidence",
+            {"evidence": [{"metrics": [
+                {"name": "fold_change", "value": float("nan")},
+                {"name": "ct", "value": float("inf")},
+                {"name": "baseline_sd", "value": float("-inf")},
+                {"name": "delta", "value": 0.8},
+            ]}]},
+        )
+
+    def test_non_finite_metrics_post_as_null_and_the_batch_syncs(self, db_client, tmp_path, monkeypatch):
+        client, local_db = db_client
+        self._seed_nan_event(local_db)
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+
+        captured = {}
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            captured.update(kw)
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        response = client.post("/sync/flush")
+
+        # The poisoned event no longer blocks the flush.
+        assert response.json()["synced"] == 1
+        metrics = captured["json"]["events"][0]["payload"]["evidence"][0]["metrics"]
+        by_name = {m["name"]: m["value"] for m in metrics}
+        assert by_name["fold_change"] is None   # NaN -> null
+        assert by_name["ct"] is None            # Infinity -> null
+        assert by_name["baseline_sd"] is None   # -Infinity -> null
+        assert by_name["delta"] == 0.8          # finite values pass through untouched
+
+    def test_poison_event_does_not_block_healthy_events_behind_it(self, db_client, tmp_path, monkeypatch):
+        import json as _json
+        import requests as _requests
+
+        client, local_db = db_client
+        self._seed_nan_event(local_db)                                  # id 1: poisoned
+        local_db.enqueue_event("run_complete", {"run_name": "Run 2"})   # id 2: healthy
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        # Faithful to on-device requests: json= is strictly serialized, and a
+        # non-finite float raises InvalidJSONError (a RequestException) rather
+        # than emitting an illegal `NaN` token. This is the wedge we're fixing.
+        def _strict_post(*a, **kw):
+            try:
+                _json.dumps(kw["json"], allow_nan=False)
+            except ValueError as exc:
+                raise _requests.exceptions.InvalidJSONError(exc)
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _strict_post)
+        response = client.post("/sync/flush")
+
+        assert response.json()["synced"] == 2
+        assert local_db.get_pending_events() == []
+
+
 class TestMaxMessageBytesValidation:
     """AQ_SYNC_MAX_MESSAGE_BYTES is validated so a misconfigured value can't
     crash the flush or drive the cap negative and mass-quarantine every event."""
