@@ -184,6 +184,83 @@ class TestSyncFlushEndpoint:
         assert len(local_db.get_pending_events()) == 1
 
 
+class TestHomingSampleImport:
+    """The sync cycle imports Homing Samples from the on-device homing log into
+    the outbox and flushes them upstream (ADR-021 wiring, issue #326). Without
+    this, samples sit in homing.log forever, never become Events, and never reach
+    the warehouse -- so the Homing Misses metric stays empty fleet-wide."""
+
+    def _write_homing_log(self, tmp_path, *lines):
+        log_dir = tmp_path / "logs" / "homing"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        (log_dir / "homing.log").write_text("".join(line + "\n" for line in lines))
+        return log_dir
+
+    def _sample(self, sid, motor="axis", reached=True):
+        import json
+        return json.dumps({
+            "id": sid, "ts": "2026-07-21T20:00:00Z", "motor": motor,
+            "steps_to_flag": 100, "residual": 0, "reached_home": reached,
+        })
+
+    def test_flush_imports_the_homing_log_and_syncs_the_samples(self, db_client, tmp_path, monkeypatch):
+        client, local_db = db_client
+        log_dir = self._write_homing_log(
+            tmp_path, self._sample("aaa", "axis", True), self._sample("bbb", "drawer", False)
+        )
+        monkeypatch.setenv("AQ_HOMING_LOG_DIR", str(log_dir))
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+
+        posted = []
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        def _capture(*a, **kw):
+            posted.append(kw["json"])
+            return _OK()
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", _capture)
+        resp = client.post("/sync/flush")
+
+        # Both Homing Samples became homing_sample Events and flushed upstream.
+        assert resp.json()["synced"] == 2
+        types = [e["event_type"] for body in posted for e in body["events"]]
+        assert types.count("homing_sample") == 2
+        assert local_db.get_pending_events() == []
+
+    def test_reflush_does_not_double_enqueue_the_same_samples(self, db_client, tmp_path, monkeypatch):
+        client, local_db = db_client
+        log_dir = self._write_homing_log(tmp_path, self._sample("aaa"), self._sample("bbb"))
+        monkeypatch.setenv("AQ_HOMING_LOG_DIR", str(log_dir))
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", lambda *a, **kw: _OK())
+
+        assert client.post("/sync/flush").json()["synced"] == 2
+        # Same log, second cycle: dedup by sample id means nothing new to enqueue.
+        assert client.post("/sync/flush").json()["synced"] == 0
+
+    def test_missing_homing_log_does_not_break_the_sync_cycle(self, db_client, tmp_path, monkeypatch):
+        client, local_db = db_client
+        _seed_event(local_db, tmp_path)  # a normal run_complete event, no homing log
+        monkeypatch.setenv("AQ_HOMING_LOG_DIR", str(tmp_path / "no" / "such" / "dir"))
+        monkeypatch.setenv("AQ_SYNC_ENDPOINT", "http://fake-aws/ingest")
+
+        class _OK:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        monkeypatch.setattr("aquila_web.sync.requests.post", lambda *a, **kw: _OK())
+        # A missing homing log is a no-op; the run_complete still syncs normally.
+        assert client.post("/sync/flush").json()["synced"] == 1
+
+
 class TestNonFiniteFloats:
     """A NaN/Infinity metric must not wedge the outbox. JSON has no NaN token, so
     a single non-finite value (e.g. a fold-change over a zero baseline) otherwise
