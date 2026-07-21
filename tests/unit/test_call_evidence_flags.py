@@ -18,6 +18,7 @@ FLAG_KEYS = {
     "threshold_pass", "spike_only_crossings", "test_run", "typical_pass",
     "biphasic_pass", "baseline_fail", "mountain_shape_detected",
     "rapid_rise_detected", "late_ok", "late_confident", "signal_range_pass",
+    "cq_after_hard_max",
 }
 
 
