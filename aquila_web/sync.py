@@ -1,5 +1,6 @@
 import base64
 import binascii
+import math
 import os
 import logging
 from typing import Any
@@ -136,10 +137,30 @@ def _chunk_events(event: dict, cap: int, device_id: str | None) -> list[dict] | 
     return chunks
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively replace non-finite floats (NaN, +/-Infinity) with None.
+
+    JSON has no NaN/Infinity token, so a single non-finite value -- e.g. a
+    per-Well metric like a fold-change over a zero baseline, or a Ct that never
+    crossed -- makes the batch fail to serialize (InvalidJSONError). Left
+    unguarded that poisons the oldest batch and wedges the entire outbox
+    indefinitely, since the same event is retried at the front every flush. A
+    non-finite number carries no value a consumer can use, so null is its
+    faithful representation and the run still reaches the warehouse.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    return value
+
+
 def _post_batch(endpoint: str, body: dict[str, Any], cert, timeout: int) -> bool:
     """POST one batch; True on success, False on network error (caller retries)."""
     try:
-        response = requests.post(endpoint, json=body, cert=cert, timeout=timeout)
+        response = requests.post(endpoint, json=_json_safe(body), cert=cert, timeout=timeout)
         response.raise_for_status()
         return True
     except requests.exceptions.RequestException as exc:
