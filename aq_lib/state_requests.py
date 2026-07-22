@@ -171,6 +171,19 @@ def reset_stop_request() -> None:
     except requests.exceptions.RequestException as e:
         logger.exception("Error resetting stop request: %s", e)
 
+def reset_run_request() -> None:
+    # Consume a latched run-request edge WITHOUT clearing the selected profile.
+    # /button/run sets run_requested=True even while a run is in progress and
+    # nothing acks it until end() next polls, so a Run press (e.g. a double-tap
+    # at run start) survives the whole run and would arm a phantom next run
+    # (#333 regression). Uses /run_requested/ack — NOT /run_status/reset — so
+    # the profile stays set and a genuine results-screen press can still reuse
+    # it (#275).
+    try:
+        requests.post(f"{BACKEND_URL}/run_requested/ack", timeout=5)
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error resetting run request: %s", e)
+
 _stop_poll_failures = 0
 _STOP_POLL_FAILURE_LIMIT = 10
 

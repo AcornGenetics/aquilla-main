@@ -370,6 +370,13 @@ class AssayInterface():
         time.sleep(2)
         sr.timer_control( "reset" )
         sr.change_screen("3")
+        # Drop any Run press that was latched during the run before we inspect
+        # the button (#333 regression): /button/run keeps setting run_requested
+        # mid-run, so a double-tap at run start would still be pending here and
+        # arm a phantom next run. Clearing it now means only a fresh press on
+        # the results screen arms the next run; the profile is preserved so that
+        # single press still reuses it.
+        sr.reset_run_request()
         profile, run_name = self.button_logic( state = "end" )
         if profile is not None:
             # Run pressed on the results screen: arm the next run here,
