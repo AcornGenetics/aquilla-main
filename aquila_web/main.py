@@ -850,9 +850,20 @@ async def health_check():
     return {"status": "ok"}
 
 
+def _read_app_version() -> str:
+    """The app version shown in Settings / Help, sourced from the single config
+    file config_files/version.json so it lives in one place (not hardcoded in the
+    UI). Falls back to the AQ_APP_VERSION env var, then 'unknown', on any error."""
+    try:
+        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
+        return str(data["app_version"])
+    except Exception:
+        return os.getenv("AQ_APP_VERSION", "unknown")
+
+
 @app.get("/version")
 async def version_check():
-    return {"version": os.getenv("AQ_APP_VERSION", "unknown")}
+    return {"version": _read_app_version()}
 
 
 @app.get("/results")
