@@ -278,7 +278,7 @@
 
         <!-- Footer -->
         <div class="help-footer" style="padding-bottom:16px;">
-          <span class="help-footer__meta" id="help-version-info">V 2.1.0.3</span>
+          <span class="help-footer__meta" id="help-version-info"></span>
           <button class="help-exit-btn" onclick="notifyExitForce()">Exit GUI</button>
         </div>
 
@@ -303,6 +303,16 @@
       try { await fetch("/button/exit/force", { method: "POST" }); }
       catch (err) { console.error("Exit failed", err); }
     }
+
+    // Version comes from the single source of truth (config_files/version.json)
+    // served by /version — never hardcoded in this page.
+    fetch("/version")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.version) {
+          document.getElementById("help-version-info").textContent = "V " + data.version;
+        }
+      }).catch(() => {});
 
     fetch("/button_status")
       .then(r => r.ok ? r.json() : null)
