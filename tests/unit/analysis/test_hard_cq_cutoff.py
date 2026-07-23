@@ -8,8 +8,8 @@ the late-Cq-confident rescue path. A Cq at or below the cutoff is unaffected.
 Fixtures are real baseline-corrected curves captured from optics logs:
   * PAST_CUTOFF  — run5_2026-07-16 FAM well 4 (Cq ~38.6): a terminal-spike artifact
     that the late-Cq path used to promote to Detected.
-  * WITHIN_CUTOFF — aba_form_3_set_3 FAM well 1 (Cq ~35.4): a genuine late riser
-    below the cutoff that must stay Detected.
+  * PAST_CUTOFF_NEAR — aba_form_3_set_3 FAM well 1 (Cq ~35.4): a late riser just
+    past the cutoff that must be Not Detected under PCR_CQ_HARD_MAX=35.
 """
 import numpy as np
 import pytest
@@ -28,8 +28,8 @@ PAST_CUTOFF = [
     0.0193, 0.07623,
 ]
 
-# aba_form_3_set_3_2026-05-08_20-05-19.log, FAM well 1 — crosses at Cq ~35.4 (<= 36).
-WITHIN_CUTOFF = [
+# aba_form_3_set_3_2026-05-08_20-05-19.log, FAM well 1 — crosses at Cq ~35.4 (> 35).
+PAST_CUTOFF_NEAR = [
     -0.07761, -0.06425, -0.02999, -0.0319, -0.00847, -0.0041, 0.00333, 0.00239,
     0.00058, -0.00386, -0.00243, -0.00082, 0.00605, 0.00951, -0.01063, -0.01575,
     -0.00411, -0.00054, -0.0057, -0.00617, -0.00944, -0.00325, -0.0057, -0.0045,
@@ -65,12 +65,13 @@ def test_cq_past_hard_max_is_undetected(monkeypatch):
     assert ev["decision_reason"] == "cq_after_hard_max"
 
 
-def test_cq_within_hard_max_still_detected(monkeypatch):
-    """A late crossing at or below the cutoff is unaffected and stays Detected."""
-    ev = _evaluate(WITHIN_CUTOFF, monkeypatch)
-    assert ev["flags"]["cq_after_hard_max"] is False
-    assert ev["status"] == "detected"
+def test_cq_just_past_hard_max_is_undetected(monkeypatch):
+    """A crossing at Cq ~35.4 is now past the cutoff and Not Detected."""
+    ev = _evaluate(PAST_CUTOFF_NEAR, monkeypatch)
+    assert ev["flags"]["cq_after_hard_max"] is True
+    assert ev["status"] == "undetected"
+    assert ev["decision_reason"] == "cq_after_hard_max"
 
 
-def test_hard_max_default_is_36():
-    assert config.get_float("PCR_CQ_HARD_MAX") == 36
+def test_hard_max_default_is_35():
+    assert config.get_float("PCR_CQ_HARD_MAX") == 35

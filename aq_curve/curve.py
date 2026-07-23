@@ -356,13 +356,11 @@ class Curve:
             # even where suppression later flips the final call (#297).
             rox_raw_status = dict(rox_status)
 
-            # FAM undetected + late ROX Cq → suppress ROX.
-            # A late-rising ROX with no FAM signal is non-specific; treat as undetected.
-            late_cq_threshold = config.get_int("PCR_LATE_CQ_THRESHOLD")
+            # FAM undetected → suppress ROX unconditionally.
+            # With no FAM signal any ROX call (detected, inconclusive, or late)
+            # is non-specific, so the well is treated as undetected.
             for w in _WELLS:
-                if (fam_status[w] == "Not Detected"
-                        and rox_cq[w] is not None
-                        and rox_cq[w] >= late_cq_threshold):
+                if fam_status[w] == "Not Detected":
                     rox_status[w] = "Not Detected"
                     rox_cq[w] = None
 

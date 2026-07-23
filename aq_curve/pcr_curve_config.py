@@ -6,7 +6,7 @@ DEFAULTS = {
     "PCR_CQ_MAX": 40,
     # Hard negative cutoff: any Cq strictly greater than this is called Not
     # Detected regardless of curve shape/fold evidence (overrides late-Cq rescue).
-    "PCR_CQ_HARD_MAX": 36,
+    "PCR_CQ_HARD_MAX": 35,
     "PCR_CQ_MIN": 7,
     "PCR_END_MIDPOINT_FRACTION": 0.50,
     "PCR_LATE_CQ_THRESHOLD": 35,

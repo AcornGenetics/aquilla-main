@@ -273,13 +273,13 @@ def test_late_rox_suppressed_when_fam_undetected(tmp_path, monkeypatch):
 
 
 @pytest.mark.unit
-def test_early_rox_not_suppressed_when_fam_undetected(tmp_path, monkeypatch):
-    """ROX with an early Cq must remain Detected even when FAM is undetected."""
+def test_early_rox_suppressed_when_fam_undetected(tmp_path, monkeypatch):
+    """ROX must become Not Detected when FAM is undetected, even with an early Cq."""
     monkeypatch.setattr(curve_module, "evaluate_curve",
                         _stub_evaluate_by_dye("undetected", "detected"))
     monkeypatch.setattr(curve_module, "get_curve_data", _stub_get_curve_data)
     monkeypatch.setattr(curve_module, "get_threshold", _stub_get_threshold)
-    # FAM wells 1-4: None; ROX wells 1-4: 22.0 (< threshold, rule does not fire)
+    # FAM wells 1-4: None; ROX wells 1-4: 22.0 (early) — suppressed regardless of Cq
     monkeypatch.setattr(curve_module, "compute_cq",
                         _make_cq_sequence(None, None, None, None, 22.0, 22.0, 22.0, 22.0))
 
@@ -288,8 +288,27 @@ def test_early_rox_not_suppressed_when_fam_undetected(tmp_path, monkeypatch):
     data = json.loads((tmp_path / "results.json").read_text())
 
     for col in ("1", "2", "3", "4"):
-        assert data["2"][col] == "Detected", f"ROX well {col} should remain Detected"
-        assert data["cq"]["2"][col] == 22.0, f"ROX Cq well {col} should be preserved"
+        assert data["2"][col] == "Not Detected", f"ROX well {col} should be suppressed"
+        assert data["cq"]["2"][col] is None, f"ROX Cq well {col} should be None"
+
+
+@pytest.mark.unit
+def test_inconclusive_rox_suppressed_when_fam_undetected(tmp_path, monkeypatch):
+    """ROX must become Not Detected when FAM is undetected, even if ROX is inconclusive."""
+    monkeypatch.setattr(curve_module, "evaluate_curve",
+                        _stub_evaluate_by_dye("undetected", "inconclusive"))
+    monkeypatch.setattr(curve_module, "get_curve_data", _stub_get_curve_data)
+    monkeypatch.setattr(curve_module, "get_threshold", _stub_get_threshold)
+    monkeypatch.setattr(curve_module, "compute_cq",
+                        _make_cq_sequence(None, None, None, None, 22.0, 22.0, 22.0, 22.0))
+
+    curve = Curve(src_basedir=str(tmp_path))
+    curve.results_to_json("raw.dat", "results.json")
+    data = json.loads((tmp_path / "results.json").read_text())
+
+    for col in ("1", "2", "3", "4"):
+        assert data["2"][col] == "Not Detected", f"ROX well {col} should be suppressed"
+        assert data["cq"]["2"][col] is None, f"ROX Cq well {col} should be None"
 
 
 @pytest.mark.unit
