@@ -42,7 +42,10 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.api
-          platforms: linux/amd64,linux/arm64
+          # arm64 only — the fleet runs 64-bit Pi OS and nothing consumes the amd64
+          # variant. QEMU above is still required: the runner is amd64, so the arm64
+          # build is emulated. See #348.
+          platforms: linux/arm64
           push: true
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}-api:latest
@@ -62,7 +65,7 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.ui
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
           push: true
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}-ui:latest
