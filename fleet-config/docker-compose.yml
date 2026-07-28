@@ -149,9 +149,13 @@ services:
     environment:
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_HTTP_API_UPDATE: "true"
+      # Exposes /v1/metrics, which is how the backend confirms whether an update
+      # actually applied. Without it the outcome is unknowable and the backend
+      # cannot distinguish a slow success from a failed pull (#350).
+      WATCHTOWER_HTTP_API_METRICS: "true"
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_CONFIG_FILE: "/config.json"
-    command: --label-enable --http-api-update --cleanup --api-version 1.54
+    command: --label-enable --http-api-update --http-api-metrics --cleanup --api-version 1.54
     restart: unless-stopped
     logging:
       driver: json-file
