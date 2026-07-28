@@ -1,81 +1,142 @@
 #!/usr/bin/env bash
-# Cap the number of Aquila image sets retained on a device (issue #355).
+# Image retention / rollback logic for a Sentri (issue #355).
 #
-# Nothing in any deploy path removes old images. fleet-update.sh runs
-# `docker compose pull` + `up -d --force-recreate`, and compose never deletes
-# the image it replaced. Watchtower's --cleanup would, but it runs without
-# --interval so it only acts on POST /v1/update and mostly never fires.
-# The result is unbounded accumulation: sn03 was measured holding 27 images,
-# 19 of them dangling, 8.84 GB reclaimable.
+# Nothing on a device has ever removed an image. Measured on sn03: 30 images,
+# ~9.8 GB reclaimable, the oldest being a telemetry image from 2023 belonging to
+# a stack replaced by Grafana Alloy.
 #
-# A "set" is one API image plus its matching UI image. Retention rules, in
-# priority order:
+# A device keeps at most TWO sets, both from its CURRENT ring:
 #
-#   1. Never remove an image a container references. Enforced by Docker itself
-#      -- `docker rmi` refuses, so a logic error here cannot take down a
-#      running container.
-#   2. Never remove a ring-tagged image (sandbox/dev/pilot/prod). Enforced by
-#      construction: only `dangling=true` images are considered, and a ring tag
-#      means an image is not dangling. These are deliberate offline rollback
-#      targets -- a device holding both api:sandbox and api:dev keeps both.
-#   3. Of what remains, keep the most recent (IMAGE_RETENTION_SETS - 1) per
-#      family. The running set is tagged, so untagged images are all previous
-#      versions.
-#   4. Remove the rest.
+#     current   the image it is running   (carries the ring tag)
+#     fallback  the build it replaced     (untagged)
 #
-# Anything not positively identified as an Aquila API or UI image is left
-# alone, so Watchtower and any future images are never candidates.
+# A "set" is one API image plus its matching UI image, so at most 4 Aquila
+# images on disk.
+#
+# ── The two cases ─────────────────────────────────────────────────────────────
+#
+# SAME-RING UPDATE (pilot v2 -> pilot v3)
+#     The replaced build becomes the fallback; the previous fallback is deleted.
+#     current=v3, fallback=v2, v1 removed.
+#
+# RING CHANGE (pilot -> prod)
+#     Every image from the old ring goes, current and fallback alike, and the
+#     device starts with NO fallback. Falling back across rings is not a
+#     rollback: promotion flows sandbox -> dev -> pilot -> prod, so the old
+#     ring's image is newer and *less* soaked than the one just promoted in.
+#
+# ── Why one ring name is the only state needed ────────────────────────────────
+#
+# An untagged image carries no record of its ring -- verified on-device, an
+# orphan has RepoTags: [], RepoDigests: [], Labels: map[]. So "the previous
+# pilot image" is not identifiable by inspection.
+#
+# The ring-change rule removes the need to identify it. Because a ring change
+# deletes every old-ring image, the invariant afterwards is zero orphans. Each
+# same-ring update then adds exactly one and removes the previous, so the orphan
+# pool is always <= 1 AND always from the current ring. Sorting by date is
+# therefore exact, not an approximation -- provided we know whether the ring
+# changed, which is the one thing recorded in STATE_FILE.
+#
+# ── Safety ────────────────────────────────────────────────────────────────────
+#   - An image a container references is never removed. Docker enforces this
+#     (`docker rmi` refuses), not this script, so a logic error here cannot take
+#     down a running container.
+#   - Anything not positively identified as an Aquila API or UI image is never
+#     touched: Watchtower and any future image are never candidates.
+#   - If the ring cannot be determined, the script exits without removing
+#     anything rather than guessing.
 #
 # Env:
-#   IMAGE_RETENTION_SETS  total sets to keep, including the running one (default 3)
-#   DRY_RUN               set to 1 to report without removing
+#   DEVICE_RING  override the detected ring (default: IMAGE_TAG from the .env files)
+#   STATE_FILE   where the last-seen ring is recorded
+#   DRY_RUN      set to 1 to report without removing
 set -euo pipefail
 
-RETENTION_SETS="${IMAGE_RETENTION_SETS:-3}"
 DRY_RUN="${DRY_RUN:-0}"
+FLEET_ENV="${FLEET_ENV:-/opt/fleet/.env}"
+DEVICE_ENV="${DEVICE_ENV:-/opt/aquila/config/device.env}"
+STATE_FILE="${STATE_FILE:-/opt/fleet/.prune-state}"
+
+KNOWN_RINGS="sandbox dev pilot prod"
+# `latest` is not a ring: it tracks whatever was built last and no device should
+# be running it, so it is always removable.
+NON_RING_TAGS="latest"
 
 log() { printf '[prune-images] %s\n' "$*"; }
 
-if ! [[ "${RETENTION_SETS}" =~ ^[0-9]+$ ]] || (( RETENTION_SETS < 1 )); then
-    log "IMAGE_RETENTION_SETS must be a positive integer (got '${RETENTION_SETS}')"
-    exit 1
-fi
+command -v docker >/dev/null 2>&1 || { log "docker not found; nothing to do"; exit 0; }
 
-# The running set is tagged, not dangling, so it is never in the candidate list.
-KEEP_UNTAGGED=$(( RETENTION_SETS - 1 ))
+_detect_ring() {
+    local f v
+    for f in "${FLEET_ENV}" "${DEVICE_ENV}"; do
+        [[ -r "${f}" ]] || continue
+        v="$(grep -E '^IMAGE_TAG=' "${f}" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"'\''[:space:]')"
+        if [[ -n "${v}" ]]; then printf '%s' "${v}"; return; fi
+    done
+}
 
-if ! command -v docker >/dev/null 2>&1; then
-    log "docker not found; nothing to do"
+RING="${DEVICE_RING:-$(_detect_ring)}"
+if [[ -z "${RING}" ]]; then
+    log "ring unknown (no IMAGE_TAG in ${FLEET_ENV} or ${DEVICE_ENV})"
+    log "refusing to remove anything — will not guess"
     exit 0
 fi
 
-# Classify an untagged image using config baked in at build time.
-#
-# Dangling images have lost their repository name, so `docker images` output
-# cannot tell an orphaned API image from an orphaned UI one. These two markers
-# were verified on a live device:
+LAST_RING=""
+[[ -r "${STATE_FILE}" ]] && LAST_RING="$(cat "${STATE_FILE}" 2>/dev/null | tr -d '[:space:]')"
+
+# No state means either a fresh device or the first run on an existing one. Treat
+# it as a ring change: an unverifiable fallback is not a fallback, and this
+# establishes the zero-orphan invariant everything below relies on. Costs at most
+# one rollback target, once.
+if [[ -z "${LAST_RING}" ]]; then
+    MODE="ring-change"
+    log "ring: ${RING} (no previous state — treating as a ring change to establish a clean baseline)"
+elif [[ "${LAST_RING}" != "${RING}" ]]; then
+    MODE="ring-change"
+    log "ring changed: ${LAST_RING} -> ${RING} (all ${LAST_RING} images will be removed, no fallback)"
+else
+    MODE="same-ring"
+    log "ring: ${RING} (unchanged — keeping current + 1 fallback)"
+fi
+
+_rmi() {
+    local ref="$1"
+    if [[ "${DRY_RUN}" == "1" ]]; then
+        log "  would remove ${ref}"
+        return
+    fi
+    if docker rmi "${ref}" >/dev/null 2>&1; then
+        log "  removed ${ref}"
+    else
+        log "  skipped ${ref} (in use or has children)"
+    fi
+}
+
+# Untagged images have no repository name, so `docker images` cannot tell an
+# orphaned API image from an orphaned UI one. They are classified by config baked
+# in at build time, verified on-device:
 #   API -> WorkingDir=/opt/aquila, Cmd=[uvicorn aquila_web.main:app ...]
 #   UI  -> WorkingDir=/,           Cmd=[nginx -g daemon off;]
-# Once #351 bakes OCI labels into the images, this can key off
-# org.opencontainers.image.* instead and stop depending on the entrypoint.
+# Once #351 bakes OCI labels in, this can key off org.opencontainers.image.*
+# and stop depending on the entrypoint.
 _classify() {
     local id="$1" workdir cmd
     workdir="$(docker inspect "${id}" --format '{{.Config.WorkingDir}}' 2>/dev/null || true)"
     cmd="$(docker inspect "${id}" --format '{{json .Config.Cmd}}' 2>/dev/null || true)"
-
-    if [[ "${workdir}" == "/opt/aquila" ]]; then
-        echo api
-    elif [[ "${cmd}" == *nginx* ]]; then
-        echo ui
-    else
-        echo other
+    if [[ "${workdir}" == "/opt/aquila" ]]; then echo api
+    elif [[ "${cmd}" == *nginx* ]];           then echo ui
+    else                                           echo other
     fi
 }
 
-total_removed=0
+# ── Step 1: fallbacks (untagged Aquila images) ────────────────────────────────
+# ring-change keeps none; same-ring keeps the newest of each family.
+keep_n=0
+[[ "${MODE}" == "same-ring" ]] && keep_n=1
 
 for family in api ui; do
-    # Untagged images of this family, newest first.
     candidates="$(
         docker images --filter dangling=true --quiet 2>/dev/null | sort -u | while read -r id; do
             [[ -n "${id}" ]] || continue
@@ -83,43 +144,40 @@ for family in api ui; do
             printf '%s %s\n' "$(docker inspect "${id}" --format '{{.Created}}' 2>/dev/null)" "${id}"
         done | sort -r | awk '{ print $2 }'
     )"
+    [[ -n "${candidates}" ]] || { log "${family}: no fallback images"; continue; }
 
-    if [[ -z "${candidates}" ]]; then
-        log "${family}: no untagged images"
-        continue
-    fi
+    total="$(printf '%s\n' "${candidates}" | wc -l | tr -d ' ')"
+    stale="$(printf '%s\n' "${candidates}" | tail -n "+$(( keep_n + 1 ))")"
+    [[ -n "${stale}" ]] || { log "${family}: ${total} fallback, keeping it"; continue; }
 
-    count="$(printf '%s\n' "${candidates}" | wc -l | tr -d ' ')"
-    stale="$(printf '%s\n' "${candidates}" | tail -n "+$(( KEEP_UNTAGGED + 1 ))")"
-
-    if [[ -z "${stale}" ]]; then
-        log "${family}: ${count} untagged, keeping all (limit ${KEEP_UNTAGGED})"
-        continue
-    fi
-
-    stale_count="$(printf '%s\n' "${stale}" | wc -l | tr -d ' ')"
-    log "${family}: ${count} untagged, keeping ${KEEP_UNTAGGED} newest, removing ${stale_count}"
-
+    log "${family}: ${total} untagged, keeping ${keep_n}, removing $(printf '%s\n' "${stale}" | wc -l | tr -d ' ')"
     printf '%s\n' "${stale}" | while read -r id; do
         [[ -n "${id}" ]] || continue
-        if [[ "${DRY_RUN}" == "1" ]]; then
-            log "  would remove ${id}"
-            continue
-        fi
-        # Fails harmlessly when a container still references the image; that is
-        # rule 1 being enforced by Docker rather than by this script.
-        if docker rmi "${id}" >/dev/null 2>&1; then
-            log "  removed ${id}"
-        else
-            log "  skipped ${id} (in use or has children)"
-        fi
+        _rmi "${id}"
     done
+done
 
-    total_removed=$(( total_removed + stale_count ))
+# ── Step 2: tagged images from other rings ────────────────────────────────────
+# Runs after step 1 deliberately. Removing a tag turns that image into an orphan,
+# so doing this first would let a just-untagged foreign-ring image compete to be
+# kept as the fallback.
+for tag in ${KNOWN_RINGS} ${NON_RING_TAGS}; do
+    [[ "${tag}" == "${RING}" ]] && continue
+    while read -r ref; do
+        [[ -n "${ref}" ]] || continue
+        _rmi "${ref}"
+    done < <(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+             | grep -E "aquilla-main-(api|ui):${tag}$" || true)
 done
 
 if [[ "${DRY_RUN}" == "1" ]]; then
-    log "dry run complete (IMAGE_RETENTION_SETS=${RETENTION_SETS})"
+    log "dry run complete (ring=${RING}, mode=${MODE}) — state not written"
 else
-    log "done (IMAGE_RETENTION_SETS=${RETENTION_SETS})"
+    if printf '%s\n' "${RING}" > "${STATE_FILE}" 2>/dev/null; then
+        log "done (ring=${RING}, mode=${MODE})"
+    else
+        # Without state every run looks like a ring change, so no fallback is
+        # ever kept. Safe, but worth surfacing.
+        log "done (ring=${RING}, mode=${MODE}) — WARNING: could not write ${STATE_FILE}"
+    fi
 fi
