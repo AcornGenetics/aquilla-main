@@ -10,7 +10,8 @@ from pathlib import Path
 from fastapi import WebSocket
 import asyncio
 import logging
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 import os
 import sys
 from pydantic import BaseModel
@@ -2038,6 +2039,16 @@ _OTA_GHCR_REPO_API = _OTA_GHCR_BASE + "-api"
 _OTA_GHCR_REPO_UI  = _OTA_GHCR_BASE + "-ui"
 _OTA_IMAGE_TAG = os.getenv("IMAGE_TAG", "")   # dev | pilot | prod — set by device.env
 _OTA_POLL_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL", "300"))  # seconds
+# How long to wait for an update to complete before declaring it failed. Sized to
+# the pull, not to a request timeout: the old code allowed 60s for a synchronous
+# call that had to download the whole image, so any update slower than a minute
+# was reported as a failure while it was still succeeding (#350 mode 1).
+_OTA_APPLY_TIMEOUT = int(os.getenv("AQ_UPDATE_APPLY_TIMEOUT", "900"))  # seconds
+_FLEET_ENV_PATH = os.getenv("AQ_FLEET_ENV_PATH", "/opt/fleet/.env")
+# A successful check older than this means the device has not verified its
+# software in a long time — surfaced to the operator, since a device that cannot
+# check looks identical to one that is up to date (#350 mode 2).
+_OTA_STALE_AFTER = int(os.getenv("AQ_UPDATE_STALE_AFTER", "86400"))  # seconds
 
 _update_available: bool = False
 _update_dismissed: bool = False
@@ -2104,8 +2115,26 @@ def _resolve_startup_update_state() -> None:
 # ------------------------------------------------------------------------------
 
 
-async def _ghcr_bearer_token(user: str, token: str, repo: str) -> str | None:
-    """Exchange Basic credentials for a short-lived GHCR Bearer token."""
+# Why a registry check failed. These previously all collapsed to None, which is
+# why the operator-facing message had to say "Registry unreachable OR credentials
+# invalid" — the code genuinely could not tell. They need different actions
+# ("check the network" vs "escalate"), so they are distinguished here. See #350.
+_ERR_NETWORK = "network"
+_ERR_AUTH = "auth"
+_ERR_REGISTRY = "registry"
+
+_ERR_MESSAGES = {
+    _ERR_NETWORK: "No internet connection",
+    _ERR_AUTH: "The update server rejected this device's credentials",
+    _ERR_REGISTRY: "The update server returned an unexpected response",
+}
+
+
+async def _ghcr_bearer_token(user: str, token: str, repo: str) -> tuple[str | None, str | None]:
+    """Exchange Basic credentials for a short-lived GHCR Bearer token.
+
+    Returns (token, error_kind). Exactly one is non-None.
+    """
     cred = base64.b64encode(f"{user}:{token}".encode()).decode()
     owner = repo.split("/")[0]
     name = "/".join(repo.split("/")[1:]) or repo
@@ -2113,18 +2142,28 @@ async def _ghcr_bearer_token(user: str, token: str, repo: str) -> str | None:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             r = await client.get(url, headers={"Authorization": f"Basic {cred}"})
-        if r.status_code == 200:
-            return r.json().get("token")
-    except Exception:
-        pass
-    return None
+    except httpx.RequestError:
+        # Connect failure, DNS failure, timeout — the device cannot reach GHCR.
+        return None, _ERR_NETWORK
+    except Exception:  # noqa: BLE001 - an update check must never crash the poller
+        logger.exception("unexpected error fetching GHCR token")
+        return None, _ERR_REGISTRY
+
+    if r.status_code in (401, 403):
+        return None, _ERR_AUTH
+    if r.status_code != 200:
+        return None, _ERR_REGISTRY
+    bearer = r.json().get("token")
+    return (bearer, None) if bearer else (None, _ERR_REGISTRY)
 
 
-async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> str | None:
-    """Return the manifest digest for a GHCR image tag without pulling it."""
-    bearer = await _ghcr_bearer_token(user, token, repo)
+async def _ghcr_manifest_digest(
+    repo: str, tag: str, user: str, token: str
+) -> tuple[str | None, str | None]:
+    """Return (manifest digest, error_kind) for a GHCR image tag without pulling it."""
+    bearer, err = await _ghcr_bearer_token(user, token, repo)
     if bearer is None:
-        return None
+        return None, err
     owner = repo.split("/")[0]
     name = "/".join(repo.split("/")[1:]) or repo
     url = f"https://ghcr.io/v2/{owner}/{name}/manifests/{tag}"
@@ -2139,47 +2178,78 @@ async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> s
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             r = await client.head(url, headers=headers, follow_redirects=True)
-        return r.headers.get("docker-content-digest")
-    except Exception:
-        return None
+    except httpx.RequestError:
+        return None, _ERR_NETWORK
+    except Exception:  # noqa: BLE001
+        logger.exception("unexpected error fetching GHCR manifest")
+        return None, _ERR_REGISTRY
+
+    if r.status_code in (401, 403):
+        return None, _ERR_AUTH
+    if r.status_code >= 400:
+        return None, _ERR_REGISTRY
+    digest = r.headers.get("docker-content-digest")
+    return (digest, None) if digest else (None, _ERR_REGISTRY)
 
 
 async def _do_check_update() -> None:
+    """Ask GHCR whether a newer image exists. Never pulls.
+
+    `idle` means "checked successfully, nothing new". A check that could not run
+    reports `offline` instead — previously both produced `idle`, and the UI
+    rendered that as a green "Software is up to date" on a device that had in
+    fact failed to reach the registry (#350 mode 2).
+    """
     global _update_available, _update_status, _update_error, _update_last_checked
     global _startup_image_digest, _startup_image_digest_ui, _latest_ghcr_digest, _latest_ghcr_digest_ui
     _update_status = "checking"
     try:
         if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
-            _update_status = "idle"
-            _update_error = "Registry credentials or IMAGE_TAG not configured"
+            _update_status = "offline"
+            _update_error = "This device is not configured to receive updates"
             return
-        latest_api, latest_ui = await asyncio.gather(
+
+        (latest_api, err_api), (latest_ui, err_ui) = await asyncio.gather(
             _ghcr_manifest_digest(_OTA_GHCR_REPO_API, _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN),
             _ghcr_manifest_digest(_OTA_GHCR_REPO_UI,  _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN),
         )
-        _update_last_checked = datetime.utcnow().isoformat() + "Z"
-        if latest_api is None and latest_ui is None:
-            _update_status = "idle"
-            _update_error = "Registry unreachable or credentials invalid"
+
+        # A partial result is a failed check, not a partial success. Accepting one
+        # digest while the other is unknown is exactly how the API and UI end up on
+        # different builds: the update gets offered and applied with only one digest
+        # recorded (#350 mode 5).
+        err = err_api or err_ui
+        if err:
+            _update_status = "offline"
+            _update_error = _ERR_MESSAGES.get(err, "Could not reach the update server")
+            # Drop any previously-known availability. It may well still be true,
+            # but offering "Update Now" against a registry we cannot reach sends
+            # the operator into a failing apply — and the UI checks `available`
+            # before `status`, so leaving it set would hide the offline warning
+            # entirely. The next successful check re-establishes it.
+            _update_available = False
             return
-        if latest_api is not None:
-            _latest_ghcr_digest = latest_api
-        if latest_ui is not None:
-            _latest_ghcr_digest_ui = latest_ui
+
+        # Only a successful check updates this. It is shown to the operator as
+        # "last successful check", so a failed attempt must not refresh it.
+        _update_last_checked = datetime.utcnow().isoformat() + "Z"
+
+        _latest_ghcr_digest = latest_api
+        _latest_ghcr_digest_ui = latest_ui
         if _startup_image_digest is None:
             _startup_image_digest = latest_api
         if _startup_image_digest_ui is None:
             _startup_image_digest_ui = latest_ui
-        api_changed = latest_api is not None and latest_api != _startup_image_digest
-        ui_changed  = latest_ui  is not None and latest_ui  != _startup_image_digest_ui
-        if api_changed or ui_changed:
+
+        if latest_api != _startup_image_digest or latest_ui != _startup_image_digest_ui:
             _update_available = True
             _update_status = "available"
         else:
             _update_available = False
             _update_status = "idle"
         _update_error = None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the poller must survive anything
+        logger.exception("update check failed")
         _update_status = "error"
         _update_error = str(e)
 
@@ -2195,12 +2265,26 @@ async def get_update_status():
     if DEV_UPDATE_AVAILABLE and not _update_dismissed:
         available = True
         status = "available"
+
+    # A device that cannot reach the registry looks identical to one that is up
+    # to date, so the age of the last SUCCESSFUL check is surfaced. `stale` is
+    # true when that is too long ago — or when there has never been one.
+    age = None
+    if _update_last_checked:
+        try:
+            last = datetime.fromisoformat(_update_last_checked.replace("Z", "+00:00"))
+            age = max(0, int((datetime.now(timezone.utc) - last).total_seconds()))
+        except (ValueError, AttributeError):
+            age = None
+
     return {
         "available": available,
         "dismissed": _update_dismissed,
         "status": status,
         "error": _update_error,
         "last_checked": _update_last_checked,
+        "last_checked_age_seconds": age,
+        "stale": age is None or age > _OTA_STALE_AFTER,
     }
 
 
@@ -2212,6 +2296,131 @@ async def trigger_update_check():
     return {"ok": True, "message": "checking"}
 
 
+def _parse_prom_metric(body: str, name: str) -> float | None:
+    """Pull a single value out of Prometheus text exposition format."""
+    for line in body.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.split("{")[0].split(" ")[0] != name:
+            continue
+        try:
+            return float(line.rsplit(" ", 1)[1])
+        except (IndexError, ValueError):
+            return None
+    return None
+
+
+async def _watchtower_metrics() -> dict | None:
+    """Read Watchtower's scan counters. None if the endpoint is unavailable.
+
+    Requires `--http-api-metrics` on the Watchtower container. Without it this
+    returns None and an update's outcome cannot be confirmed — in which case the
+    status is left as `updating` for the poller to resolve, never reported as
+    success.
+    """
+    headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(f"{WATCHTOWER_URL}/v1/metrics", headers=headers)
+        if r.status_code != 200:
+            return None
+        return {
+            "scans": _parse_prom_metric(r.text, "watchtower_scans_total"),
+            "updated": _parse_prom_metric(r.text, "watchtower_containers_updated"),
+            "failed": _parse_prom_metric(r.text, "watchtower_containers_failed"),
+        }
+    except Exception:  # noqa: BLE001 - never let metrics polling raise into the caller
+        return None
+
+
+async def _await_update_outcome(scans_before: float | None, prev_digests: tuple) -> None:
+    """Watch for the update to finish, and report failure if it does not.
+
+    On success this coroutine never completes: Watchtower replaces the backend
+    container and the process is killed. Surviving to the end therefore means the
+    update did NOT apply, which is exactly the case the previous code reported as
+    success (#350 mode 3).
+    """
+    global _update_status, _update_error, _update_available
+
+    deadline = time.monotonic() + _OTA_APPLY_TIMEOUT
+    while time.monotonic() < deadline:
+        await asyncio.sleep(10)
+        m = await _watchtower_metrics()
+        if m is None:
+            continue
+        # Wait for OUR scan to land rather than reading the previous one's numbers.
+        if scans_before is not None and m["scans"] is not None and m["scans"] <= scans_before:
+            continue
+        if m["failed"]:
+            _fail_update("The update could not be downloaded. The device is still "
+                         "running the previous version.", prev_digests)
+            return
+        if m["updated"]:
+            # Containers were replaced but this process is somehow still alive.
+            # Leave the sentinel in place and let the poller settle the state.
+            return
+
+    _fail_update("The update timed out. The device is still running the previous "
+                 "version.", prev_digests)
+
+
+def _fail_update(message: str, prev_digests: tuple) -> None:
+    """Record a confirmed failure and undo everything the apply wrote up front."""
+    global _update_status, _update_error, _update_available
+    _update_status = "update_failed"
+    _update_error = message
+    _update_available = True  # the update is still outstanding
+
+    # Disarm the reboot. The sentinel is written before triggering Watchtower
+    # because a kill mid-swap must still leave it behind — but if the swap never
+    # happened, a stale `reboot_pending` reboots the device for an update that did
+    # not apply, then shows "Update Complete" (#350 mode 4).
+    try:
+        _sentinel.clear_sentinel(_UPDATE_SENTINEL_PATH)
+    except OSError:
+        logger.warning("could not clear update sentinel at %s", _UPDATE_SENTINEL_PATH)
+
+    # Put the recorded digests back so /opt/fleet/.env does not claim a version
+    # the device is not running.
+    _write_fleet_digests(*prev_digests)
+
+
+def _read_fleet_digests() -> tuple:
+    api = ui = None
+    try:
+        with open(_FLEET_ENV_PATH, "r") as f:
+            for line in f:
+                if line.startswith("RUNNING_IMAGE_DIGEST_UI="):
+                    ui = line.split("=", 1)[1].strip()
+                elif line.startswith("RUNNING_IMAGE_DIGEST="):
+                    api = line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return api, ui
+
+
+def _write_fleet_digests(api: str | None, ui: str | None) -> None:
+    if not os.path.exists(_FLEET_ENV_PATH):
+        return
+    try:
+        with open(_FLEET_ENV_PATH, "r") as f:
+            lines = f.readlines()
+        out = []
+        for line in lines:
+            if line.startswith("RUNNING_IMAGE_DIGEST_UI=") and ui is not None:
+                out.append(f"RUNNING_IMAGE_DIGEST_UI={ui}\n")
+            elif line.startswith("RUNNING_IMAGE_DIGEST=") and api is not None:
+                out.append(f"RUNNING_IMAGE_DIGEST={api}\n")
+            else:
+                out.append(line)
+        with open(_FLEET_ENV_PATH, "w") as f:
+            f.writelines(out)
+    except OSError:
+        logger.warning("could not update digests in %s", _FLEET_ENV_PATH)
+
+
 @app.post("/update/apply")
 async def apply_update():
     global _update_status, _update_error, _startup_image_digest, _startup_image_digest_ui, _update_available
@@ -2220,59 +2429,58 @@ async def apply_update():
             status_code=409,
             content={"ok": False, "error": "Cannot update during an active run. Stop the run first."},
         )
+
+    prev_digests = _read_fleet_digests()
+    # Capture before triggering so we can tell OUR scan's results from the
+    # previous scan's leftovers.
+    before = await _watchtower_metrics()
+    scans_before = before["scans"] if before else None
+    if before is None:
+        logger.warning(
+            "Watchtower metrics unavailable (needs --http-api-metrics); "
+            "an update's outcome cannot be confirmed"
+        )
+
     # Breadcrumb the new container reads on startup to drive the auto-reboot (#183).
-    # Written before triggering Watchtower so a kill mid-swap still leaves it behind.
+    # Written before triggering Watchtower so a kill mid-swap still leaves it
+    # behind; _fail_update() clears it again if the swap is confirmed not to have
+    # happened.
     try:
         _sentinel.write_sentinel(_UPDATE_SENTINEL_PATH, "reboot_pending", _utcnow_iso())
     except OSError:
         logger.warning("could not write update sentinel at %s", _UPDATE_SENTINEL_PATH)
+
     _update_status = "updating"
+    _write_fleet_digests(_latest_ghcr_digest, _latest_ghcr_digest_ui)
+
     headers = {"Authorization": f"Bearer {WATCHTOWER_TOKEN}"} if WATCHTOWER_TOKEN else {}
     try:
-        # Write new digests to /opt/fleet/.env before triggering Watchtower so the
-        # restarted container picks up the correct baseline even if we are killed mid-restart.
-        _fleet_env = "/opt/fleet/.env"
-        if (_latest_ghcr_digest or _latest_ghcr_digest_ui) and os.path.exists(_fleet_env):
-            try:
-                with open(_fleet_env, "r") as f:
-                    lines = f.readlines()
-                updated = []
-                for line in lines:
-                    if line.startswith("RUNNING_IMAGE_DIGEST=") and not line.startswith("RUNNING_IMAGE_DIGEST_UI=") and _latest_ghcr_digest:
-                        updated.append(f"RUNNING_IMAGE_DIGEST={_latest_ghcr_digest}\n")
-                    elif line.startswith("RUNNING_IMAGE_DIGEST_UI=") and _latest_ghcr_digest_ui:
-                        updated.append(f"RUNNING_IMAGE_DIGEST_UI={_latest_ghcr_digest_ui}\n")
-                    else:
-                        updated.append(line)
-                with open(_fleet_env, "w") as f:
-                    f.writelines(updated)
-            except OSError:
-                pass
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(f"{WATCHTOWER_URL}/v1/update", headers=headers)
-        if r.status_code == 200:
-            if _latest_ghcr_digest:
-                _startup_image_digest = _latest_ghcr_digest
-            if _latest_ghcr_digest_ui:
-                _startup_image_digest_ui = _latest_ghcr_digest_ui
-            _update_available = False
-            _update_status = "updating"
-            # If containers don't restart (nothing to update), the in-memory status
-            # would stay "updating" until the next 5-min poller tick. Schedule a
-            # check after 3 minutes so the UI gets a timely resolution either way.
-            async def _deferred_status_reset() -> None:
-                await asyncio.sleep(180)
-                if _update_status == "updating":
-                    await _do_check_update()
-            asyncio.create_task(_deferred_status_reset())
-            return {"ok": True, "message": "Update triggered — containers will restart shortly."}
-        _update_status = "error"
-        _update_error = f"Watchtower returned HTTP {r.status_code}"
+        # ?async=true returns 202 immediately. POST /v1/update is synchronous by
+        # default, and the previous 60s timeout was shorter than the pull it was
+        # waiting on — so a slow-but-successful update raised ReadTimeout and was
+        # reported to the operator as "Update failed" (#350 mode 1).
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(f"{WATCHTOWER_URL}/v1/update?async=true", headers=headers)
+    except Exception as e:  # noqa: BLE001
+        _fail_update(f"Could not start the update: {e}", prev_digests)
         return {"ok": False, "error": _update_error}
-    except Exception as e:
-        _update_status = "error"
-        _update_error = str(e)
-        return {"ok": False, "error": str(e)}
+
+    if r.status_code == 429:
+        _update_status = "updating"
+        return {"ok": True, "message": "An update is already in progress."}
+    if r.status_code not in (200, 202):
+        _fail_update(f"The update service rejected the request (HTTP {r.status_code}).",
+                     prev_digests)
+        return {"ok": False, "error": _update_error}
+
+    if _latest_ghcr_digest:
+        _startup_image_digest = _latest_ghcr_digest
+    if _latest_ghcr_digest_ui:
+        _startup_image_digest_ui = _latest_ghcr_digest_ui
+    _update_available = False
+
+    asyncio.create_task(_await_update_outcome(scans_before, prev_digests))
+    return {"ok": True, "message": "Update started — the device will restart when it completes."}
 
 
 @app.post("/update/dismiss")
@@ -2317,8 +2525,11 @@ async def reboot_device():
 async def _background_update_poller() -> None:
     """Poll GHCR every UPDATE_CHECK_INTERVAL seconds. Never pulls the image."""
     while True:
-        if _OTA_GHCR_TOKEN and _OTA_IMAGE_TAG:
-            await _do_check_update()
+        # Called unconditionally: _do_check_update() reports `offline` when the
+        # device has no registry credentials. Skipping it here left an
+        # unconfigured or mis-provisioned device sitting at the initial `idle`
+        # forever, which the UI renders as "✓ Software is up to date" (#350).
+        await _do_check_update()
         await asyncio.sleep(_OTA_POLL_INTERVAL)
 
 

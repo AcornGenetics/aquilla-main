@@ -300,6 +300,35 @@
         `;
       } else if (data.status === "updating") {
         _showUpdateOverlay();
+      } else if (data.status === "update_failed") {
+        // A confirmed failure: the update was triggered and did not apply. The
+        // reassurance line matters — an interrupted update sounds alarming and
+        // this failure is genuinely safe (#350).
+        _hideUpdateOverlay();
+        if (dot) dot.style.display = "block";
+        area.innerHTML = `
+          <p style="color:#b45309;font-size:15px;font-weight:600;margin:0 0 6px;">⚠ Update did not complete</p>
+          <p style="font-size:15px;color:#1a1c1c;margin:0 0 4px;">${_escHtml(data.error || "The update was interrupted.")}</p>
+          <p style="font-size:14px;color:#4b5563;margin:0;">Your data and settings are unaffected.</p>
+          <button onclick="openUpdateTab()"
+            style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;font-size:14px;cursor:pointer;color:#374151;">Try again</button>
+        `;
+      } else if (data.status === "offline") {
+        // Deliberately amber, not the red used for `error`. The device works
+        // fine — it just could not verify whether it is current. Previously this
+        // state produced `idle`, which rendered as a green "up to date" on a
+        // device that had failed to reach the registry (#350 mode 2).
+        if (dot) dot.style.display = "none";
+        let html = `
+          <p style="color:#b45309;font-size:15px;font-weight:600;margin:0 0 6px;">⚠ Could not check for updates</p>
+          <p style="font-size:15px;color:#1a1c1c;margin:0 0 4px;">${_escHtml(data.error || "The update server could not be reached.")}</p>`;
+        html += data.last_checked
+          ? `<p style="font-size:13px;color:#4b5563;margin:0;">Last successful check: ${_fmtChecked(data.last_checked)}${_ageSuffix(data)}</p>`
+          : `<p style="font-size:13px;color:#4b5563;margin:0;">This device has never successfully checked for updates.</p>`;
+        html += `<p style="font-size:14px;color:#4b5563;margin:8px 0 0;">The device may be missing important updates.</p>
+          <button onclick="openUpdateTab()"
+            style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;font-size:14px;cursor:pointer;color:#374151;">Try again</button>`;
+        area.innerHTML = html;
       } else if (data.status === "error") {
         area.innerHTML = `
           <p style="color:#dc2626;font-size:15px;">Could not check for updates: ${_escHtml(data.error || "unknown error")}</p>
@@ -309,9 +338,25 @@
       } else {
         if (dot) dot.style.display = "none";
         let html = '<p style="color:#16a34a;font-size:15px;font-weight:600;">✓ Software is up to date.</p>';
-        if (data.last_checked) html += `<p style="font-size:12px;color:#6b7280;margin-top:6px;">Last checked: ${_escHtml(data.last_checked.replace("T"," ").replace("Z"," UTC"))}</p>`;
+        if (data.last_checked) html += `<p style="font-size:12px;color:#6b7280;margin-top:6px;">Last checked: ${_fmtChecked(data.last_checked)}${_ageSuffix(data)}</p>`;
+        // A successful but long-ago check still means the device is not being
+        // kept current, so say so even on the healthy path.
+        if (data.stale) html += `<p style="color:#b45309;font-size:13px;margin-top:8px;">⚠ This check is out of date — the device may be missing newer updates.</p>`;
         area.innerHTML = html;
       }
+    }
+
+    function _fmtChecked(ts) {
+      return _escHtml(String(ts).replace("T", " ").replace("Z", " UTC"));
+    }
+
+    function _ageSuffix(data) {
+      const s = data.last_checked_age_seconds;
+      if (s === null || s === undefined) return "";
+      const d = Math.floor(s / 86400), h = Math.floor(s / 3600);
+      if (d >= 1) return ` (${d} day${d === 1 ? "" : "s"} ago)`;
+      if (h >= 1) return ` (${h} hour${h === 1 ? "" : "s"} ago)`;
+      return " (just now)";
     }
 
     function _showUpdateOverlay() {
@@ -366,22 +411,31 @@
         const r = await fetch("/update/status").catch(() => null);
         const data = r ? await r.json().catch(() => null) : null;
         if (!data || data.status === "updating" || data.available) { _pollForUpdateComplete(attempt + 1, fallbackError); return; }
-        if (data.status === "error") {
+
+        // Only these two states are conclusive. Anything else — notably
+        // `offline`, which a mid-update network blip produces — means we still
+        // do not know, so keep polling. Falling through to the success branch on
+        // an inconclusive status is how a failed pull came to render
+        // "✓ Update complete" (#350 mode 3).
+        if (data.status === "error" || data.status === "update_failed") {
           _hideUpdateOverlay();
-          const errMsg = fallbackError || data.error || "unknown error";
-          document.getElementById("update-status-area").innerHTML =
-            `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(errMsg)}</p>`;
+          renderUpdateStatus({ ...data, status: data.status,
+                               error: fallbackError || data.error });
           return;
         }
+        if (data.status !== "idle") { _pollForUpdateComplete(attempt + 1, fallbackError); return; }
+
+        // status === "idle" means a check completed successfully and found
+        // nothing newer — i.e. the device is now running the target build.
         _hideUpdateOverlay();
         const area = document.getElementById("update-status-area");
         const dot = document.getElementById("updates-tab-dot");
         if (dot) dot.style.display = "none";
-        const checkedAt = data.last_checked ? data.last_checked.replace("T", " ").replace("Z", " UTC") : "";
+        const checkedAt = data.last_checked ? _fmtChecked(data.last_checked) : "";
         area.innerHTML = `
           <p style="font-size:20px;font-weight:700;color:#16a34a;margin:0 0 8px;">✓ Update complete</p>
           <p style="font-size:15px;color:#1a1c1c;margin:0 0 6px;">The device is running the latest software.</p>
-          ${checkedAt ? `<p style="font-size:12px;color:#6b7280;margin:0;">Verified: ${_escHtml(checkedAt)}</p>` : ""}
+          ${checkedAt ? `<p style="font-size:12px;color:#6b7280;margin:0;">Verified: ${checkedAt}</p>` : ""}
         `;
       }, 3000);
     }
