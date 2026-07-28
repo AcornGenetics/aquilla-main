@@ -50,4 +50,12 @@ _upsert_env RUNNING_IMAGE_DIGEST_UI "${_DIGEST_UI:-}" "${FLEET_ENV}"
 #   (<hash>_aquila-backend) so they don't linger and fight for the same ports.
 docker compose --env-file "${FLEET_ENV}" -f /opt/fleet/docker-compose.yml up -d --force-recreate --remove-orphans
 
+# Cap retained images (#355). `compose pull` above leaves the replaced image
+# behind and nothing else removes it, so this is where the accumulation starts.
+# Never fail the update because pruning failed — the stack is already up, and a
+# missed prune costs disk, not availability. The timer catches the next run.
+if [[ -x /opt/fleet/prune-images.sh ]]; then
+    /opt/fleet/prune-images.sh || echo "prune-images.sh failed (non-fatal)"
+fi
+
 mkdir -p /opt/aquila/tests

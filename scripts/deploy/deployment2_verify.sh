@@ -125,6 +125,13 @@ test_phase_10() {
     echo "── Phase 10: systemd Service"
     check 10 "service file exists" "test -f /etc/systemd/system/aquila-stack.service"
     check 10 "service enabled"     "systemctl is-enabled aquila-stack.service | grep -q enabled"
+
+    # Image retention (#355). "timer enabled" alone would pass while the script
+    # is missing or broken, so the dry run below asserts it actually executes.
+    check 10 "prune script present" "test -x /opt/fleet/prune-images.sh"
+    check 10 "prune timer enabled"  "systemctl is-enabled aquila-prune-images.timer | grep -q enabled"
+    check 10 "prune timer active"   "systemctl is-active aquila-prune-images.timer | grep -q active"
+    check 10 "prune script runs"    "DRY_RUN=1 /opt/fleet/prune-images.sh >/dev/null"
 }
 
 test_phase_11() {

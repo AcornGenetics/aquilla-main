@@ -622,6 +622,15 @@ curl -fsSL \
     -o /opt/fleet/update.sh
 chmod +x /opt/fleet/update.sh
 
+# Image retention (#355). Nothing else on the device removes old images, so they
+# accumulate without limit — sn03 was measured holding 27 images, 19 dangling,
+# 8.84 GB reclaimable. Installed here and driven by the timer in Phase 10.
+curl -fsSL \
+    -H "Authorization: token ${GHCR_TOKEN}" \
+    "https://raw.githubusercontent.com/${GHCR_REPO}/main/scripts/deploy/prune-images.sh" \
+    -o /opt/fleet/prune-images.sh
+chmod +x /opt/fleet/prune-images.sh
+
 # Generate the device keypair + CSR on-device (CN = Device ID = Pi serial). The
 # private key is written owner-only (0600) and never leaves the Pi; only the CSR
 # is later submitted to acorn-ca /enroll (#240). Runs in the app image, which
@@ -828,6 +837,51 @@ run_test "renew timer active"        "systemctl is-active aquila-cert-renew.time
 run_test "AQ_RENEW_ENDPOINT set"     "grep -q 'AQ_RENEW_ENDPOINT=' /opt/aquila/config/device.env"
 
 phase_pass "aquila-cert-renew.timer registered and enabled"
+
+# ── Image retention timer (#355) ───────────────────────────────────────────────
+# A timer rather than only the fleet-update.sh hook, because there are two update
+# paths and the script covers one: /opt/fleet/update.sh is manual, while the UI's
+# "Update Now" goes through Watchtower's POST /v1/update and never touches it.
+# The timer is path-independent, and also catches devices that have not updated
+# in a long time.
+cat > /etc/systemd/system/aquila-prune-images.service <<'EOF'
+[Unit]
+Description=Cap retained Aquila container images
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fleet/prune-images.sh
+EOF
+
+# Daily with a randomized delay, matching aquila-cert-renew: there is no reason
+# for the fleet to prune in lockstep. Persistent=true catches up after downtime,
+# which matters here — devices are routinely offline for days.
+cat > /etc/systemd/system/aquila-prune-images.timer <<'EOF'
+[Unit]
+Description=Daily retained-image prune
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now aquila-prune-images.timer
+
+run_test "prune script present"   "test -x /opt/fleet/prune-images.sh"
+run_test "prune service file"     "test -f /etc/systemd/system/aquila-prune-images.service"
+run_test "prune timer file"       "test -f /etc/systemd/system/aquila-prune-images.timer"
+run_test "prune timer enabled"    "systemctl is-enabled aquila-prune-images.timer | grep -q enabled"
+run_test "prune timer active"     "systemctl is-active aquila-prune-images.timer | grep -q active"
+run_test "prune script runs"      "DRY_RUN=1 /opt/fleet/prune-images.sh >/dev/null"
+
+phase_pass "aquila-prune-images.timer registered and enabled"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 11 — Fleet Device Configuration (Start Stack)
