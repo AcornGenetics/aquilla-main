@@ -1,16 +1,39 @@
+# ── Build stage ───────────────────────────────────────────────────────────────
+# build-essential exists solely to compile RPi.GPIO and spidev from source: both
+# publish wheels only for 32-bit ARM (linux_armv6l/armv7l, cp27-cp310), and the
+# fleet runs 64-bit Pi OS on cp311/aarch64, so neither matches and pip falls back
+# to the sdist. Compiling here keeps ~300 MB of toolchain out of the runtime image.
+FROM python:3.11-slim-bookworm AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-backend.txt ./requirements-backend.txt
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements-backend.txt
+
+# ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM python:3.11-slim-bookworm
 
 WORKDIR /opt/aquila
 
+# curl is required — entrypoint.sh polls the backend's /health before starting
+# the hardware app. procps and sudo are kept for on-device debugging.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     procps \
     sudo \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# --no-index: install only from the wheels built above, never from PyPI. If a
+# wheel is missing this fails loudly at build time rather than silently pulling
+# a compiler-free sdist that cannot build.
+COPY --from=builder /wheels /wheels
 COPY requirements-backend.txt ./requirements-backend.txt
-RUN pip install --no-cache-dir -r requirements-backend.txt
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements-backend.txt \
+    && rm -rf /wheels
 
 COPY . .
 COPY profiles/bundled/ /opt/aquila/profiles_bundled/

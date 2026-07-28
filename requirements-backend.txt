@@ -4,11 +4,9 @@ pydantic
 requests
 httpx
 numpy
-pandas
 matplotlib
 pyserial
 RPi.GPIO
 spidev
 smbus2
-simple-rpc
 cryptography
