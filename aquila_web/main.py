@@ -845,9 +845,44 @@ async def timer(payload: TimerControl):
         raise HTTPException(status_code=400, detail="Invalid action")
 
 
+def _read_build_identity() -> dict:
+    """This image's own baked provenance (#351).
+
+    Written into config_files/version.json at build time by docker/Dockerfile.api.
+    config_files/ is not a mounted volume, so nothing can overwrite it at runtime
+    — unlike RUNNING_IMAGE_DIGEST, which is an env var supplied by whoever started
+    the container and is written by /update/apply BEFORE the swap, recording
+    intent rather than outcome.
+
+    Tolerates the keys being absent: images built before #351 have only
+    app_version, and a device running one must not crash on startup.
+    """
+    identity = {"app_version": "unknown", "git_sha": "unknown", "build_time": "unknown"}
+    try:
+        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
+        for key in identity:
+            if data.get(key):
+                identity[key] = str(data[key])
+    except Exception:  # noqa: BLE001 - identity must never break startup
+        logger.warning("could not read build identity from version.json")
+    return identity
+
+
+# Resolved once: the values are baked into the image and cannot change while the
+# container runs, and /health is polled every 30s by the Docker healthcheck.
+_BUILD_IDENTITY = _read_build_identity()
+
+
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        **_BUILD_IDENTITY,
+        # Deliberately reported alongside the baked values rather than instead of
+        # them: their disagreement is the signal that a device is not running what
+        # the fleet config claims. See #352.
+        "running_image_digest": os.getenv("RUNNING_IMAGE_DIGEST") or "unknown",
+    }
 
 
 def _read_app_version() -> str:

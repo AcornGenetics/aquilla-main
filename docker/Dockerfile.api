@@ -17,6 +17,24 @@ COPY profiles/bundled/ /opt/aquila/profiles_bundled/
 COPY docker/entrypoint.sh /opt/aquila/entrypoint.sh
 RUN chmod +x /opt/aquila/entrypoint.sh
 
+# Bake build provenance into the image (#351).
+#
+# An injected env var like RUNNING_IMAGE_DIGEST is a claim made by whoever
+# started the container — /update/apply writes it BEFORE the swap, so it records
+# intent, not outcome. A value baked into the image bytes cannot misreport what
+# is running. config_files/ is not a mounted volume, so nothing can overwrite
+# this at runtime.
+#
+# Declared here, after the dependency layers, so a new SHA invalidates only this
+# tiny layer and the build cache from #348 still applies.
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+LABEL org.opencontainers.image.revision=$GIT_SHA
+LABEL org.opencontainers.image.created=$BUILD_TIME
+# Extends the version.json introduced in #340 rather than replacing it —
+# _read_app_version() reads data["app_version"] and is unaffected by extra keys.
+RUN python -c "import json,os,pathlib;p=pathlib.Path('config_files/version.json');d=json.loads(p.read_text());d['git_sha']=os.environ.get('GIT_SHA','unknown');d['build_time']=os.environ.get('BUILD_TIME','unknown');p.write_text(json.dumps(d,indent=4)+'\n')"
+
 ENV DATA_DIR=/opt/aquila \
     PROFILE_DIR=/opt/aquila/profiles \
     RESULTS_PATH=/opt/aquila/results/results.json

@@ -3,5 +3,17 @@ FROM nginx:1.27-alpine
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY aquila_web/static/ /usr/share/nginx/html/
 
+# Bake build provenance (#351). This image is nginx serving static files — there
+# is no application to answer a request — so the identity is a static file that
+# nginx serves directly. See the `location = /version.json` block in nginx.conf:
+# without it this path falls through to the catch-all proxy and is answered by
+# the API container, which would silently compare that image against itself.
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+LABEL org.opencontainers.image.revision=$GIT_SHA
+LABEL org.opencontainers.image.created=$BUILD_TIME
+RUN printf '{"git_sha":"%s","build_time":"%s"}\n' "$GIT_SHA" "$BUILD_TIME" \
+    > /usr/share/nginx/html/version.json
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1/ > /dev/null
