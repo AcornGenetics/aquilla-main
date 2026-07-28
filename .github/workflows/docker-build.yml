@@ -24,6 +24,12 @@ jobs:
       - name: Set lowercase repo
         run: echo "REPO_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
+      # Computed in a step rather than read from github.event.head_commit, which
+      # is absent on workflow_dispatch. Baked into both images so a device can
+      # report its own provenance — see #351.
+      - name: Stamp build time
+        run: echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -47,6 +53,9 @@ jobs:
           # build is emulated. See #348.
           platforms: linux/arm64
           push: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ env.BUILD_TIME }}
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}-api:latest
             ghcr.io/${{ env.REPO_LOWER }}-api:${{ github.sha }}
@@ -67,6 +76,9 @@ jobs:
           file: docker/Dockerfile.ui
           platforms: linux/arm64
           push: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ env.BUILD_TIME }}
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}-ui:latest
             ghcr.io/${{ env.REPO_LOWER }}-ui:${{ github.sha }}
