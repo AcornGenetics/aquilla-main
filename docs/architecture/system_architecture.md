@@ -25,10 +25,8 @@ aquilla-main/
 │   ├── motor_class.py   # Stepper motors (carousel + drawer)
 │   ├── lid_temperature.py # ADS1115 ADC lid temperature sensor
 │   ├── regulate.py      # Lid heater PID worker
-│   ├── tecControl.py    # TEC high-level interface
 │   ├── thermal_engine.py# Thermal runaway detection
 │   ├── state_requests.py# HTTP client → backend state endpoints
-│   ├── hw_api.py        # High-level hardware abstraction
 │   └── config_module.py # Loads host_config.json per hostname
 ├── aq_curve/            # PCR curve analysis
 │   ├── curve.py         # Baseline correction, cross-talk, Cq calculation

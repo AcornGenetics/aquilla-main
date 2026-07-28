@@ -18,7 +18,6 @@
 
 ## aq_lib Core Drivers
 - `aq_lib/config_module.py`: Loads `config_files/*.json`, exposes host-specific dictionaries, and provides helpers to locate serial devices by VID/PID or serial number.
-- `aq_lib/hw_api.py`: `DockInterface` wrapper around simple_rpc/serial that timestamps runs, logs critical events, and exposes helpers like digitalWrite/read for the MCU.
 - `aq_lib/lid_temperature.py`: Implements an ADS1115 I²C client supporting single-shot and continuous conversions plus comparator configuration for lid sensing.
 - `aq_lib/mecrc16.py`: CRC-CCITT lookup table and helper functions used in Meerstetter frame integrity checks.
 - `aq_lib/meerstetter.py`: Comprehensive Meerstetter TEC driver that discovers devices, wraps numerous parameter getters/setters, and handles framing/CRC on the serial link.
@@ -27,13 +26,11 @@
 ## aq_lib Control Helpers
 - `aq_lib/regulate.py`: Starts the lid heater worker that continuously samples the ADS1115 and toggles GPIO21 (optionally via PWM) to maintain a voltage/temperature setpoint.
 - `aq_lib/state_requests.py`: Provides REST helpers that talk to the kiosk FastAPI server to change screens, control timers, update result paths, and await button input.
-- `aq_lib/tecControl.py`: Legacy example tying thermal profiles to Meerstetter commands and MCU fan pins via simple_rpc, illustrating how TEC runs were orchestrated.
 - `aq_lib/thermal_engine.py`: Executes the action stream from `thermal_parser`, calling into the Meerstetter object, logging ramp/hold events, and invoking callbacks (fans/optics).
 - `aq_lib/thermal_parser.py`: Generator that expands JSON profile steps into ramp/hold/enable/fan/optics commands with support for repeats and per-step ramp rates.
 - `aq_lib/utils.py`: Miscellaneous helpers for JSON loading, timestamped logfile naming, dummy components, and centralized logging configurations.
 
 ## Web UI & Sensor Tools
-- `aquila_web/hardware.py`: Simple helper that opens a simple_rpc Interface on `/dev/ttyACM0` so the FastAPI layer can forward hardware method calls.
 - `aquila_web/main.py`: FastAPI app that drives the kiosk UI: serves static pages, manages run state/timers, handles profile selection, and publishes websocket updates.
 - `aquila_web/stream/5_pressure_overlay_psi.py`: Streamlit dashboard for selecting docks/logs and overlaying PSI pressure traces with adjustable time windows.
 - `aquila_web/stream/7_pcr_overlay.py`: Streamlit app for plotting TEC telemetry columns from multiple PCR runs with selectable Y-axes.
