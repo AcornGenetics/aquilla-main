@@ -622,14 +622,12 @@ curl -fsSL \
     -o /opt/fleet/update.sh
 chmod +x /opt/fleet/update.sh
 
-# Image retention (#355). Nothing else on the device removes old images, so they
-# accumulate without limit — sn03 was measured holding 27 images, 19 dangling,
-# 8.84 GB reclaimable. Installed here and driven by the timer in Phase 10.
-curl -fsSL \
-    -H "Authorization: token ${GHCR_TOKEN}" \
-    "https://raw.githubusercontent.com/${GHCR_REPO}/main/scripts/deploy/prune-images.sh" \
-    -o /opt/fleet/prune-images.sh
-chmod +x /opt/fleet/prune-images.sh
+# NOTE: prune-images.sh (#355) is deliberately NOT fetched here. It ships inside
+# the container image and is written to /opt/fleet by docker/entrypoint.sh on
+# every backend start. Fetching it from main at provisioning would freeze it at
+# that day's version forever (nothing refreshes host scripts afterwards) and
+# would bypass the ring system for a script that deletes images. The systemd
+# units that drive it are still installed here, in Phase 10.
 
 # Generate the device keypair + CSR on-device (CN = Device ID = Pi serial). The
 # private key is written owner-only (0600) and never leaves the Pi; only the CSR

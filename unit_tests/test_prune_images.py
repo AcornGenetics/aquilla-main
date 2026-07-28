@@ -168,3 +168,71 @@ def test_empty_retention_count_falls_back_to_default(tmp_path):
     result, removed = _run(tmp_path, images, IMAGE_RETENTION_SETS="")
     assert result.returncode == 0
     assert sorted(removed) == ["api1", "api2"]  # default of 3 -> keep 2 untagged
+
+
+# ── entrypoint sync (#355) ────────────────────────────────────────────────────
+# The script reaches a device by riding in the container image: docker/entrypoint.sh
+# copies it to /opt/fleet, which is bind-mounted from the host. That is the only
+# automatic delivery path — nothing on a device fetches host-side scripts.
+
+ENTRYPOINT = Path(__file__).resolve().parents[1] / "docker" / "entrypoint.sh"
+
+
+def _run_entrypoint(tmp_path, fleet_dir, make_writable=True):
+    """Run entrypoint.sh with a fake /opt/fleet and a stubbed command."""
+    helper_src = tmp_path / "opt" / "aquila" / "scripts" / "deploy"
+    helper_src.mkdir(parents=True, exist_ok=True)
+    (helper_src / "prune-images.sh").write_text("#!/usr/bin/env bash\necho stub\n")
+
+    fleet_dir.mkdir(parents=True, exist_ok=True)
+    if not make_writable:
+        fleet_dir.chmod(0o500)
+
+    # entrypoint.sh hardcodes /opt/aquila/scripts/deploy; rewrite it to the fake
+    # tree so the test does not need to run as root or inside a container.
+    src = ENTRYPOINT.read_text().replace(
+        'helper_src="/opt/aquila/scripts/deploy"',
+        f'helper_src="{helper_src}"',
+    )
+    patched = tmp_path / "entrypoint.sh"
+    patched.write_text(src)
+    patched.chmod(0o755)
+
+    return subprocess.run(
+        ["bash", str(patched), "true"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "FLEET_DIR": str(fleet_dir), "PROFILE_DIR": str(tmp_path / "profiles")},
+    )
+
+
+def test_entrypoint_syncs_prune_script_to_fleet_dir(tmp_path):
+    fleet = tmp_path / "fleet"
+    result = _run_entrypoint(tmp_path, fleet)
+    assert result.returncode == 0, result.stderr
+    synced = fleet / "prune-images.sh"
+    assert synced.exists(), "prune-images.sh was not written to the fleet dir"
+    assert os.access(synced, os.X_OK), "synced script is not executable"
+
+
+def test_entrypoint_overwrites_an_older_copy(tmp_path):
+    """A device already holding an old copy must get the new one on restart."""
+    fleet = tmp_path / "fleet"
+    fleet.mkdir()
+    (fleet / "prune-images.sh").write_text("#!/usr/bin/env bash\necho STALE\n")
+    _run_entrypoint(tmp_path, fleet)
+    assert "STALE" not in (fleet / "prune-images.sh").read_text()
+
+
+def test_entrypoint_survives_missing_fleet_mount(tmp_path):
+    """/opt/fleet is mounted into backend only — this is a no-op in the app container."""
+    result = _run_entrypoint(tmp_path, tmp_path / "does-not-exist")
+    assert result.returncode == 0, result.stderr
+
+
+def test_entrypoint_survives_readonly_fleet_mount(tmp_path):
+    """A read-only mount must not stop the backend from starting."""
+    fleet = tmp_path / "ro-fleet"
+    result = _run_entrypoint(tmp_path, fleet, make_writable=False)
+    fleet.chmod(0o700)  # restore so pytest can clean up
+    assert result.returncode == 0, result.stderr
