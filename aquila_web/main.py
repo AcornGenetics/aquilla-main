@@ -1941,6 +1941,12 @@ async def websocket_endpoint(websocket: WebSocket):
             panel_with_timer["drawer_state_open"] = drawer_state_open
             panel_with_timer["drawer_state_closed"] = drawer_state_closed
 
+            # Build identity (#352). Pushed over the socket the UI already holds
+            # open rather than polled: detection is immediate and costs no extra
+            # requests. Only false is actionable — null means the check could not
+            # run, which must not be rendered as a problem OR as a pass.
+            panel_with_timer["identity_ok"] = _identity_state.get("identity_ok")
+
             # Server-authoritative run identity for the Run-card header (issue #265).
             # The header must keep showing the active run's profile/run name even
             # when the dropdown cannot re-select it after navigating back to /run.
@@ -2533,6 +2539,230 @@ async def _background_update_poller() -> None:
         await asyncio.sleep(_OTA_POLL_INTERVAL)
 
 
+# ── Build identity verification (#352) ────────────────────────────────────────
+#
+# Two questions, both answered by comparing git SHAs — never build timestamps.
+# Posit hit exactly this: timestamp-based client/server version tracking proved
+# unreliable because build nodes disagreed on the clock. These Pis have no RTC
+# and can boot with a badly wrong clock (see the device-clock issue), so
+# build_time is for humans reading a screen and must never be a comparison key.
+#
+#   A. Do the API and UI images come from the same build?
+#      Both report their own baked SHA, so this needs no network.
+#
+#   B. Is the running build the one the fleet config claims?
+#      The baked SHA is what is running. RUNNING_IMAGE_DIGEST is what /opt/fleet
+#      claims. They are different types — a git commit hash vs an OCI content
+#      digest — so they cannot be compared directly. The bridge is the
+#      org.opencontainers.image.revision label added in #351, read from the
+#      registry manifest without pulling the image.
+_UI_IDENTITY_URL = os.getenv("AQ_UI_IDENTITY_URL", "http://aquila-ui/version.json")
+
+_identity_state: dict = {
+    "api_git_sha": None,
+    "ui_git_sha": None,
+    "images_match": None,
+    "expected_git_sha": None,
+    "digest_matches": None,
+    "identity_ok": None,
+    "checked_at": None,
+    "error": None,
+}
+
+
+async def _fetch_ui_identity() -> tuple[str | None, str | None]:
+    """The UI image's own baked SHA, served by nginx from its own filesystem.
+
+    nginx.conf has an explicit `location = /version.json` for exactly this: the
+    catch-all proxies to this backend, so without it we would fetch our own
+    identity and the comparison would always pass (#351).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(_UI_IDENTITY_URL)
+        if r.status_code != 200:
+            return None, f"UI identity unavailable (HTTP {r.status_code})"
+        return (r.json().get("git_sha") or None), None
+    except Exception:  # noqa: BLE001
+        return None, "Could not reach the UI container"
+
+
+async def _ghcr_revision_for_digest(
+    repo: str, digest: str, user: str, token: str
+) -> tuple[str | None, str | None]:
+    """Resolve an image digest to the git SHA it was built from.
+
+    Reads the OCI label out of the image's config blob. Registry reads only — the
+    image is never pulled.
+    """
+    bearer, err = await _ghcr_bearer_token(user, token, repo)
+    if bearer is None:
+        return None, err
+    owner = repo.split("/")[0]
+    name = "/".join(repo.split("/")[1:]) or repo
+    base = f"https://ghcr.io/v2/{owner}/{name}"
+    headers = {
+        "Authorization": f"Bearer {bearer}",
+        "Accept": (
+            "application/vnd.oci.image.index.v1+json,"
+            "application/vnd.oci.image.manifest.v1+json,"
+            "application/vnd.docker.distribution.manifest.list.v2+json,"
+            "application/vnd.docker.distribution.manifest.v2+json"
+        ),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(f"{base}/manifests/{digest}", headers=headers)
+            if r.status_code >= 400:
+                return None, _ERR_REGISTRY
+            doc = r.json()
+
+            # A multi-arch tag resolves to an index; descend into the single
+            # platform manifest. The fleet is arm64-only since #348, but the
+            # index wrapper can still be present.
+            if "manifests" in doc and doc.get("manifests"):
+                child = doc["manifests"][0]["digest"]
+                r = await client.get(f"{base}/manifests/{child}", headers=headers)
+                if r.status_code >= 400:
+                    return None, _ERR_REGISTRY
+                doc = r.json()
+
+            config_digest = (doc.get("config") or {}).get("digest")
+            if not config_digest:
+                return None, _ERR_REGISTRY
+
+            r = await client.get(f"{base}/blobs/{config_digest}", headers=headers)
+            if r.status_code >= 400:
+                return None, _ERR_REGISTRY
+            labels = ((r.json().get("config") or {}).get("Labels")) or {}
+    except httpx.RequestError:
+        return None, _ERR_NETWORK
+    except Exception:  # noqa: BLE001
+        logger.exception("could not resolve image revision from registry")
+        return None, _ERR_REGISTRY
+
+    return labels.get("org.opencontainers.image.revision"), None
+
+
+def _resolve_identity_ok(images_match, digest_matches) -> bool | None:
+    """False beats None beats True.
+
+    `null` when a check could not run — never `true`. A check that could not run
+    reporting the same result as a check that passed is the exact failure the OTA
+    status issue documents, and it would be easy to reintroduce here as a fix for
+    noisy alerts.
+    """
+    if images_match is False or digest_matches is False:
+        return False
+    if images_match is None or digest_matches is None:
+        return None
+    return True
+
+
+async def _check_build_identity() -> None:
+    global _identity_state
+    api_sha = _BUILD_IDENTITY.get("git_sha")
+    if api_sha in (None, "", "unknown"):
+        api_sha = None
+
+    ui_sha, ui_err = await _fetch_ui_identity()
+    images_match = None if (api_sha is None or ui_sha is None) else (api_sha == ui_sha)
+
+    expected_sha = None
+    digest_matches = None
+    reg_err = None
+    running_digest = os.getenv("RUNNING_IMAGE_DIGEST") or None
+    if running_digest and _OTA_GHCR_TOKEN and api_sha:
+        expected_sha, reg_err = await _ghcr_revision_for_digest(
+            _OTA_GHCR_REPO_API, running_digest, _OTA_GHCR_USER, _OTA_GHCR_TOKEN
+        )
+        if expected_sha:
+            digest_matches = expected_sha == api_sha
+
+    identity_ok = _resolve_identity_ok(images_match, digest_matches)
+    was_ok = _identity_state.get("identity_ok")
+
+    _identity_state = {
+        "api_git_sha": api_sha,
+        "ui_git_sha": ui_sha,
+        "images_match": images_match,
+        "expected_git_sha": expected_sha,
+        "digest_matches": digest_matches,
+        "identity_ok": identity_ok,
+        "checked_at": datetime.utcnow().isoformat() + "Z",
+        "error": ui_err or (_ERR_MESSAGES.get(reg_err) if reg_err else None),
+    }
+
+    if identity_ok is False:
+        # Push it to the screen immediately over the websocket the UI already
+        # holds open, rather than waiting for a poll.
+        state_change_event.set()
+        state_change_event.clear()
+        if was_ok is not False:  # only on transition, not every poll
+            logger.error("build identity mismatch: %s", _identity_state)
+            _emit_identity_mismatch_event()
+
+
+def _emit_identity_mismatch_event() -> None:
+    """Report the mismatch to the analytics platform.
+
+    An on-screen warning only helps someone standing at the device. Without this
+    a mismatch on an unattended Sentri stays invisible, which is the original
+    problem simply relocated. Follows the ADR-021 telemetry pattern.
+    """
+    try:
+        enqueue_event(
+            "identity_mismatch",
+            {k: v for k, v in _identity_state.items()},
+            dedup_key=f"identity:{_identity_state.get('api_git_sha')}:"
+                      f"{_identity_state.get('ui_git_sha')}:"
+                      f"{_identity_state.get('expected_git_sha')}",
+        )
+    except Exception:  # noqa: BLE001 - telemetry must never break the check
+        logger.exception("could not enqueue identity mismatch event")
+
+
+@app.get("/identity")
+async def get_identity():
+    """This device's build provenance and whether it verifies."""
+    return {**_BUILD_IDENTITY,
+            "running_image_digest": os.getenv("RUNNING_IMAGE_DIGEST") or "unknown",
+            **_identity_state}
+
+
+@app.post("/identity/check")
+async def trigger_identity_check():
+    """Re-run the check now rather than waiting for the poll.
+
+    Used by the post-deploy verification, and by the operator's "Try again".
+    """
+    await _check_build_identity()
+    return {"ok": True, **_identity_state}
+
+
+async def _background_identity_poller() -> None:
+    # All four containers start together on a device, so the UI is frequently not
+    # yet serving when this first runs — which would leave the check unresolved
+    # until the next poll five minutes later. Retry quickly a few times first,
+    # then settle onto the update-check cadence, which already runs at the right
+    # interval and already talks to GHCR.
+    for delay in (5, 15, 30):
+        await asyncio.sleep(delay)
+        try:
+            await _check_build_identity()
+        except Exception:  # noqa: BLE001
+            logger.exception("identity check failed")
+        if _identity_state.get("images_match") is not None:
+            break  # the UI answered; no need to keep retrying fast
+
+    while True:
+        await asyncio.sleep(_OTA_POLL_INTERVAL)
+        try:
+            await _check_build_identity()
+        except Exception:  # noqa: BLE001 - the poller must survive anything
+            logger.exception("identity check failed")
+
+
 _SYNC_INTERVAL_SECONDS = int(os.getenv("AQ_SYNC_INTERVAL_SECONDS", "900"))
 
 
@@ -2612,3 +2842,8 @@ async def start_background_update_poller() -> None:
 @app.on_event("startup")
 async def start_background_sync_poller() -> None:
     asyncio.create_task(_background_sync_poller())
+
+
+@app.on_event("startup")
+async def start_background_identity_poller() -> None:
+    asyncio.create_task(_background_identity_poller())

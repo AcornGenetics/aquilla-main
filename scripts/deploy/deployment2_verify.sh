@@ -140,6 +140,18 @@ test_phase_11() {
     check 11 "aquila-ui running"         \
         "docker ps --filter name=aquila-ui --format '{{.Status}}' | grep -q Up"
     check 11 "backend reachable :8090"   "curl -sf http://localhost:8090/health"
+
+    # Build identity (#351/#352). "backend reachable" passes on an image with no
+    # provenance at all, and a version mismatch is invisible without this.
+    check 11 "backend reports a build SHA" \
+        "curl -sf http://localhost:8090/health | grep -qv '\"git_sha\": *\"unknown\"'"
+    # nginx must serve the UI's own identity, not proxy the request to the
+    # backend — otherwise the UI appears to match itself no matter what.
+    check 11 "UI serves its own identity" \
+        "curl -sf http://localhost:8080/version.json | grep -q git_sha"
+    # false means a confirmed mismatch. null (could not verify) is not a failure.
+    check 11 "no confirmed identity mismatch" \
+        "! curl -sf http://localhost:8090/identity | grep -q '\"identity_ok\": *false'"
     check 11 "aquila-watchtower running" \
         "docker ps --filter name=aquila-watchtower --format '{{.Status}}' | grep -q Up"
     check 11 "watchtower webhook responds" \
