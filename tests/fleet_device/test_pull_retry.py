@@ -105,7 +105,7 @@ FAST = "PULL_BACKOFF_SECONDS=0; PULL_TOTAL_BUDGET_SECONDS=60;"
 
 
 def test_successful_pull_runs_once_and_does_not_touch_ipv6() -> None:
-    setup = f"{FAST} ipv6_usable() {{ echo IPV6_PROBED; return 1; }}"
+    setup = f"{FAST} ipv6_only_pull_possible() {{ echo IPV6_PROBED; return 1; }}"
     out = _call("pull_with_fallback", "true", setup=setup)
 
     assert "pull succeeded" in out
@@ -126,15 +126,16 @@ def test_transport_failure_retries_then_falls_back_to_ipv6() -> None:
     setup = (
         f"{FAST} PULL_IPV4_ATTEMPTS=3;"
         " _fail() { echo 'unexpected EOF'; return 1; };"
-        " enable_ipv6() { :; };"
-        " ipv6_usable() { return 0; }"
+        ""
+        " ipv6_only_pull_possible() { return 0; };"
+        " _pull_ipv6_only() { shift; \"$@\"; }"
     )
     out = _call("pull_with_fallback", "_fail", setup=setup)
 
     # "==> pull attempt" is the IPv4 banner; the v6 one reads "==> IPv6 pull attempt".
     assert out.count("==> pull attempt") == 3, "should use its full IPv4 budget first"
-    assert "IPv4 exhausted; trying IPv6" in out
-    assert "IPv6 pull attempt" in out
+    assert "IPv4 exhausted; considering an IPv6-only attempt" in out
+    assert "IPv6-only pull attempt" in out
 
 
 def test_reports_degraded_ipv4_when_ipv6_rescues_the_pull() -> None:
@@ -143,8 +144,9 @@ def test_reports_degraded_ipv4_when_ipv6_rescues_the_pull() -> None:
         f"{FAST} PULL_IPV4_ATTEMPTS=1;"
         " _flaky() { [[ -f $STATE ]] && return 0; touch $STATE;"
         "            echo 'unexpected EOF'; return 1; };"
-        " enable_ipv6() { :; };"
-        " ipv6_usable() { return 0; };"
+        ""
+        " ipv6_only_pull_possible() { return 0; };"
+        " _pull_ipv6_only() { shift; \"$@\"; };"
         " STATE=$(mktemp -u)"
     )
     out = _call("pull_with_fallback", "_flaky", setup=setup)
@@ -158,8 +160,8 @@ def test_no_ipv6_at_site_fails_with_a_diagnosable_message() -> None:
     setup = (
         f"{FAST} PULL_IPV4_ATTEMPTS=1;"
         " _fail() { echo 'unexpected EOF'; return 1; };"
-        " enable_ipv6() { :; };"
-        " ipv6_usable() { return 1; }"
+        ""
+        " ipv6_only_pull_possible() { return 1; }"
     )
     result = subprocess.run(
         ["bash", "-c", f"source {SCRIPT}\n{setup}\npull_with_fallback _fail"],
@@ -170,7 +172,7 @@ def test_no_ipv6_at_site_fails_with_a_diagnosable_message() -> None:
     combined = result.stdout + result.stderr
 
     assert result.returncode != 0, "must not report success when nothing was pulled"
-    assert "no usable IPv6" in combined
+    assert "IPv6-only pull not possible" in combined
     assert "families tried: ipv4" in combined
 
 
@@ -180,7 +182,7 @@ def test_failed_pull_never_reports_success() -> None:
     Reading that instead of PIPESTATUS[0] would mark every failed pull as a success
     and let the update continue onto the digest write-back with a stale image.
     """
-    setup = f"{FAST} PULL_IPV4_ATTEMPTS=1; ipv6_usable() {{ return 1; }}"
+    setup = f"{FAST} PULL_IPV4_ATTEMPTS=1; ipv6_only_pull_possible() {{ return 1; }}"
     result = subprocess.run(
         ["bash", "-c", f"set +o pipefail\nsource {SCRIPT}\n{setup}\npull_with_fallback false"],
         capture_output=True,
@@ -230,8 +232,9 @@ def test_records_which_families_were_tried_for_the_backend(tmp_path) -> None:
         f"{FAST} PULL_IPV4_ATTEMPTS=1; PULL_OUTCOME_PATH='{outcome}';"
         " _flaky() { [[ -f $STATE ]] && return 0; touch $STATE;"
         "            echo 'unexpected EOF'; return 1; };"
-        " enable_ipv6() { :; };"
-        " ipv6_usable() { return 0; };"
+        ""
+        " ipv6_only_pull_possible() { return 0; };"
+        " _pull_ipv6_only() { shift; \"$@\"; };"
         " STATE=$(mktemp -u)"
     )
     _call("pull_with_fallback", "_flaky", setup=setup)
@@ -246,14 +249,14 @@ def test_records_a_failure_the_backend_can_explain(tmp_path) -> None:
     setup = (
         f"{FAST} PULL_IPV4_ATTEMPTS=1; PULL_OUTCOME_PATH='{outcome}';"
         " _fail() { echo 'unexpected EOF'; return 1; };"
-        " enable_ipv6() { :; };"
-        " ipv6_usable() { return 1; }"
+        ""
+        " ipv6_only_pull_possible() { return 1; }"
     )
     _call("pull_with_fallback", "_fail", setup=setup)
 
     recorded = json.loads(outcome.read_text())
     assert recorded["result"] == "failed"
-    assert "no usable IPv6" in recorded["detail"]
+    assert "no viable IPv6 path" in recorded["detail"]
 
 
 def test_unwritable_breadcrumb_does_not_fail_the_update() -> None:
@@ -262,3 +265,75 @@ def test_unwritable_breadcrumb_does_not_fail_the_update() -> None:
     out = _call("pull_with_fallback", "true", setup=setup)
 
     assert "pull succeeded" in out
+
+
+# --- the IPv6-only last resort ----------------------------------------------
+# _pull_ipv6_only removes the device's IPv4 default route for one attempt. If it
+# ever failed to put it back, a remote device would lose connectivity and nobody
+# could reach it to fix that. These drive it with a stubbed `ip`.
+
+IP_STUB = (
+    " ip() {{ echo \"ip $*\" >> {log};"
+    '   if [[ "$*" == "-4 route show default" ]]; then'
+    '     echo "default via 192.168.1.1 dev wlan0 proto dhcp metric 600"; fi; }};'
+)
+
+
+def _ip_calls(log) -> list[str]:
+    return log.read_text().splitlines() if log.exists() else []
+
+
+def test_ipv4_route_is_restored_after_a_successful_ipv6_attempt(tmp_path) -> None:
+    log = tmp_path / "ip.log"
+    setup = IP_STUB.format(log=log)
+    out = _call("_pull_ipv6_only", "60", "true", setup=setup)
+
+    calls = _ip_calls(log)
+    assert any("route del default" in c for c in calls), "should remove the v4 route"
+    assert any("route replace" in c for c in calls), "must put the v4 route back"
+    assert "restored" in out
+
+
+def test_ipv4_route_is_restored_even_when_the_pull_fails(tmp_path) -> None:
+    """The failure path is the one that matters -- it's where a device gets stranded."""
+    log = tmp_path / "ip.log"
+    setup = IP_STUB.format(log=log)
+    result = subprocess.run(
+        ["bash", "-c", f"source {SCRIPT}\n{setup}\n_pull_ipv6_only 60 false"],
+        capture_output=True, text=True, timeout=60,
+    )
+
+    assert result.returncode != 0, "a failed pull must still report failure"
+    assert any("route replace" in c for c in _ip_calls(log)), "route must be restored"
+
+
+def test_no_ipv4_route_to_remove_is_a_no_op(tmp_path) -> None:
+    """Nothing to remove means nothing to restore -- must not delete a route blindly."""
+    log = tmp_path / "ip.log"
+    setup = f' ip() {{ echo "ip $*" >> {log}; }};'
+    result = subprocess.run(
+        ["bash", "-c", f"source {SCRIPT}\n{setup}\n_pull_ipv6_only 60 true"],
+        capture_output=True, text=True, timeout=60,
+    )
+
+    assert result.returncode != 0
+    assert not any("route del" in c for c in _ip_calls(log))
+
+
+def test_fallback_is_skipped_when_the_network_cannot_support_it(tmp_path) -> None:
+    """Without NAT64, ghcr.io is unreachable v6-only: dropping IPv4 would only cost
+    the device its connectivity and still fail at authentication."""
+    log = tmp_path / "ip.log"
+    setup = (
+        f"{FAST} PULL_IPV4_ATTEMPTS=1;"
+        " _fail() { echo 'unexpected EOF'; return 1; };"
+        " ipv6_only_pull_possible() { return 1; };"
+        f' ip() {{ echo "ip $*" >> {log}; }};'
+    )
+    result = subprocess.run(
+        ["bash", "-c", f"source {SCRIPT}\n{setup}\npull_with_fallback _fail"],
+        capture_output=True, text=True, timeout=60,
+    )
+
+    assert not any("route del" in c for c in _ip_calls(log)), "must not touch routing"
+    assert "IPv6-only pull not possible" in result.stdout + result.stderr

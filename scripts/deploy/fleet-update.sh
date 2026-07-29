@@ -18,16 +18,22 @@ COMPOSE_FILE="${COMPOSE_FILE:-/opt/fleet/docker-compose.yml}"
 #   auth + manifest -> ghcr.io                              (a few KB, NO AAAA record)
 #   blob / layers   -> pkg-containers.githubusercontent.com (hundreds of MB, HAS AAAA)
 # On a degraded IPv4 path the small manifest fetch still succeeds -- so the device
-# correctly detects an update -- while the bulk blob transfer stalls. Because the blob
-# host is v6-capable, bringing IPv6 up rescues exactly the leg that fails. This was
-# observed in the field: switching a stuck device to IPv6 completed the update.
+# correctly detects an update -- while the bulk blob transfer stalls.
 #
-# We do NOT force a family per connection (docker exposes no such flag, and pinning CDN
-# addresses into /etc/hosts rots as the CDN rotates). We make IPv6 usable and let
-# glibc's RFC 6724 address selection prefer it for AAAA-bearing hosts. ghcr.io publishes
-# no AAAA, so auth/manifest stay on IPv4 by themselves -- no special-casing needed.
-
-PULL_BLOB_HOST="${PULL_BLOB_HOST:-pkg-containers.githubusercontent.com}"
+# Two things follow, and they pull in opposite directions:
+#
+#   Merely *enabling* IPv6 achieves nothing. Both Go (dockerd) and glibc already prefer
+#   IPv6 over IPv4 when both work, so a device with usable IPv6 is already trying it.
+#
+#   Forcing IPv6 does help, but only somewhere specific. In the field a stuck device
+#   completed its update after IPv4 was switched off by hand. With ghcr.io having no
+#   AAAA, a v6-only pull can only authenticate where the network runs NAT64/DNS64 --
+#   so that is the situation being reproduced, and the gate below tests for exactly it.
+#
+# Hence: retry on IPv4 first (which is what helps everywhere), and only as a last resort
+# -- the update has already failed by then -- drop the IPv4 default route for one
+# attempt, where the network can actually support that. This is deliberately the final
+# thing tried, never a first move.
 
 # Breadcrumb read back by the backend for /update/status (#357). The backend cannot
 # observe this itself: the operator's Update button drives Watchtower, which performs
@@ -89,38 +95,68 @@ classify_pull_error() {
     echo "unknown"
 }
 
-# ipv6_usable -- true only with real internet IPv6 that reaches the blob host.
+# ipv6_only_pull_possible -- can the WHOLE pull complete with IPv4 out of the way?
 #
-# Two traps this guards against:
-#   - Tailscale hands out an fd7a::/8 ULA address, so "has a global v6 address" is not
-#     enough; devices look v6-capable while having no route off-link. Requiring a
-#     default route excludes that.
-#   - A router can advertise v6 with no working upstream (blackholed), which would make
-#     the fallback slower than no fallback. So we prove the path end to end.
-ipv6_usable() {
+# ghcr.io publishes no AAAA record, so on an ordinary dual-stack network a v6-only pull
+# cannot even authenticate. It works only where the network runs NAT64/DNS64: an
+# IPv6-mostly setup that synthesises addresses for IPv4-only servers and translates on
+# the way out. Reaching ghcr.io over IPv6 is a direct test for exactly that, and it is
+# the situation observed in the field, where forcing a stuck device to IPv6 completed
+# the update.
+#
+# Gating on this keeps us from dropping IPv4 anywhere it could not possibly help.
+ipv6_only_pull_possible() {
     ip -6 route show default 2>/dev/null | grep -q . || return 1
-    # No -f: any HTTP status proves the path carried a request. Only a failure to
-    # connect at all (non-zero curl exit) means IPv6 is unusable here.
-    curl -6 -s -o /dev/null --max-time 8 "https://${PULL_BLOB_HOST}/" >/dev/null 2>&1
+    curl -6 -s -o /dev/null --max-time 8 "https://ghcr.io/v2/" >/dev/null 2>&1
 }
 
-# enable_ipv6 -- undo an explicitly disabled stack.
-#
-# Some device images ship with IPv6 switched off in sysctl; that is the case we can fix
-# locally. If the site's network simply doesn't route v6, there is nothing to enable --
-# ipv6_usable() stays false and we report that rather than pretend a fallback exists.
-enable_ipv6() {
-    local persisted="/etc/sysctl.d/99-aquila-ipv6.conf"
+# _restore_ipv4 <saved-route>
+_restore_ipv4() {
+    [[ -n "${1:-}" ]] && ip route replace ${1} 2>/dev/null || true
+}
 
-    if [[ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo 0)" == "1" ]]; then
-        echo "  IPv6 was disabled in sysctl -- enabling it"
-        sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null 2>&1 || return 1
-        sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null 2>&1 || true
-        # Persist, or the next reboot silently reverts the device to a broken update path.
-        printf 'net.ipv6.conf.all.disable_ipv6 = 0\nnet.ipv6.conf.default.disable_ipv6 = 0\n' \
-            > "${persisted}" 2>/dev/null || true
-        sleep 5   # SLAAC needs a moment to land a route once the stack is back up
+# _pull_ipv6_only <timeout-seconds> <command...>
+#
+# The last thing tried before giving up: remove the IPv4 default route so the pull has
+# no choice but IPv6, attempt it once, then put the route back.
+#
+# Safety, because this briefly takes the device off IPv4 -- which can interrupt remote
+# access for the duration:
+#   - only the default ROUTE is removed, never an address or interface, so restoring is
+#     a single re-add;
+#   - a trap restores it on any exit, including Ctrl-C or a failure mid-pull;
+#   - a detached watchdog restores it even if this shell is killed outright;
+#   - nothing is written to persistent config, so a reboot also heals it.
+_pull_ipv6_only() {
+    local timeout_s=$1; shift
+    local saved rc=0 watchdog
+
+    saved=$(ip -4 route show default 2>/dev/null | head -1)
+    if [[ -z "${saved}" ]]; then
+        echo "  no IPv4 default route to remove -- skipping"
+        return 1
     fi
+
+    trap '_restore_ipv4 "${saved}"' EXIT INT TERM
+    # Detached from this shell's stdout: an inherited pipe would keep the caller
+    # blocked until the watchdog's sleep expired, long after the pull finished.
+    ( sleep $((timeout_s + 60)); ip route replace ${saved} 2>/dev/null || true ) \
+        >/dev/null 2>&1 &
+    watchdog=$!
+
+    echo "  removing the IPv4 default route for this attempt (restored afterwards)"
+    ip -4 route del default 2>/dev/null || true
+
+    _run_pull "${timeout_s}" "$@" || rc=$?
+
+    # Kill the sleep first: killing only the subshell orphans its child, which would
+    # linger for the full watchdog interval on every update.
+    pkill -P "${watchdog}" 2>/dev/null || true
+    kill "${watchdog}" 2>/dev/null || true
+    _restore_ipv4 "${saved}"
+    trap - EXIT INT TERM
+    echo "  IPv4 default route restored"
+    return "${rc}"
 }
 
 # _pull_timeout <seconds> <command...>
@@ -209,14 +245,18 @@ pull_with_fallback() {
         sleep "${PULL_BACKOFF_SECONDS}"
     done
 
-    # Every IPv4 attempt died on transport -- the case IPv6 exists to rescue.
-    echo "==> IPv4 exhausted; trying IPv6 for the blob transfer"
-    enable_ipv6 || true
+    # Every IPv4 attempt died on transport. One last thing before giving up: force the
+    # pull onto IPv6. This is worth trying precisely because the update has already
+    # failed -- the downside is a brief interruption on a device that is stuck anyway.
+    echo "==> IPv4 exhausted; considering an IPv6-only attempt"
 
-    if ! ipv6_usable; then
-        echo "==> no usable IPv6 here (no v6 default route, or ${PULL_BLOB_HOST} unreachable over v6)." >&2
+    if ! ipv6_only_pull_possible; then
+        # Either no IPv6 at all, or IPv6 without NAT64 -- in which case ghcr.io (no
+        # AAAA) is unreachable v6-only and dropping IPv4 would fail at authentication
+        # while costing the device its connectivity. Not worth it.
+        echo "==> IPv6-only pull not possible here (no v6 route, or ghcr.io unreachable over IPv6)." >&2
         echo "==> pull FAILED (families tried: ${_PULL_FAMILIES_TRIED})" >&2
-        _write_pull_outcome failed "${_PULL_FAMILIES_TRIED}" "IPv4 transfer failed and no usable IPv6 at this site"
+        _write_pull_outcome failed "${_PULL_FAMILIES_TRIED}" "IPv4 transfer failed; no viable IPv6 path at this site"
         return 1
     fi
 
@@ -225,17 +265,17 @@ pull_with_fallback() {
         remaining=$((PULL_TOTAL_BUDGET_SECONDS - ($(date +%s) - started)))
         (( remaining <= 0 )) && break
 
-        echo "==> IPv6 pull attempt ${attempt}/${PULL_IPV6_ATTEMPTS} (${remaining}s of budget left)"
-        rc=0; _run_pull "${remaining}" "$@" || rc=$?
+        echo "==> IPv6-only pull attempt ${attempt}/${PULL_IPV6_ATTEMPTS} (${remaining}s of budget left)"
+        rc=0; _pull_ipv6_only "${remaining}" "$@" || rc=$?
         if (( rc == 0 )); then
-            # Loud on purpose: a device needing the v6 fallback on every update has a
-            # site network problem to fix upstream, not to paper over here.
+            # Loud on purpose: a device needing this on every update has a site network
+            # problem to fix upstream, not to paper over here.
             echo "==> pull succeeded over IPv6 after IPv4 failed -- site IPv4 path is degraded"
             _write_pull_outcome ok "${_PULL_FAMILIES_TRIED}" "IPv4 failed; completed over IPv6"
             return 0
         fi
         kind=$(classify_pull_error "${_PULL_LAST_ERROR}")
-        echo "==> IPv6 attempt ${attempt} failed (${kind})"
+        echo "==> IPv6-only attempt ${attempt} failed (${kind})"
         sleep "${PULL_BACKOFF_SECONDS}"
     done
 
