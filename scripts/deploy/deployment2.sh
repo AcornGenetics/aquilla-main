@@ -177,6 +177,57 @@ run_test "NM dispatcher installed" "test -x /etc/NetworkManager/dispatcher.d/99-
 phase_pass "NetworkManager BSSID dispatcher installed"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3e — Persistent journal (#354)
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "3e" "Persistent Journal"
+
+# The journal defaults to volatile storage (/run/log/journal, a tmpfs), so every
+# reboot destroys the host-level history: docker pull events, container swaps,
+# service restarts, kernel messages. During the last investigation everything
+# before Jul 20 was simply gone.
+#
+# This does NOT affect container logs. fleet-config pins those to Docker's
+# json-file driver (10m x 3), which already lands on disk under
+# /var/lib/docker/containers. journald never sees them.
+#
+# Devices boot from SD cards, so writes matter — but not much next to what is
+# already happening: one OTA writes ~889 MB (dropping to ~4 MB once the build
+# cache from #348 is in), against a journal ceiling of 500 MB TOTAL.
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/10-aquila-persistent.conf <<'EOF'
+[Journal]
+# Survive reboots. Without this the journal lives in a tmpfs and is destroyed on
+# every restart, which is exactly when you most want to read it.
+Storage=persistent
+
+# SystemMaxUse protects the SD card; MaxRetentionSec is the thing actually being
+# bought. Both are enforced, whichever binds first — journald evicts oldest-first
+# automatically, at file granularity, with no maintenance job.
+#
+# The pairing matters: a chatty failure (a crash-looping container, a retrying
+# pull) can burn a size-only budget in days and evict precisely the history an
+# incident makes valuable.
+SystemMaxUse=500M
+MaxRetentionSec=90d
+
+# Compression is the default; stated so a future edit does not silently drop it.
+Compress=yes
+
+# Batch flushes into fewer, larger writes — the pattern SD cards handle best.
+SyncIntervalSec=300
+EOF
+
+systemctl restart systemd-journald
+mkdir -p /var/log/journal
+systemd-tmpfiles --create --prefix /var/log/journal 2>/dev/null || true
+
+run_test "journald drop-in installed" "test -f /etc/systemd/journald.conf.d/10-aquila-persistent.conf"
+run_test "journal storage persistent" "journalctl --header 2>/dev/null | grep -q /var/log/journal || test -d /var/log/journal"
+run_test "journald running"           "systemctl is-active systemd-journald | grep -q active"
+
+phase_pass "journal is persistent, capped at 500M / 90d"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 3c — Fleet DNS forwarder (dnsmasq)
 # ═══════════════════════════════════════════════════════════════════════════════
 # Docker freezes each container's DNS upstream at network-creation time; when a

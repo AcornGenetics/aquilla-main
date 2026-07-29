@@ -54,6 +54,18 @@ test_phase_3() {
     check 3 "pi in docker group"       "groups pi | grep -q docker"
 }
 
+test_phase_3e() {
+    echo "── Phase 3e: Persistent Journal"
+    check 3e "journald drop-in installed" \
+        "test -f /etc/systemd/journald.conf.d/10-aquila-persistent.conf"
+    check 3e "journal dir exists"          "test -d /var/log/journal"
+    check 3e "journald active"             "systemctl is-active systemd-journald | grep -q active"
+    # The cap is what keeps this off the SD card's back; assert it is actually
+    # applied rather than merely written to the file.
+    check 3e "journal within its cap" \
+        "journalctl --disk-usage 2>/dev/null | grep -qE '[0-9.]+[MK]'"
+}
+
 test_phase_4() {
     echo "── Phase 4: Autologin"
     check 4 "autologin.conf exists"        "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
@@ -161,6 +173,32 @@ test_phase_13() {
     check 13 "alloy installed"       "which alloy"
     check 13 "alloy service active"  "systemctl is-active alloy.service | grep -q active"
     check 13 "alloy service enabled" "systemctl is-enabled alloy.service | grep -q enabled"
+
+    # The three checks above ALL pass when Alloy is running and shipping nothing
+    # — bad Grafana Cloud credentials, an unreachable endpoint, a misconfigured
+    # loki.write. The process is up, systemctl is happy, the deploy verifies
+    # clean, and no log line ever arrives. Same pattern as #350: verifying the
+    # wrong thing and concluding success. The checks below assert delivery.
+    local alloy_metrics="http://127.0.0.1:12345/metrics"
+
+    check 13 "alloy metrics reachable" \
+        "curl -sf --max-time 5 ${alloy_metrics} -o /dev/null"
+
+    # Entries actually handed to Grafana Cloud. Zero means nothing has ever
+    # shipped, which is the failure this phase previously could not see.
+    check 13 "alloy has shipped log entries" \
+        "curl -sf --max-time 5 ${alloy_metrics} | awk '/^loki_write_sent_entries_total/ { for (i=NF; i>0; i--) if (\$i+0 > 0) found=1 } END { exit !found }'"
+
+    # Sustained drops mean the pipeline is up but losing data.
+    check 13 "alloy not dropping entries" \
+        "! curl -sf --max-time 5 ${alloy_metrics} | awk '/^loki_write_dropped_entries_total/ { for (i=NF; i>0; i--) if (\$i+0 > 0) found=1 } END { exit !found }'"
+
+    # loki.source.journal only reads back max_age, so entries older than that are
+    # never shipped even with a persistent journal. The 24h default silently caps
+    # what Grafana Cloud can hold after an outage — and these devices are
+    # routinely offline for days.
+    check 13 "alloy journal max_age > 24h" \
+        "! grep -qE 'max_age[[:space:]]*=[[:space:]]*\"24h' /etc/alloy/config.alloy"
 }
 
 test_phase_14() {
@@ -184,7 +222,7 @@ test_smoke() {
 # Entry point
 # ═══════════════════════════════════════════════════════════════════════════════
 
-ALL_PHASES=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 smoke)
+ALL_PHASES=(1 2 3 3e 4 5 6 7 8 9 10 11 12 13 14 smoke)
 
 if [[ "${1:-}" == "smoke" ]]; then
     test_smoke

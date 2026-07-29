@@ -76,7 +76,12 @@ discovery.relabel "logs_integrations_integrations_node_exporter_journal_scrape" 
 }
 
 loki.source.journal "logs_integrations_integrations_node_exporter_journal_scrape" {
-	max_age       = "24h0m0s"
+	// Raised from the 24h default (#354). loki.source.journal only reads back
+	// max_age, so anything older is never shipped even when the journal itself is
+	// persistent — silently capping what Grafana Cloud can hold after an outage.
+	// These devices are routinely offline for days; sn02 was last seen 53 days ago.
+	// Bounded by the journal's own retention (90d) rather than being unlimited.
+	max_age       = "168h0m0s"
 	relabel_rules = discovery.relabel.logs_integrations_integrations_node_exporter_journal_scrape.rules
 	forward_to    = [loki.write.grafana_cloud_loki.receiver]
 	labels        = {
