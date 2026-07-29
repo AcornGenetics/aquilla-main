@@ -9,10 +9,12 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi import WebSocket
 import asyncio
+import contextlib
 import logging
 from datetime import datetime
 import os
 import sys
+import tempfile
 from pydantic import BaseModel
 from typing import Optional
 import json
@@ -2248,6 +2250,74 @@ async def approve_update_gate():
 
 _PULL_OUTCOME_PATH = os.getenv("AQ_PULL_OUTCOME_PATH", "/opt/fleet/last_pull.json")
 
+# --- keeping the host updater current ---------------------------------------
+# /opt/fleet/update.sh is the host-side updater. Until now it was written exactly once,
+# by deployment2.sh at provisioning, and nothing ever refreshed it -- so every device
+# ran whatever main said on the day it was set up, and a fix to it could only reach the
+# fleet by hand. That is why the un-retried pull (#357) survived so long.
+#
+# The script ships inside this image (Dockerfile.api does `COPY . .`) and /opt/fleet is
+# mounted read-write here, so syncing it on startup puts the updater on the normal ring
+# promotion path: sandbox -> dev -> pilot -> prod, like everything else. Devices that
+# are offline today pick it up whenever they next update.
+_FLEET_UPDATE_SRC = os.getenv(
+    "AQ_FLEET_UPDATE_SRC", "/opt/aquila/scripts/deploy/fleet-update.sh"
+)
+_FLEET_UPDATE_DEST = os.getenv("AQ_FLEET_UPDATE_DEST", "/opt/fleet/update.sh")
+
+
+def sync_fleet_update_script(src: str | None = None, dest: str | None = None) -> str:
+    """Publish this image's fleet-update.sh to the host. Returns what it did.
+
+    Written to a temporary file and moved into place with os.replace, which is atomic
+    on the same filesystem. This matters more than it looks: a half-written update.sh
+    would leave the device unable to update at all, and the only tool that could fix
+    that remotely is the very script being written.
+
+    The image is the source of truth, so a device hand-patched for debugging is
+    restored on the next restart -- deliberate, and the documented rollback already
+    relies on an image update healing such edits.
+
+    Never raises. A read-only mount or a missing source is degraded operation (the
+    device keeps its existing updater), not a reason to fail startup.
+    """
+    src = src or _FLEET_UPDATE_SRC
+    dest = dest or _FLEET_UPDATE_DEST
+
+    try:
+        with open(src, "rb") as f:
+            desired = f.read()
+    except OSError:
+        return "skipped"
+
+    try:
+        with open(dest, "rb") as f:
+            if f.read() == desired:
+                return "unchanged"   # avoid rewriting the file on every boot
+    except OSError:
+        pass   # absent or unreadable -> fall through and write it
+
+    try:
+        directory = os.path.dirname(dest) or "."
+        fd, tmp = tempfile.mkstemp(dir=directory, prefix=".update.sh.")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(desired)
+                f.flush()
+                os.fsync(f.fileno())
+            os.chmod(tmp, 0o755)
+            os.replace(tmp, dest)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise
+    except OSError as e:
+        logger.warning("could not sync %s to %s: %s", src, dest, e)
+        return "skipped"
+
+    logger.info("synced host updater to %s", dest)
+    return "synced"
+
 
 def _read_last_pull() -> dict | None:
     """Outcome of the last device-side pull, written by scripts/deploy/fleet-update.sh.
@@ -2480,6 +2550,16 @@ async def resolve_update_completion() -> None:
         _resolve_startup_update_state()
     except Exception as e:  # noqa: BLE001 - never block startup on this
         logger.warning("update sentinel resolution failed: %s", e)
+
+
+@app.on_event("startup")
+async def publish_host_updater() -> None:
+    """Keep /opt/fleet/update.sh in step with the image, so fixes to the host updater
+    ride the normal ring promotion instead of needing a hand-push to every device."""
+    try:
+        sync_fleet_update_script()
+    except Exception as e:  # noqa: BLE001 - never block startup on this
+        logger.warning("host updater sync failed: %s", e)
 
 
 @app.on_event("startup")
