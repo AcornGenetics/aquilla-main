@@ -33,6 +33,12 @@ services:
       # the container and every recreate (update / --force-recreate) silently
       # discards unsynced runs. The on-device schema migrates in place (#305).
       - /opt/aquila/data:/opt/aquila/data
+      # systemd's NTP sync flag, so the backend can tell whether the host clock
+      # is trustworthy. These Pis have no RTC, and every outbox Event is stamped
+      # with the local clock — a device that boots wrong writes wrong timestamps
+      # into the analytics warehouse. Read-only; absence just means "unknown".
+      # See #353.
+      - /run/systemd/timesync:/run/systemd/timesync:ro
       # Mount the whole fleet dir (not just .env) so the OTA reboot sentinel
       # /opt/fleet/last_update.json is host-backed and survives the Watchtower
       # container swap. See specs/backend/spec_ota_sentinel_persistent_volume.md.

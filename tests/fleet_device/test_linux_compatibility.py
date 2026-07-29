@@ -121,6 +121,12 @@ class TestLinuxCompatibility:
                 # Skip Docker socket (watchtower)
                 if host_path == "/var/run/docker.sock":
                     continue
+                # systemd's NTP sync flag (#353). Read-only, and it is the only
+                # place the host's clock state is observable — the backend cannot
+                # tell whether the timestamps it writes onto the outbox are
+                # trustworthy without it.
+                if host_path == "/run/systemd/timesync":
+                    continue
                 if host_path == "/root/.docker/config.json":
                     continue
                 assert (

@@ -150,6 +150,35 @@ run_test "pi in docker group"       "groups pi | grep -q docker"
 phase_pass "Docker installed and running, pi in docker group"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3d — Device clock (#353)
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "3d" "Device Clock"
+
+# A Pi has no battery-backed RTC: on every power loss the clock resets and stays
+# wrong until NTP resyncs. That is not just a logging annoyance here — every
+# Event on the sync outbox is stamped with the local clock, so a device that
+# boots wrong writes wrong timestamps into the analytics warehouse, permanently.
+#
+# fake-hwclock saves the last known time on shutdown and restores it at boot,
+# before NTP has synced. It narrows the window; systemd-timesyncd closes it.
+# Neither can help a device that never reaches an NTP server, which is why the
+# backend also reports its clock state at /clock.
+DEBIAN_FRONTEND=noninteractive apt-get install -y fake-hwclock
+systemctl enable --now fake-hwclock 2>/dev/null || true
+timedatectl set-ntp true 2>/dev/null || true
+systemctl enable --now systemd-timesyncd 2>/dev/null || true
+
+run_test "fake-hwclock installed"   "dpkg -l fake-hwclock | grep -q '^ii'"
+run_test "NTP enabled"              "timedatectl show -p NTP --value | grep -q yes"
+run_test "timesyncd active"         "systemctl is-active systemd-timesyncd | grep -q active"
+# The clock being SET is what matters, not merely that the service is running —
+# a device that cannot reach an NTP server has timesyncd active and a wrong clock.
+run_test "system clock synchronized" \
+    "timedatectl show -p NTPSynchronized --value | grep -q yes"
+
+phase_pass "fake-hwclock installed, NTP enabled and synchronized"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 3b — NetworkManager: disable BSSID pinning
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start "3b" "NetworkManager BSSID policy"

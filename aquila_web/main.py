@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Form, Body, HTTPException, Query
 from aq_lib.device_id import inject_hw_serial_env
 from aquila_web.local_db import enqueue_event, init_local_db, _utc_now
+from aquila_web import clock_health
 from aquila_web.optics_readings import build_optics_readings, count_data_lines
 from aq_curve.curve import ALGO_VERSION
 from aquila_web.profile_assembly import assemble_steps, validate_stages
@@ -864,6 +865,33 @@ def _read_app_version() -> str:
 @app.get("/version")
 async def version_check():
     return {"version": _read_app_version()}
+
+
+def _baked_build_time() -> str | None:
+    """The running image's build timestamp, if it carries one.
+
+    Present from #351 onward; absent on older images, in which case the clock's
+    lower-bound check simply cannot run. Read defensively so this works either
+    way.
+    """
+    try:
+        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
+        value = data.get("build_time")
+        return str(value) if value and value != "unknown" else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+@app.get("/clock")
+async def clock_check():
+    """Whether this device's clock can be trusted (#353).
+
+    These Pis have no battery-backed RTC, and local_db stamps every outbox Event
+    with the local clock — so a device that boots with a wrong time writes wrong
+    timestamps into the analytics warehouse. Surfacing the state is the
+    prerequisite for deciding whether a timestamp is suspect.
+    """
+    return clock_health.clock_status(_baked_build_time())
 
 
 @app.get("/results")

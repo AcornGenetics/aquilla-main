@@ -54,6 +54,19 @@ test_phase_3() {
     check 3 "pi in docker group"       "groups pi | grep -q docker"
 }
 
+test_phase_3d() {
+    echo "── Phase 3d: Device Clock"
+    check 3d "fake-hwclock installed" "dpkg -l fake-hwclock | grep -q '^ii'"
+    check 3d "NTP enabled"            "timedatectl show -p NTP --value | grep -q yes"
+    check 3d "timesyncd active"       "systemctl is-active systemd-timesyncd | grep -q active"
+    # "service active" is not "clock correct" — a device that cannot reach an NTP
+    # server has timesyncd running and a wrong clock. Every outbox Event is
+    # stamped with that clock. See #353.
+    check 3d "clock synchronized"     "timedatectl show -p NTPSynchronized --value | grep -q yes"
+    check 3d "backend sees the clock state" \
+        "curl -sf http://localhost:8090/clock | grep -q clock_status"
+}
+
 test_phase_4() {
     echo "── Phase 4: Autologin"
     check 4 "autologin.conf exists"        "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
@@ -184,7 +197,7 @@ test_smoke() {
 # Entry point
 # ═══════════════════════════════════════════════════════════════════════════════
 
-ALL_PHASES=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 smoke)
+ALL_PHASES=(1 2 3 3d 4 5 6 7 8 9 10 11 12 13 14 smoke)
 
 if [[ "${1:-}" == "smoke" ]]; then
     test_smoke
