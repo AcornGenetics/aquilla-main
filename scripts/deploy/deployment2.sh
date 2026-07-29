@@ -208,7 +208,12 @@ Storage=persistent
 # pull) can burn a size-only budget in days and evict precisely the history an
 # incident makes valuable.
 SystemMaxUse=500M
-MaxRetentionSec=90d
+# 30d, against a 7d Alloy max_age. The buffer only has to cover the longest a
+# device runs while UNABLE to ship — not how long it is powered off, since it
+# generates nothing then. 7d is generous for that; the remaining margin is for
+# reading locally over SSH. Raise both together if devices turn out to run
+# offline for longer.
+MaxRetentionSec=30d
 
 # Compression is the default; stated so a future edit does not silently drop it.
 Compress=yes

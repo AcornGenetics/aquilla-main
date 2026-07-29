@@ -73,10 +73,23 @@ def test_alloy_max_age_exceeds_one_day():
 
 
 def test_alloy_max_age_does_not_exceed_journal_retention():
-    """Reading back further than the journal keeps is pointless."""
+    """Reading back further than the journal keeps is pointless.
+
+    max_age is the number that decides whether Alloy gets everything — it only
+    reads BACK that far, so anything older is never shipped no matter how long
+    the journal holds it. Retention just has to be at least as long.
+    """
     alloy_hours = int(re.search(r'max_age\s*=\s*"(\d+)h', ALLOY).group(1))
     retention_days = int(re.search(r"MaxRetentionSec=(\d+)d", DEPLOY).group(1))
     assert alloy_hours <= retention_days * 24
+
+
+def test_backfill_window_is_seven_days():
+    """Locked deliberately: the buffer only needs to cover the longest a device
+    runs while unable to ship, not how long it is powered off. A larger window
+    also means a returning device dumps that much into Loki in one burst."""
+    alloy_hours = int(re.search(r'max_age\s*=\s*"(\d+)h', ALLOY).group(1))
+    assert alloy_hours == 168, f"expected a 7-day backfill window, got {alloy_hours}h"
 
 
 def test_verify_script_registers_the_new_phase():
