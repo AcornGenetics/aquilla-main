@@ -2246,6 +2246,32 @@ async def approve_update_gate():
     return update_gate.GATE.status()
 
 
+_PULL_OUTCOME_PATH = os.getenv("AQ_PULL_OUTCOME_PATH", "/opt/fleet/last_pull.json")
+
+
+def _read_last_pull() -> dict | None:
+    """Outcome of the last device-side pull, written by scripts/deploy/fleet-update.sh.
+
+    Surfaced so a failed update says which address families were tried — enough to
+    tell "no IPv6 at this site" from "registry unreachable" from "bad token" without
+    SSHing in (#357).
+
+    Scope caveat: the operator's Update button drives Watchtower, which performs its
+    own pull and never runs that script, so this reflects script-driven updates only
+    and is reported under its own key rather than folded into `error`.
+
+    Never raises: a missing file is the normal case on a device that has not run a
+    scripted update, and a truncated one (killed mid-write) must not break the
+    status endpoint the UI polls.
+    """
+    try:
+        with open(_PULL_OUTCOME_PATH) as f:
+            outcome = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return outcome if isinstance(outcome, dict) else None
+
+
 @app.get("/update/status")
 async def get_update_status():
     available = _update_available
@@ -2263,6 +2289,7 @@ async def get_update_status():
         "status": status,
         "error": _update_error,
         "last_checked": _update_last_checked,
+        "last_pull": _read_last_pull(),
     }
 
 

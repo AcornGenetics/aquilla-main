@@ -29,6 +29,13 @@ COMPOSE_FILE="${COMPOSE_FILE:-/opt/fleet/docker-compose.yml}"
 
 PULL_BLOB_HOST="${PULL_BLOB_HOST:-pkg-containers.githubusercontent.com}"
 
+# Breadcrumb read back by the backend for /update/status (#357). The backend cannot
+# observe this itself: the operator's Update button drives Watchtower, which performs
+# its own pull and never runs this script. So a device-side pull records what it tried
+# here, and the API surfaces it -- explicitly as "the last device-side pull", not as a
+# claim about the Watchtower path.
+PULL_OUTCOME_PATH="${PULL_OUTCOME_PATH:-/opt/fleet/last_pull.json}"
+
 # An operator is standing at the device. Long enough to ride out a slow link, short
 # enough not to look hung. Total wall clock across every attempt.
 PULL_TOTAL_BUDGET_SECONDS="${PULL_TOTAL_BUDGET_SECONDS:-480}"
@@ -155,6 +162,16 @@ _run_pull() {
     return "${rc}"
 }
 
+# _write_pull_outcome <result> <families> <detail>
+# Best-effort: a device that cannot write the breadcrumb must still complete its
+# update, so every failure here is swallowed.
+_write_pull_outcome() {
+    local result=$1 families=$2 detail=$3
+    printf '{"result":"%s","families_tried":"%s","detail":"%s","at":"%s"}\n' \
+        "${result}" "${families}" "${detail}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        > "${PULL_OUTCOME_PATH}" 2>/dev/null || true
+}
+
 # pull_with_fallback <pull-command...>
 #
 # Retry over the default path, then -- only for transport failures -- bring IPv6 up and
@@ -173,6 +190,7 @@ pull_with_fallback() {
         rc=0; _run_pull "${remaining}" "$@" || rc=$?
         if (( rc == 0 )); then
             echo "==> pull succeeded (families tried: ${_PULL_FAMILIES_TRIED})"
+            _write_pull_outcome ok "${_PULL_FAMILIES_TRIED}" ""
             return 0
         fi
 
@@ -180,9 +198,11 @@ pull_with_fallback() {
         case "${kind}" in
             auth)
                 echo "==> pull failed: credentials rejected. Not retrying -- check GHCR_TOKEN." >&2
+                _write_pull_outcome failed "${_PULL_FAMILIES_TRIED}" "credentials rejected"
                 return 1 ;;
             notfound)
                 echo "==> pull failed: image/tag not found. Not retrying -- check IMAGE_TAG." >&2
+                _write_pull_outcome failed "${_PULL_FAMILIES_TRIED}" "image or tag not found"
                 return 1 ;;
         esac
         echo "==> attempt ${attempt} failed (${kind}); backing off ${PULL_BACKOFF_SECONDS}s"
@@ -196,6 +216,7 @@ pull_with_fallback() {
     if ! ipv6_usable; then
         echo "==> no usable IPv6 here (no v6 default route, or ${PULL_BLOB_HOST} unreachable over v6)." >&2
         echo "==> pull FAILED (families tried: ${_PULL_FAMILIES_TRIED})" >&2
+        _write_pull_outcome failed "${_PULL_FAMILIES_TRIED}" "IPv4 transfer failed and no usable IPv6 at this site"
         return 1
     fi
 
@@ -210,6 +231,7 @@ pull_with_fallback() {
             # Loud on purpose: a device needing the v6 fallback on every update has a
             # site network problem to fix upstream, not to paper over here.
             echo "==> pull succeeded over IPv6 after IPv4 failed -- site IPv4 path is degraded"
+            _write_pull_outcome ok "${_PULL_FAMILIES_TRIED}" "IPv4 failed; completed over IPv6"
             return 0
         fi
         kind=$(classify_pull_error "${_PULL_LAST_ERROR}")
@@ -218,6 +240,7 @@ pull_with_fallback() {
     done
 
     echo "==> pull FAILED over every path (families tried: ${_PULL_FAMILIES_TRIED})" >&2
+    _write_pull_outcome failed "${_PULL_FAMILIES_TRIED}" "transfer failed over both IPv4 and IPv6"
     return 1
 }
 

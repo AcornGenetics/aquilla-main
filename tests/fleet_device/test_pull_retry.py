@@ -5,6 +5,7 @@ directly, so they exercise real behaviour rather than asserting on source text.
 Sourcing is safe: the script only runs the update when executed, not when sourced.
 """
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -218,3 +219,46 @@ def test_pull_retains_digest_writeback_after_a_successful_pull() -> None:
 
     assert text.index("pull_with_fallback docker compose") < text.index("RepoDigests")
     assert text.index("RepoDigests") < text.index("_upsert_env RUNNING_IMAGE_DIGEST")
+
+
+# --- outcome breadcrumb -----------------------------------------------------
+
+def test_records_which_families_were_tried_for_the_backend(tmp_path) -> None:
+    """/update/status reads this file; it must name the families on the v6 rescue."""
+    outcome = tmp_path / "last_pull.json"
+    setup = (
+        f"{FAST} PULL_IPV4_ATTEMPTS=1; PULL_OUTCOME_PATH='{outcome}';"
+        " _flaky() { [[ -f $STATE ]] && return 0; touch $STATE;"
+        "            echo 'unexpected EOF'; return 1; };"
+        " enable_ipv6() { :; };"
+        " ipv6_usable() { return 0; };"
+        " STATE=$(mktemp -u)"
+    )
+    _call("pull_with_fallback", "_flaky", setup=setup)
+
+    recorded = json.loads(outcome.read_text())
+    assert recorded["result"] == "ok"
+    assert recorded["families_tried"] == "ipv4,ipv6"
+
+
+def test_records_a_failure_the_backend_can_explain(tmp_path) -> None:
+    outcome = tmp_path / "last_pull.json"
+    setup = (
+        f"{FAST} PULL_IPV4_ATTEMPTS=1; PULL_OUTCOME_PATH='{outcome}';"
+        " _fail() { echo 'unexpected EOF'; return 1; };"
+        " enable_ipv6() { :; };"
+        " ipv6_usable() { return 1; }"
+    )
+    _call("pull_with_fallback", "_fail", setup=setup)
+
+    recorded = json.loads(outcome.read_text())
+    assert recorded["result"] == "failed"
+    assert "no usable IPv6" in recorded["detail"]
+
+
+def test_unwritable_breadcrumb_does_not_fail_the_update() -> None:
+    """A device that cannot write the breadcrumb must still complete its update."""
+    setup = f"{FAST} PULL_OUTCOME_PATH='/nonexistent-dir/last_pull.json'"
+    out = _call("pull_with_fallback", "true", setup=setup)
+
+    assert "pull succeeded" in out
