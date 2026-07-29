@@ -22,6 +22,50 @@ from aq_curve.analysis_service import AnalysisService
 logger = logging.getLogger( __name__ )
 logger.setLevel("WARNING")
 
+
+# ── Quiet the polling endpoints in the access log (#354) ──────────────────────
+#
+# Uvicorn logs every HTTP request. The kiosk polls a handful of endpoints
+# continuously, so the access log is overwhelmingly `GET /button_status/ 200 OK`.
+# Measured on sn08: aquila-backend produced 19 MB of container log in two days —
+# 48x the next container, and ~9.5 MB/day of almost entirely poll noise. That
+# buries the lines that matter (update decisions, sync results, errors), and once
+# container logs are shipped to Grafana Cloud it would be paid for twice.
+#
+# Only SUCCESSFUL polls are dropped. A failing poll still logs, so the endpoint
+# going wrong stays visible — which is the whole reason to keep an access log.
+_QUIET_ACCESS_PATHS = frozenset({
+    "/button_status", "/button_status/",  # the kiosk's main poll loop
+    "/health",                            # Docker HEALTHCHECK, every 30s
+    "/results", "/results/status",
+    "/run/name",
+    "/drawer/state",
+    "/update/status",
+})
+
+
+class _QuietPollFilter(logging.Filter):
+    """Drop access-log records for successful polls of high-frequency endpoints."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = getattr(record, "args", None)
+        # uvicorn.access passes (client_addr, method, full_path, http_version, status)
+        if not isinstance(args, tuple) or len(args) < 5:
+            return True  # unrecognised shape — keep it rather than lose a line
+        path, status = args[2], args[4]
+        if not isinstance(path, str):
+            return True
+        try:
+            failed = int(status) >= 400
+        except (TypeError, ValueError):
+            return True
+        if failed:
+            return True
+        return path.split("?")[0] not in _QUIET_ACCESS_PATHS
+
+
+logging.getLogger("uvicorn.access").addFilter(_QuietPollFilter())
+
 app = FastAPI(redirect_slashes=False)
 static_dir = Path(__file__).parent / "static"
 
