@@ -36,16 +36,21 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Log in to ECR
         uses: aws-actions/amazon-ecr-login@v2
+      # QEMU lets this amd64 runner cross-build the arm64 image the Sentri Pis run.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Bake the git SHA as a tag; push returns the immutable digest we pin on.
+      # Multi-arch: the Sentri is arm64, CI/dev is amd64. push returns the
+      # manifest-list digest we pin on (the device resolves its own arch from it).
       - name: Build + push api image
         id: api
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile.api
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.ECR_REGISTRY }}/aquilla-main-api:${{ github.sha }}
       - name: Build + push ui image
@@ -54,6 +59,7 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.ui
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.ECR_REGISTRY }}/aquilla-main-ui:${{ github.sha }}
 
