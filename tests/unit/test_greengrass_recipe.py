@@ -117,6 +117,13 @@ def test_recipe_depends_on_docker_application_manager():
     assert "aws.greengrass.DockerApplicationManager" in deps
 
 
+def test_recipe_depends_on_token_exchange_service():
+    deps = _recipe_with_images()["ComponentDependencies"]
+    # Private ECR pulls require the Token Exchange Service; as a recipe dependency
+    # every deployment includes it automatically (no manual add per ring).
+    assert "aws.greengrass.TokenExchangeService" in deps
+
+
 def test_recipe_declares_images_as_docker_artifacts():
     artifacts = _recipe_with_images()["Manifests"][0]["Artifacts"]
     uris = [a["URI"] for a in artifacts]
