@@ -1251,12 +1251,32 @@ async def button_open():
     logger.info("Drawer reset pressed")
     return{"ok":True}
 
+from aquila_web.version_health import runs_allowed
+
+
+def _running_container_shas():
+    """(api_build_sha, ui_build_sha) of the running containers, or None if unknown.
+
+    Sourced from the baked build identity (am#365); unknown during migration, in
+    which case the run gate cannot enforce and allows the run.
+    """
+    return (os.getenv("RUNNING_BUILD_SHA"), os.getenv("RUNNING_BUILD_SHA_UI"))
+
+
 @app.post("/button/run")
 async def button_run():
     global run_requested, stop_requested
     run_requested = True
     stop_requested = False
     logger.info("Run button pressed")
+    # Matched-pair gate (am#360): never run a split-brain api/ui (the sn04 case).
+    if not runs_allowed(*_running_container_shas()):
+        run_requested = False
+        return {
+            "ok": False,
+            "message": "Update incomplete — the api and ui versions do not match. "
+            "Runs are blocked until the versions match.",
+        }
     if not selected_profile:
         run_requested = False
         return {"ok": False, "message": "Select a profile before running"}
