@@ -661,6 +661,10 @@ AWS_REGION="${AWS_REGION:-us-east-2}"
 GG_ROLE_ALIAS="${GG_ROLE_ALIAS:-acorn-sentri-tes}"   # Token Exchange role alias (ECR pulls)
 GG_THING_GROUP="${GG_THING_GROUP:-holding}"          # JITP lands new Sentris here
 GG_ROOT="/greengrass/v2"
+# Account IoT endpoints (from `aws iot describe-endpoint`). The Pi has no AWS creds
+# to look these up, so they are baked in here (env-overridable for other accounts).
+GG_IOT_DATA_ENDPOINT="${GG_IOT_DATA_ENDPOINT:-a2xt0nylntrpe0-ats.iot.us-east-2.amazonaws.com}"
+GG_IOT_CRED_ENDPOINT="${GG_IOT_CRED_ENDPOINT:-c1mnxdemzipv8n.credentials.iot.us-east-2.amazonaws.com}"
 
 # The nucleus is a Java app; install a headless JRE + unzip for the installer.
 DEBIAN_FRONTEND=noninteractive apt-get install -y default-jre-headless unzip
@@ -689,6 +693,8 @@ services:
     configuration:
       awsRegion: "${AWS_REGION}"
       iotRoleAlias: "${GG_ROLE_ALIAS}"
+      iotDataEndpoint: "${GG_IOT_DATA_ENDPOINT}"
+      iotCredEndpoint: "${GG_IOT_CRED_ENDPOINT}"
 EOF
 
 java -Droot="${GG_ROOT}" -Dlog.store=FILE \
