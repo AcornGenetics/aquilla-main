@@ -1,0 +1,84 @@
+name: publish-component
+
+# Builds the api+ui images, pushes them to ECR BY DIGEST, and publishes a new
+# Greengrass component version whose recipe pins those digests + a compose
+# artifact in S3. It does NOT promote to any ring — that is a separate,
+# human-gated step in acorn-fleet. Auth is GitHub OIDC; no static AWS keys.
+on:
+  push:
+    branches: [feat/greengrass-migration]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # mint the OIDC token to assume the publish role
+
+env:
+  AWS_REGION: us-east-2
+  COMPONENT_NAME: com.acorn.sentri
+  ECR_REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: publish # pins the OIDC sub to repo:...:environment:publish
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pyyaml
+
+      - name: Assume the publish role via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/aquilla-main-component-publish
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Log in to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Bake the git SHA as a tag; push returns the immutable digest we pin on.
+      - name: Build + push api image
+        id: api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.api
+          push: true
+          tags: ${{ env.ECR_REGISTRY }}/aquilla-main-api:${{ github.sha }}
+      - name: Build + push ui image
+        id: ui
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.ui
+          push: true
+          tags: ${{ env.ECR_REGISTRY }}/aquilla-main-ui:${{ github.sha }}
+
+      - name: Version + artifact URI
+        id: meta
+        run: |
+          VERSION="0.0.${{ github.run_number }}"
+          ARTIFACT_URI="s3://${{ vars.ARTIFACTS_BUCKET }}/${COMPONENT_NAME}/${VERSION}/compose.yaml"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "artifact_uri=$ARTIFACT_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Generate pinned compose + recipe
+        run: |
+          python -m scripts.greengrass.publish \
+            --compose compose.yaml \
+            --api-ref "${ECR_REGISTRY}/aquilla-main-api@${{ steps.api.outputs.digest }}" \
+            --ui-ref  "${ECR_REGISTRY}/aquilla-main-ui@${{ steps.ui.outputs.digest }}" \
+            --component-name "$COMPONENT_NAME" \
+            --version "${{ steps.meta.outputs.version }}" \
+            --artifact-uri "${{ steps.meta.outputs.artifact_uri }}" \
+            --out-compose pinned-compose.yaml \
+            --out-recipe recipe.json
+
+      # Upload BEFORE publishing so the recipe's artifact is fetchable at deploy.
+      - name: Upload compose artifact
+        run: aws s3 cp pinned-compose.yaml "${{ steps.meta.outputs.artifact_uri }}"
+      - name: Publish Greengrass component version
+        run: aws greengrassv2 create-component-version --inline-recipe fileb://recipe.json --region "$AWS_REGION"
