@@ -59,6 +59,22 @@ def test_is_reversible():
     assert "rm -rf /greengrass/v2" in SCRIPT
 
 
+def test_grants_ggc_user_docker_and_config_access():
+    # The Greengrass component runs as ggc_user; without Docker-socket access +
+    # readable device.env the component goes BROKEN ("permission denied").
+    assert "usermod -aG docker ggc_user" in SCRIPT
+    assert "chgrp ggc_group /opt/aquila/config/device.env" in SCRIPT
+
+
+def test_no_meerstetter_tuning_in_provisioning():
+    # Meerstetter first-time tuning needs the running app container (owned by the
+    # Greengrass component), so it is not a provisioning-time step. Check the
+    # tuning CODE is gone (not the word, which may appear in explanatory comments).
+    assert "find_meer" not in SCRIPT
+    assert "MeerStetter(" not in SCRIPT
+    assert "docker exec" not in SCRIPT  # no exec into the app during provisioning
+
+
 def test_retains_deployment2_device_build():
     # Everything else from deployment2 is kept (spot-check across phases).
     for marker in ("I2C", "Tailscale", "aquila-cert-renew", "security.sh", "Plymouth"):
