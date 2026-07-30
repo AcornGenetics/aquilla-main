@@ -68,7 +68,7 @@ jobs:
       - name: Generate pinned compose + recipe
         run: |
           python -m scripts.greengrass.publish \
-            --compose compose.yaml \
+            --compose fleet-config/greengrass-compose.yaml \
             --api-ref "${ECR_REGISTRY}/aquilla-main-api@${{ steps.api.outputs.digest }}" \
             --ui-ref  "${ECR_REGISTRY}/aquilla-main-ui@${{ steps.ui.outputs.digest }}" \
             --component-name "$COMPONENT_NAME" \
