@@ -46,9 +46,14 @@ def build_recipe(component_name, version, compose_artifact_uri, image_refs=None)
         "ComponentName": component_name,
         "ComponentVersion": version,
         # Greengrass pulls/pre-stages the ECR images (via the device's token
-        # exchange creds) before the compose stack runs.
+        # exchange creds) before the compose stack runs. TokenExchangeService is
+        # what mints those creds from the device cert — required for private ECR,
+        # and as a dependency it ships with every deployment (no per-ring add).
         "ComponentDependencies": {
             "aws.greengrass.DockerApplicationManager": {
+                "VersionRequirement": ">=2.0.0",
+            },
+            "aws.greengrass.TokenExchangeService": {
                 "VersionRequirement": ">=2.0.0",
             },
         },
