@@ -661,6 +661,10 @@ AWS_REGION="${AWS_REGION:-us-east-2}"
 GG_ROLE_ALIAS="${GG_ROLE_ALIAS:-acorn-sentri-tes}"   # Token Exchange role alias (ECR pulls)
 GG_THING_GROUP="${GG_THING_GROUP:-holding}"          # JITP lands new Sentris here
 GG_ROOT="/greengrass/v2"
+# Account IoT endpoints (from `aws iot describe-endpoint`). The Pi has no AWS creds
+# to look these up, so they are baked in here (env-overridable for other accounts).
+GG_IOT_DATA_ENDPOINT="${GG_IOT_DATA_ENDPOINT:-a2xt0nylntrpe0-ats.iot.us-east-2.amazonaws.com}"
+GG_IOT_CRED_ENDPOINT="${GG_IOT_CRED_ENDPOINT:-c1mnxdemzipv8n.credentials.iot.us-east-2.amazonaws.com}"
 
 # The nucleus is a Java app; install a headless JRE + unzip for the installer.
 DEBIAN_FRONTEND=noninteractive apt-get install -y default-jre-headless unzip
@@ -689,6 +693,8 @@ services:
     configuration:
       awsRegion: "${AWS_REGION}"
       iotRoleAlias: "${GG_ROLE_ALIAS}"
+      iotDataEndpoint: "${GG_IOT_DATA_ENDPOINT}"
+      iotCredEndpoint: "${GG_IOT_CRED_ENDPOINT}"
 EOF
 
 java -Droot="${GG_ROOT}" -Dlog.store=FILE \
@@ -800,13 +806,12 @@ phase_start 10 "App Stack Ownership (Greengrass)"
 
 # Under Greengrass the com.acorn.sentri component runs `docker compose up` from
 # its recipe, so the host must NOT also run the stack — a second owner would race
-# the component (double up/down, port clashes). Remove any legacy host compose
-# service left by deployment2 so greengrass.service is the sole stack owner.
-if systemctl list-unit-files | grep -q '^aquila-stack.service'; then
-    systemctl disable --now aquila-stack.service || true
-    rm -f /etc/systemd/system/aquila-stack.service
-    systemctl daemon-reload
-fi
+# the component (double up/down, port clashes). Unconditionally remove any legacy
+# host compose service left by deployment2 so greengrass.service is the sole owner.
+# (disable is best-effort; the rm is what the check below verifies.)
+systemctl disable --now aquila-stack.service 2>/dev/null || true
+rm -f /etc/systemd/system/aquila-stack.service
+systemctl daemon-reload
 
 run_test "no host compose service" "! test -f /etc/systemd/system/aquila-stack.service"
 

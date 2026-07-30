@@ -35,6 +35,13 @@ def test_configures_role_alias_region_and_holding_ring():
     assert "holding" in SCRIPT            # JITP lands the Thing here
 
 
+def test_configures_iot_endpoints():
+    # Manual provisioning must be told the account's IoT data + credential
+    # endpoints — the Pi has no AWS creds to look them up itself.
+    assert "iotDataEndpoint" in SCRIPT
+    assert "iotCredEndpoint" in SCRIPT
+
+
 def test_watchtower_ota_path_removed():
     # No Watchtower updater, no manual GHCR compose pull for delivery.
     assert "fleet-update.sh" not in SCRIPT
