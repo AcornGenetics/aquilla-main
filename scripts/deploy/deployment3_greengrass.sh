@@ -704,12 +704,21 @@ java -Droot="${GG_ROOT}" -Dlog.store=FILE \
     --setup-system-service true \
     --provision false
 
-run_test "greengrass root created"      "test -d ${GG_ROOT}"
-run_test "greengrass service installed" "test -f /etc/systemd/system/greengrass.service"
-run_test "provisioned with device cert" "grep -q 'device.crt' /opt/aquila/config/greengrass-config.yaml"
-run_test "role alias configured"        "grep -q '${GG_ROLE_ALIAS}' /opt/aquila/config/greengrass-config.yaml"
+# The component runs as ggc_user, which must (a) reach the Docker socket to run
+# the compose stack and (b) read the root-owned device.env the compose injects.
+# Without these the component goes BROKEN ("permission denied ... docker.sock").
+usermod -aG docker ggc_user
+chgrp ggc_group /opt/aquila/config/device.env && chmod 640 /opt/aquila/config/device.env
+chmod o+rx /opt/aquila /opt/aquila/config
 
-phase_pass "Greengrass nucleus installed + provisioned with the device cert (JITP -> ${GG_THING_GROUP})"
+run_test "greengrass root created"        "test -d ${GG_ROOT}"
+run_test "greengrass service installed"   "test -f /etc/systemd/system/greengrass.service"
+run_test "provisioned with device cert"   "grep -q 'device.crt' /opt/aquila/config/greengrass-config.yaml"
+run_test "role alias configured"          "grep -q '${GG_ROLE_ALIAS}' /opt/aquila/config/greengrass-config.yaml"
+run_test "ggc_user in docker group"       "id -nG ggc_user | grep -qw docker"
+run_test "device.env readable by ggc_group" "test \"\$(stat -c '%G' /opt/aquila/config/device.env)\" = ggc_group"
+
+phase_pass "Greengrass nucleus installed + provisioned; ggc_user granted Docker + config access (JITP -> ${GG_THING_GROUP})"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 9b — Chromium Kiosk (Openbox autostart)
@@ -885,53 +894,26 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-echo "  Running Meerstetter first-time tuning..."
-if ! docker exec \
-    -e CONFIG_DIR=/opt/aquila/config \
-    aquila-app \
-    python3 - <<'PY'
-from aq_lib.config_module import Config
-from aq_lib.meerstetter import MeerStetter
+# The Greengrass side is what provisioning owns. The app + Meerstetter first-time
+# tuning happen once the com.acorn.sentri component runs, which requires a cloud
+# deployment targeting this device's ring — that may land AFTER provisioning. So
+# the app-up check below is informational (non-fatal); Meerstetter tuning is no
+# longer a provisioning step (it needs the running app container the component owns).
+run_test "DEVICE_ID set"             "grep -q 'DEVICE_ID=' /opt/aquila/config/device.env"
+run_test "greengrass service active" "systemctl is-active greengrass | grep -q active"
 
-config = Config()
-device_type = int(config.pcr["device_type"])
-pid = int(config.pcr["pid"], 16)
-vid = int(config.pcr["vid"], 16)
-device = MeerStetter.find_meer(vid, pid, device_type)
-if not device:
-    raise SystemExit("Meerstetter device not found")
-
-meer = MeerStetter(device, baudrate=57600, timeout=1)
-meer.set_parid_long(108, 1, 0)
-meer.read(100)
-meer.set_parid_long(2000, 1, 1)
-meer.set_parid_float(3002, 3.0)
-meer.set_parid_float(3010, 80.0)
-meer.set_parid_float(3011, 5.0)
-meer.set_parid_float(3012, 4.0)
-meer.set_parid_float(3013, 0.0)
-meer.set_parid_float(3030, 9.0)
-meer.set_parid_float(3033, 73.0)
-meer.set_parid_float(3040, 1.0)
-meer.set_parid_long(108, 1, 1)
-meer.close()
-print("Meerstetter tuning applied")
-PY
-then
-    phase_fail "Meerstetter tuning failed"
+app_up=0
+for i in $(seq 1 30); do
+    if curl -sf http://localhost:8090/health >/dev/null 2>&1; then app_up=1; break; fi
+    sleep 2
+done
+if [[ "${app_up}" == "1" ]]; then
+    echo "  ✓ app already up — a deployment has landed (/health OK on :8090)"
+else
+    echo "  ℹ app not up yet — it starts once a Greengrass deployment targets this device's ring."
 fi
 
-run_test "DEVICE_ID set"            "grep -q 'DEVICE_ID=' /opt/aquila/config/device.env"
-run_test "greengrass service active" "systemctl is-active greengrass | grep -q active"
-run_test "aquila-backend running"    \
-    "docker ps --filter name=aquila-backend --format '{{.Status}}' | grep -q Up"
-run_test "aquila-app running"        \
-    "docker ps --filter name=aquila-app --format '{{.Status}}' | grep -q Up"
-run_test "aquila-ui running"         \
-    "docker ps --filter name=aquila-ui --format '{{.Status}}' | grep -q Up"
-run_test "backend reachable :8090"   "curl -sf http://localhost:8090/health"
-
-phase_pass "Greengrass running the stack, containers up, backend reachable on :8090"
+phase_pass "Greengrass active + provisioned; app starts when a ring deployment lands"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 11b — Kiosk Control Service
