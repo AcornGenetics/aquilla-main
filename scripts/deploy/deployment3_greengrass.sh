@@ -806,13 +806,12 @@ phase_start 10 "App Stack Ownership (Greengrass)"
 
 # Under Greengrass the com.acorn.sentri component runs `docker compose up` from
 # its recipe, so the host must NOT also run the stack — a second owner would race
-# the component (double up/down, port clashes). Remove any legacy host compose
-# service left by deployment2 so greengrass.service is the sole stack owner.
-if systemctl list-unit-files | grep -q '^aquila-stack.service'; then
-    systemctl disable --now aquila-stack.service || true
-    rm -f /etc/systemd/system/aquila-stack.service
-    systemctl daemon-reload
-fi
+# the component (double up/down, port clashes). Unconditionally remove any legacy
+# host compose service left by deployment2 so greengrass.service is the sole owner.
+# (disable is best-effort; the rm is what the check below verifies.)
+systemctl disable --now aquila-stack.service 2>/dev/null || true
+rm -f /etc/systemd/system/aquila-stack.service
+systemctl daemon-reload
 
 run_test "no host compose service" "! test -f /etc/systemd/system/aquila-stack.service"
 
