@@ -32,7 +32,12 @@ def main(argv=None):
     pinned = pin_compose(compose, args.api_ref, args.ui_ref)
     Path(args.out_compose).write_text(yaml.safe_dump(pinned, sort_keys=False))
 
-    recipe = build_recipe(args.component_name, args.version, args.artifact_uri)
+    recipe = build_recipe(
+        args.component_name,
+        args.version,
+        args.artifact_uri,
+        image_refs=[args.api_ref, args.ui_ref],
+    )
     Path(args.out_recipe).write_text(json.dumps(recipe, indent=2))
 
 

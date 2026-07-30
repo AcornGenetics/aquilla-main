@@ -11,6 +11,10 @@ Behaviors tested:
   2. build_recipe pins the compose artifact and runs it via a Lifecycle
   3. pin_compose rewrites the app images to the ECR digest refs
   4. pin_compose strips build sections (the device pulls, never builds)
+  5. build_recipe depends on DockerApplicationManager to pre-stage the images
+  6. build_recipe declares the app images as docker artifacts (pre-staged)
+  7. build_recipe reports the app /health as the component health
+  8. pin_compose also pins the app service (shares the api image)
 """
 import pytest
 
@@ -79,6 +83,16 @@ def test_pin_compose_strips_build_sections():
     assert "build" not in pinned["services"]["ui"]
 
 
+def test_pin_compose_also_pins_the_app_service():
+    compose = _device_compose()
+    compose["services"]["app"] = {"image": "ghcr.io/acorngenetics/aquilla-main-api:latest"}
+
+    pinned = pin_compose(compose, API_DIGEST, UI_DIGEST)
+
+    # app shares the api image, so it pins to the same digest as backend.
+    assert pinned["services"]["app"]["image"] == API_DIGEST
+
+
 def test_pin_compose_does_not_mutate_the_input():
     original = _device_compose()
     pin_compose(original, API_DIGEST, UI_DIGEST)
@@ -86,3 +100,32 @@ def test_pin_compose_does_not_mutate_the_input():
     # The authored compose is reused across builds — pinning must not clobber it.
     assert original["services"]["backend"]["image"].startswith("ghcr.io/")
     assert "build" in original["services"]["backend"]
+
+
+def _recipe_with_images():
+    return build_recipe(
+        "com.acorn.sentri",
+        "1.2.3",
+        "s3://acorn-artifacts/com.acorn.sentri/1.2.3/compose.yaml",
+        image_refs=[API_DIGEST, UI_DIGEST],
+    )
+
+
+def test_recipe_depends_on_docker_application_manager():
+    deps = _recipe_with_images()["ComponentDependencies"]
+    # Greengrass pre-stages the ECR images via DockerApplicationManager.
+    assert "aws.greengrass.DockerApplicationManager" in deps
+
+
+def test_recipe_declares_images_as_docker_artifacts():
+    artifacts = _recipe_with_images()["Manifests"][0]["Artifacts"]
+    uris = [a["URI"] for a in artifacts]
+    # docker: URIs tell DockerApplicationManager which images to pre-stage.
+    assert f"docker:{API_DIGEST}" in uris
+    assert f"docker:{UI_DIGEST}" in uris
+
+
+def test_recipe_reports_health_from_slash_health():
+    run = _recipe_with_images()["Manifests"][0]["Lifecycle"]["Run"]
+    # Component liveness is gated on the app's /health endpoint.
+    assert "/health" in run

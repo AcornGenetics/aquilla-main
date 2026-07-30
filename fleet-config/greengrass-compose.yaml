@@ -1,0 +1,50 @@
+# On-device app stack for the Greengrass component (com.acorn.sentri).
+#
+# A clean-room version of docker-compose.yml: same app stack, but the CI
+# publish workflow pins the images to ECR digests, Greengrass (not watchtower)
+# owns updates, and state lives on named volumes. Do NOT reintroduce watchtower
+# or the #314 host-DNS forwarding here — Greengrass manages the network.
+services:
+  backend:
+    image: aquilla-main-api
+    env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
+    container_name: aquila-backend
+    ports:
+      - "8090:8090"
+    restart: unless-stopped
+    volumes:
+      - aquila-results:/opt/aquila/results
+      - aquila-logs:/opt/aquila/logs
+      - aquila-profiles:/opt/aquila/profiles
+      - aquila-config:/opt/aquila/config
+      # The sync outbox (completed runs not yet pushed) — must survive recreate.
+      - aquila-data:/opt/aquila/data
+
+  app:
+    image: aquilla-main-api
+    env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
+    container_name: aquila-app
+    restart: unless-stopped
+    volumes:
+      - aquila-results:/opt/aquila/results
+      - aquila-logs:/opt/aquila/logs
+      - aquila-profiles:/opt/aquila/profiles
+      - aquila-config:/opt/aquila/config
+      - aquila-data:/opt/aquila/data
+
+  ui:
+    image: aquilla-main-ui
+    env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
+    container_name: aquila-ui
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+# Persistent state lives in named volumes managed by the Docker engine — survives
+# container recreate on every Greengrass deployment, no host /opt binds needed.
+volumes:
+  aquila-results:
+  aquila-logs:
+  aquila-profiles:
+  aquila-config:
+  aquila-data:
