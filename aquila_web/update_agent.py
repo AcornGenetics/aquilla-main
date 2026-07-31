@@ -1,0 +1,31 @@
+"""Greengrass update agent (am#382, Phase 2).
+
+Wires the tested decisions (UpdateGate + version_health) to Greengrass Core IPC:
+- defers an offered component update until the operator approves AND no assay runs
+- publishes the Device Shadow (running SHAs + matched-pair Container Health)
+
+The IPC client is injected — the real greengrasscoreipc adapter is used on-device;
+tests pass a fake. This module holds no IPC specifics, only the orchestration.
+"""
+from aquila_web.version_health import build_shadow_report
+
+
+class UpdateAgent:
+    def __init__(self, ipc, gate, running_shas, assay_running):
+        self._ipc = ipc
+        self._gate = gate
+        self._running_shas = running_shas
+        self._assay_running = assay_running
+
+    def handle_update_offer(self, deployment_id, version):
+        """Greengrass offers `version` — hold it until idle AND operator-approved."""
+        self._gate.mark_pending(version)
+        if not self._gate.should_apply(self._assay_running()):
+            self._ipc.defer_component_update(deployment_id)
+            return "deferred"
+        return "applied"
+
+    def publish_health(self):
+        """Report the running build SHAs + Container Health to the Device Shadow."""
+        api_sha, ui_sha = self._running_shas()
+        self._ipc.update_thing_shadow(build_shadow_report(api_sha, ui_sha))
