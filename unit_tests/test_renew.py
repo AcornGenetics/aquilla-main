@@ -16,7 +16,13 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-from aq_lib.renew import RenewalError, renew_device_cert, renewal_due, run_renewal
+from aq_lib.renew import (
+    ROTATION_MARKER,
+    RenewalError,
+    renew_device_cert,
+    renewal_due,
+    run_renewal,
+)
 
 DEVICE_ID = "10000000a6b7d43e"
 RENEW_ENDPOINT = "https://renew.example/renew"
@@ -259,6 +265,69 @@ class TestRenewDeviceCert:
         )
         (cn,) = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
         assert cn.value == DEVICE_ID
+
+
+class TestGreengrassReconnectMarker:
+    """After a rotation, the container must signal the host to reconnect Greengrass.
+
+    Greengrass reads device.crt once at startup and holds a long-lived MQTT
+    connection, so it won't pick up a rotated cert until greengrass.service
+    restarts. The renewal runs in a container and can't touch the host's systemd,
+    so on a successful rotation it drops a marker in the (bind-mounted) config dir;
+    a host-side hook sees it and bounces Greengrass. No rotation => no marker, so a
+    healthy connection is never bounced needlessly.
+    """
+
+    def test_rotation_drops_the_reconnect_marker(self, tmp_path):
+        now = dt.datetime(2026, 7, 11, tzinfo=dt.timezone.utc)
+        config = tmp_path / "config"
+        write_config(config, due_cert(now))
+        post = issuing_post(now)
+
+        renew_device_cert(
+            RENEW_ENDPOINT, config_dir=str(config), device_id=DEVICE_ID,
+            now=now, http_post=post,
+        )
+
+        assert (config / ROTATION_MARKER).exists()
+
+    def test_not_due_leaves_no_marker(self, tmp_path):
+        # Nothing rotated, so Greengrass's healthy long-lived connection must not be
+        # bounced. A daily no-op tick must never leave a marker.
+        now = dt.datetime(2026, 7, 2, tzinfo=dt.timezone.utc)
+        config = tmp_path / "config"
+        fresh = make_cert_pem(
+            not_before=now - dt.timedelta(days=1),
+            not_after=now + dt.timedelta(days=13),
+        )
+        write_config(config, fresh)
+
+        result = renew_device_cert(
+            RENEW_ENDPOINT, config_dir=str(config), device_id=DEVICE_ID,
+            now=now, http_post=lambda *a, **k: pytest.fail("must not contact /renew"),
+        )
+
+        assert result is None
+        assert not (config / ROTATION_MARKER).exists()
+
+    def test_failed_renewal_leaves_no_marker(self, tmp_path):
+        # Due, but /renew refused: the installed cert is unchanged, so there is
+        # nothing new to reconnect with. A marker here would bounce Greengrass back
+        # onto the same old cert — pointless and disruptive.
+        now = dt.datetime(2026, 7, 11, tzinfo=dt.timezone.utc)
+        config = tmp_path / "config"
+        write_config(config, due_cert(now))
+
+        def refusing_post(url, data=None, cert=None):
+            return FakeResponse(403, {"error": "Device ID is revoked"})
+
+        with pytest.raises(RenewalError):
+            renew_device_cert(
+                RENEW_ENDPOINT, config_dir=str(config), device_id=DEVICE_ID,
+                now=now, http_post=refusing_post,
+            )
+
+        assert not (config / ROTATION_MARKER).exists()
 
 
 class TestRunRenewal:

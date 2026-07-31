@@ -849,6 +849,14 @@ ExecStart=/usr/bin/docker run --rm \\
     -v /opt/aquila/config:/config \\
     ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG} \\
     python -m aq_lib.renew /config
+# Greengrass loads device.crt once at startup and holds a long-lived MQTT
+# connection, so it won't pick up a renewed cert on its own (#363). The renewal
+# runs in the container above and can't touch host systemd; on a rotation it drops
+# /opt/aquila/config/.cert-rotated. Only when that marker is present do we restart
+# Greengrass so it reconnects with the new cert, then clear it. A no-op renewal
+# leaves no marker => Greengrass's healthy connection is never bounced. If the
+# restart fails the marker stays and the next daily tick retries it.
+ExecStartPost=/bin/sh -c 'test -f /opt/aquila/config/.cert-rotated && { systemctl restart greengrass && rm -f /opt/aquila/config/.cert-rotated; } || true'
 EOF
 
 # Daily, but with a large randomized delay so a batch of devices enrolled the same
@@ -871,6 +879,7 @@ systemctl daemon-reload
 systemctl enable --now aquila-cert-renew.timer
 
 run_test "renew service file exists" "test -f /etc/systemd/system/aquila-cert-renew.service"
+run_test "renew reconnects greengrass"  "grep -q 'restart greengrass' /etc/systemd/system/aquila-cert-renew.service"
 run_test "renew timer file exists"   "test -f /etc/systemd/system/aquila-cert-renew.timer"
 run_test "renew timer enabled"       "systemctl is-enabled aquila-cert-renew.timer | grep -q enabled"
 run_test "renew timer active"        "systemctl is-active aquila-cert-renew.timer | grep -q active"
