@@ -250,44 +250,44 @@
       });
     });
 
-    // ── OTA Updates ──────────────────────────────────────────────
-    let _updateCheckPollTimer = null;
+    // ── Greengrass operator update-gate (am#382) ─────────────────
+    // Greengrass pre-stages the offered version and holds the switch; the device
+    // reports it as `pending` and applies it only when the operator approves AND
+    // the instrument is idle. There is no "check" — the gate reflects what
+    // Greengrass has already offered, so we just read /update/gate.
 
     async function openUpdateTab() {
       const area = document.getElementById("update-status-area");
-      const r = await fetch("/update/status").catch(() => null);
-      const data = r ? await r.json().catch(() => null) : null;
-      if (data && (data.available || data.status === "available")) { renderUpdateStatus(data); return; }
-      if (data && data.status === "updating") { renderUpdateStatus(data); return; }
       area.innerHTML = '<p style="color:#6b7280;font-size:15px;">Checking for updates…</p>';
-      const cr = await fetch("/update/check", { method: "POST" }).catch(() => null);
-      if (!cr || !cr.ok) {
-        const cd = cr ? await cr.json().catch(() => ({})) : {};
-        renderUpdateStatus({ status: "error", error: cd.error || "Check request failed" });
-        return;
-      }
-      _pollUpdateStatus(0);
+      const r = await fetch("/update/gate").catch(() => null);
+      const data = r ? await r.json().catch(() => null) : null;
+      renderGate(data);
     }
 
-    function _pollUpdateStatus(attempt) {
-      if (_updateCheckPollTimer) clearTimeout(_updateCheckPollTimer);
-      if (attempt > 20) { renderUpdateStatus({ status: "error", error: "Check timed out" }); return; }
-      _updateCheckPollTimer = setTimeout(async () => {
-        const r = await fetch("/update/status").catch(() => null);
-        const data = r ? await r.json().catch(() => null) : null;
-        if (!data || data.status === "checking") { _pollUpdateStatus(attempt + 1); }
-        else { renderUpdateStatus(data); }
-      }, 1500);
-    }
-
-    function renderUpdateStatus(data) {
+    function renderGate(data) {
       const area = document.getElementById("update-status-area");
       const dot = document.getElementById("updates-tab-dot");
-      if (data.available || data.status === "available") {
+      if (!data) {
+        area.innerHTML = `
+          <p style="color:#dc2626;font-size:15px;">Could not read update status.</p>
+          <button onclick="openUpdateTab()"
+            style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;font-size:14px;cursor:pointer;color:#374151;">Try again</button>
+        `;
+        return;
+      }
+      if (data.pending && data.approved) {
+        // Already approved — the deferred switch will apply when idle and restart
+        // the app; hold the overlay until it does.
+        if (dot) dot.style.display = "none";
+        _showUpdateOverlay();
+        _pollForSwitch(0);
+      } else if (data.pending) {
         if (dot) dot.style.display = "block";
+        const ver = data.target_version
+          ? ` (version ${_escHtml(String(data.target_version))})` : "";
         area.innerHTML = `
           <p style="font-size:15px;color:#1a1c1c;line-height:1.6;margin:0 0 18px;">
-            A software update is available. Do you want to update now?
+            A software update${ver} is ready to install. It applies when the instrument is idle.
           </p>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <button id="update-now-btn"
@@ -298,19 +298,9 @@
               onclick="dismissUpdate()">Later</button>
           </div>
         `;
-      } else if (data.status === "updating") {
-        _showUpdateOverlay();
-      } else if (data.status === "error") {
-        area.innerHTML = `
-          <p style="color:#dc2626;font-size:15px;">Could not check for updates: ${_escHtml(data.error || "unknown error")}</p>
-          <button onclick="openUpdateTab()"
-            style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;font-size:14px;cursor:pointer;color:#374151;">Try again</button>
-        `;
       } else {
         if (dot) dot.style.display = "none";
-        let html = '<p style="color:#16a34a;font-size:15px;font-weight:600;">✓ Software is up to date.</p>';
-        if (data.last_checked) html += `<p style="font-size:12px;color:#6b7280;margin-top:6px;">Last checked: ${_escHtml(data.last_checked.replace("T"," ").replace("Z"," UTC"))}</p>`;
-        area.innerHTML = html;
+        area.innerHTML = '<p style="color:#16a34a;font-size:15px;font-weight:600;">✓ Software is up to date.</p>';
       }
     }
 
@@ -343,65 +333,46 @@
       if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
       _showUpdateOverlay();
       document.querySelectorAll(".help-badge").forEach(b => b.remove());
-      const r = await fetch("/update/apply", { method: "POST" }).catch(() => null);
-      const d = r ? await r.json().catch(() => null) : null;
-      if (d && d.ok === false && d.error) { _pollForUpdateComplete(0, d.error); }
-      else { _pollForUpdateComplete(0, null); }
+      // Release the deferred switch. Greengrass applies the pre-staged version at
+      // its next recheck once the device is idle; the app container then restarts.
+      await fetch("/update/approve", { method: "POST" }).catch(() => null);
+      _pollForSwitch(0);
     }
 
-    function _pollForUpdateComplete(attempt, fallbackError) {
-      if (attempt > 200) {
-        _hideUpdateOverlay();
-        const msg = fallbackError
-          ? `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(fallbackError)}</p>`
-          : '<p style="color:#6b7280;font-size:15px;">Update timed out. Please check the device and try again.</p>';
-        document.getElementById("update-status-area").innerHTML = msg;
-        return;
-      }
-      if (attempt === 60) {
+    function _pollForSwitch(attempt) {
+      // Once Greengrass applies the switch the app container restarts and this
+      // page reloads on the new build, so we just hold the overlay. If the device
+      // is mid-run the switch is deferred until it finishes — relabel so the
+      // operator knows it's queued, and keep waiting.
+      if (attempt === 40) {
         const lbl = document.getElementById("update-overlay-label");
-        if (lbl) lbl.textContent = "Still updating, please wait…";
+        if (lbl) lbl.textContent = "Update queued — applies when the current run finishes.";
       }
       setTimeout(async () => {
-        const r = await fetch("/update/status").catch(() => null);
+        const r = await fetch("/update/gate").catch(() => null);
         const data = r ? await r.json().catch(() => null) : null;
-        if (!data || data.status === "updating" || data.available) { _pollForUpdateComplete(attempt + 1, fallbackError); return; }
-        if (data.status === "error") {
-          _hideUpdateOverlay();
-          const errMsg = fallbackError || data.error || "unknown error";
-          document.getElementById("update-status-area").innerHTML =
-            `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(errMsg)}</p>`;
-          return;
-        }
-        _hideUpdateOverlay();
-        const area = document.getElementById("update-status-area");
-        const dot = document.getElementById("updates-tab-dot");
-        if (dot) dot.style.display = "none";
-        const checkedAt = data.last_checked ? data.last_checked.replace("T", " ").replace("Z", " UTC") : "";
-        area.innerHTML = `
-          <p style="font-size:20px;font-weight:700;color:#16a34a;margin:0 0 8px;">✓ Update complete</p>
-          <p style="font-size:15px;color:#1a1c1c;margin:0 0 6px;">The device is running the latest software.</p>
-          ${checkedAt ? `<p style="font-size:12px;color:#6b7280;margin:0;">Verified: ${_escHtml(checkedAt)}</p>` : ""}
-        `;
+        // Gate cleared (pending=false) => the switch applied on the new build.
+        if (data && !data.pending) { location.reload(); return; }
+        _pollForSwitch(attempt + 1);
       }, 3000);
     }
 
-    async function dismissUpdate() {
-      await fetch("/update/dismiss", { method: "POST" }).catch(() => {});
+    function dismissUpdate() {
+      // No backend dismiss under Greengrass — the gate simply stays `pending`
+      // (deferred) until approved. "Later" only closes the prompt.
       document.getElementById("update-status-area").innerHTML =
-        '<p style="color:#6b7280;font-size:15px;">Update reminder dismissed. You can check again by reopening this tab.</p>';
+        '<p style="color:#6b7280;font-size:15px;">Update postponed. It stays ready and installs when you tap Update Now.</p>';
       const dot = document.getElementById("updates-tab-dot");
       if (dot) dot.style.display = "none";
-      document.querySelectorAll(".help-badge").forEach(b => b.remove());
     }
 
     function _escHtml(str) {
       return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     }
 
-    // Show tab dot if update is already known available on page load
-    fetch("/update/status").then(r => r.ok ? r.json() : null).then(data => {
-      if (!data || !data.available || data.dismissed) return;
+    // Show the tab dot on load if Greengrass has a version pending approval.
+    fetch("/update/gate").then(r => r.ok ? r.json() : null).then(data => {
+      if (!data || !data.pending || data.approved) return;
       const dot = document.getElementById("updates-tab-dot");
       if (dot) dot.style.display = "block";
     }).catch(() => {});
