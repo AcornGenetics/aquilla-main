@@ -136,3 +136,11 @@ def test_recipe_reports_health_from_slash_health():
     run = _recipe_with_images()["Manifests"][0]["Lifecycle"]["Run"]
     # Component liveness is gated on the app's /health endpoint.
     assert "/health" in run
+
+
+def test_recipe_health_gate_waits_for_startup():
+    run = _recipe_with_images()["Manifests"][0]["Lifecycle"]["Run"]
+    # A 25s buffer + grace loop so a slow first boot doesn't instantly break the
+    # component (the app takes ~15s to become healthy after compose up).
+    assert "sleep 25" in run  # buffer before the first health check
+    assert "seq" in run       # grace loop after the buffer
