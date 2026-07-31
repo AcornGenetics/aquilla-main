@@ -69,6 +69,12 @@ def build_recipe(component_name, version, compose_artifact_uri, image_refs=None)
                     # fails the loop exits non-zero and Greengrass marks it broken
                     # (feeds rollback in af#4).
                     "Run": (
+                        # Give the containers this core device's thing name so the
+                        # update agent (am#382) can address its own Device Shadow
+                        # over IPC. SVCUID + the nucleus socket path are already in
+                        # this process env (Greengrass sets them) and compose passes
+                        # them through; the thing name is not, so export it here.
+                        'export AWS_IOT_THING_NAME="{iot:thingName}"; '
                         "docker compose -f %s up -d; "
                         # buffer: do not check /health for the first 25s (boot ~15s)
                         "sleep 25; "
