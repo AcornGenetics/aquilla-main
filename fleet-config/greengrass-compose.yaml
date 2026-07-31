@@ -1,10 +1,23 @@
 # On-device app stack for the Greengrass component (com.acorn.sentri).
 #
-# A clean-room version of docker-compose.yml: same app stack, but the CI
-# publish workflow pins the images to ECR digests, Greengrass (not watchtower)
-# owns updates, and state lives on named volumes. Do NOT reintroduce watchtower
-# or the #314 host-DNS forwarding here — Greengrass manages the network.
+# A clean-room version of docker-compose.yml: the SAME functional stack (web
+# backend + hardware controller + UI), but the CI publish workflow pins the images
+# to ECR digests and Greengrass (not watchtower) owns updates. Do NOT reintroduce
+# watchtower or the #314 host-DNS forwarding (dns: 172.18.0.1) here — Greengrass
+# manages the network.
+#
+# State is bind-mounted from /opt/aquila on the host — NOT Docker named volumes.
+# Greengrass runs `docker compose` from a per-VERSION artifact directory, so a
+# relative named volume (aquila-data:) gets a version-scoped project prefix
+# (0114_aquila-data, 0117_aquila-data, …) and every update would start on a fresh
+# EMPTY volume, abandoning the previous version's runs + unsynced sync-outbox.
+# Host binds are version-independent and are exactly where a device's existing
+# data already lives, so data survives every update and carries over when an
+# existing device is migrated to Greengrass. They also keep config/certs
+# consistent with the host-side cert renewal (am#363), which writes /opt/aquila/config.
 services:
+  # The web backend: serves the API/UI endpoints on 8090, accepts the Run press,
+  # and owns the sync outbox. The default image CMD (uvicorn) runs here.
   backend:
     image: aquilla-main-api
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
@@ -21,63 +34,117 @@ services:
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
       - "/dev/gpiomem:/dev/gpiomem"
-    # Greengrass Core IPC: the update agent (am#382) connects to the nucleus over
-    # its domain socket to publish the Device Shadow and defer component updates.
-    # SVCUID + the socket path are set by Greengrass on the component process (and
-    # inherited by docker compose); AWS_IOT_THING_NAME is exported by the recipe.
+    # Reach the host (kiosk-control on :9191) by name.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
+      # App paths — align with the host bind-mount points below.
+      - DATA_DIR=/opt/aquila
+      - PROFILE_DIR=/opt/aquila/profiles
+      - RESULTS_PATH=/opt/aquila/results/results.json
+      - CONFIG_DIR=/opt/aquila/config
+      - KIOSK_CONTROL_URL=http://host.docker.internal:9191
+      # Greengrass Core IPC (am#382): the update agent connects to the nucleus to
+      # publish the Device Shadow + defer updates. SVCUID + the socket path are set
+      # by Greengrass on the component process and inherited by compose;
+      # AWS_IOT_THING_NAME is exported by the recipe.
       - SVCUID
       - AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT
       - AWS_IOT_THING_NAME
     volumes:
-      - aquila-results:/opt/aquila/results
-      - aquila-logs:/opt/aquila/logs
-      - aquila-profiles:/opt/aquila/profiles
-      - aquila-config:/opt/aquila/config
-      # The sync outbox (completed runs not yet pushed) — must survive recreate.
-      - aquila-data:/opt/aquila/data
+      # Host binds (version-independent) so data persists across every Greengrass
+      # update and an existing device's data carries over on migration.
+      - /opt/aquila/results:/opt/aquila/results
+      - /opt/aquila/logs:/opt/aquila/logs
+      - /opt/aquila/profiles:/opt/aquila/profiles
+      - /opt/aquila/config:/opt/aquila/config
+      # The sync outbox (completed runs not yet pushed) — must survive every update.
+      - /opt/aquila/data:/opt/aquila/data
       # The nucleus IPC socket, mounted at the same path the env var names so the
       # client inside the container connects to the same socket.
       - ${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}:${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
 
+  # The hardware controller: application.py drives the instrument (AssayInterface
+  # ready/run/end) and talks to the backend over BACKEND_URL. This is what a Run
+  # press actuates — WITHOUT this command the container runs the default web server
+  # and nothing ever drives the instrument (the button returns ok but nothing runs).
   app:
     image: aquilla-main-api
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     container_name: aquila-app
+    command: ["python3", "application.py"]
     restart: unless-stopped
     privileged: true
+    pid: host
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
       - "/dev/i2c-1:/dev/i2c-1"
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
       - "/dev/gpiomem:/dev/gpiomem"
-    # Greengrass Core IPC (see backend) — the update agent runs here too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
+      - DATA_DIR=/opt/aquila
+      - PROFILE_DIR=/opt/aquila/profiles
+      - RESULTS_PATH=/opt/aquila/results/results.json
+      - CONFIG_DIR=/opt/aquila/config
+      # How application.py reaches the web backend (run_requested, events, screens).
+      - BACKEND_URL=http://aquila-backend:8090
+      - KIOSK_CONTROL_URL=http://host.docker.internal:9191
       - SVCUID
       - AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT
       - AWS_IOT_THING_NAME
     volumes:
-      - aquila-results:/opt/aquila/results
-      - aquila-logs:/opt/aquila/logs
-      - aquila-profiles:/opt/aquila/profiles
-      - aquila-config:/opt/aquila/config
-      - aquila-data:/opt/aquila/data
+      - /opt/aquila/results:/opt/aquila/results
+      - /opt/aquila/logs:/opt/aquila/logs
+      - /opt/aquila/profiles:/opt/aquila/profiles
+      - /opt/aquila/config:/opt/aquila/config
+      - /opt/aquila/data:/opt/aquila/data
       - ${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}:${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}
+    # application.py is not a web server — disable the image's /health check so the
+    # container is not flagged unhealthy (the backend answers /health for the gate).
+    healthcheck:
+      disable: true
+    depends_on:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
+  # The kiosk UI (nginx). nginx listens on port 80 inside the container (see
+  # docker/nginx.conf), so the host's 8080 maps to 80 — mapping 8080:8080 left the
+  # kiosk UI unreachable (nothing listens on container port 8080).
   ui:
     image: aquilla-main-ui
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     container_name: aquila-ui
     ports:
-      - "8080:8080"
+      - "8080:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
-
-# Persistent state lives in named volumes managed by the Docker engine — survives
-# container recreate on every Greengrass deployment, no host /opt binds needed.
-volumes:
-  aquila-results:
-  aquila-logs:
-  aquila-profiles:
-  aquila-config:
-  aquila-data:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M

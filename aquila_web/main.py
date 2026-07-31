@@ -2461,6 +2461,21 @@ async def start_background_update_poller() -> None:
 
 
 @app.on_event("startup")
+async def init_sync_outbox_db() -> None:
+    """Create the sync-outbox schema before the sync poller reads it.
+
+    On a fresh device — or a fresh Greengrass named volume — the events table
+    otherwise does not exist until the first run completes, so the background sync
+    poller logs 'no such table: events' every tick until then. init_local_db() is
+    idempotent (CREATE TABLE IF NOT EXISTS), so this is safe on an existing DB too.
+    """
+    try:
+        init_local_db()
+    except Exception as e:  # noqa: BLE001 - never block startup on this
+        logger.warning("sync-outbox DB init failed: %s", e)
+
+
+@app.on_event("startup")
 async def start_background_sync_poller() -> None:
     asyncio.create_task(_background_sync_poller())
 
