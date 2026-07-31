@@ -2169,6 +2169,22 @@ async def _do_check_update() -> None:
         _update_error = str(e)
 
 
+from aquila_web import update_gate
+
+
+@app.get("/update/gate")
+async def get_update_gate():
+    """The operator apply-gate state (Greengrass pre-download-then-deferred-switch)."""
+    return update_gate.GATE.status()
+
+
+@app.post("/update/approve")
+async def approve_update_gate():
+    """The 'Update' button: release the deferred switch for the pending version."""
+    update_gate.GATE.approve()
+    return update_gate.GATE.status()
+
+
 @app.get("/update/status")
 async def get_update_status():
     available = _update_available
@@ -2386,3 +2402,17 @@ async def start_background_update_poller() -> None:
 @app.on_event("startup")
 async def start_background_sync_poller() -> None:
     asyncio.create_task(_background_sync_poller())
+
+
+@app.on_event("startup")
+async def start_greengrass_update_agent() -> None:
+    """Bring up the operator update-gate agent (am#382): defer offered updates
+    until the operator approves + no assay runs, and publish the Device Shadow.
+    No-ops off-device (Greengrass IPC unavailable) so local/dev boots are unaffected."""
+    from aquila_web.greengrass_ipc import start_update_agent
+
+    start_update_agent(
+        update_gate.GATE,
+        running_shas=_running_container_shas,
+        assay_running=lambda: current_item.screen == "running",
+    )
