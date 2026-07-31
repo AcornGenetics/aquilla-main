@@ -70,8 +70,8 @@ def build_recipe(component_name, version, compose_artifact_uri, image_refs=None)
                     # (feeds rollback in af#4).
                     "Run": (
                         "docker compose -f %s up -d; "
-                        # buffer: do not check /health for the first 60s (boot time)
-                        "sleep 60; "
+                        # buffer: do not check /health for the first 25s (boot ~15s)
+                        "sleep 25; "
                         # grace: then poll up to ~1 min for the first healthy response
                         "for i in $(seq 1 12); do "
                         "curl -fsS http://localhost:8090/health >/dev/null 2>&1 && break; "
