@@ -12,6 +12,15 @@ services:
     ports:
       - "8090:8090"
     restart: unless-stopped
+    # PCR hardware access (Meerstetter serial, I2C, SPI, GPIO). Without these the
+    # app serves but can't drive the instrument — runs can't start.
+    privileged: true
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
+      - "/dev/i2c-1:/dev/i2c-1"
+      - "/dev/spidev0.0:/dev/spidev0.0"
+      - "/dev/spidev0.1:/dev/spidev0.1"
+      - "/dev/gpiomem:/dev/gpiomem"
     volumes:
       - aquila-results:/opt/aquila/results
       - aquila-logs:/opt/aquila/logs
@@ -25,6 +34,13 @@ services:
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     container_name: aquila-app
     restart: unless-stopped
+    privileged: true
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
+      - "/dev/i2c-1:/dev/i2c-1"
+      - "/dev/spidev0.0:/dev/spidev0.0"
+      - "/dev/spidev0.1:/dev/spidev0.1"
+      - "/dev/gpiomem:/dev/gpiomem"
     volumes:
       - aquila-results:/opt/aquila/results
       - aquila-logs:/opt/aquila/logs
