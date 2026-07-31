@@ -109,3 +109,46 @@ def test_ci_passes_the_build_args_to_both_images():
     assert "BUILD_TIME=$(date -u" in wf, (
         "computed in a step — github.event.head_commit is absent on workflow_dispatch"
     )
+
+
+# ── The Greengrass shadow reporter reads the baked identity (am#365 -> am#382) ──
+# _running_container_shas() feeds both the run gate and the Device-Shadow
+# Container-Health report. It must source the API SHA from this image's own baked
+# git_sha and the UI SHA from the UI container's /version.json — never invent a
+# match, and never let an unreachable UI break a run.
+
+class _FakeResp:
+    def __init__(self, body):
+        self._body = body
+
+    def json(self):
+        return self._body
+
+
+def test_running_shas_reads_baked_api_and_ui_git_sha(monkeypatch):
+    monkeypatch.setattr(main, "_BUILD_IDENTITY",
+                        {"app_version": "2.1.0.6", "git_sha": "apisha", "build_time": "t"})
+    monkeypatch.setattr(main.httpx, "get",
+                        lambda url, timeout=None: _FakeResp({"git_sha": "uisha"}))
+    assert main._running_container_shas() == ("apisha", "uisha")
+
+
+def test_running_shas_ui_unreachable_degrades_to_none(monkeypatch):
+    # UI briefly down: report (api, None) — an unmatched pair, not a crash and not
+    # a false match. The run gate treats None as "cannot enforce -> allow".
+    monkeypatch.setattr(main, "_BUILD_IDENTITY", {"git_sha": "apisha"})
+
+    def boom(*a, **k):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(main.httpx, "get", boom)
+    assert main._running_container_shas() == ("apisha", None)
+
+
+def test_running_shas_unknown_api_is_none(monkeypatch):
+    # An image built before #351 bakes no git_sha ("unknown"); surface it as None
+    # so Container Health reports honestly rather than matching on the string.
+    monkeypatch.setattr(main, "_BUILD_IDENTITY", {"git_sha": "unknown"})
+    monkeypatch.setattr(main.httpx, "get",
+                        lambda url, timeout=None: _FakeResp({"git_sha": "uisha"}))
+    assert main._running_container_shas() == (None, "uisha")
