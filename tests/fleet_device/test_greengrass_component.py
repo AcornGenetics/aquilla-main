@@ -66,6 +66,36 @@ def test_app_containers_reach_greengrass_ipc():
         )
 
 
+def test_app_runs_the_hardware_controller():
+    # The `app` service must run application.py (the AssayInterface ready/run/end
+    # loop that drives the instrument), NOT the default web-server CMD. If it falls
+    # back to the web server, a Run press is accepted by the backend but nothing
+    # ever actuates the hardware — the instrument sits idle.
+    app = _load_compose()["services"]["app"]
+    command = app.get("command")
+    assert command, "app has no command — it would run the default web server, not the controller"
+    joined = " ".join(command) if isinstance(command, list) else str(command)
+    assert "application.py" in joined
+    # application.py reaches the web backend over BACKEND_URL.
+    env = " ".join(app.get("environment", []))
+    assert "BACKEND_URL=http://aquila-backend:8090" in env, "app can't reach the backend"
+
+
+def test_app_healthcheck_disabled():
+    # application.py is not a web server, so the image's /health healthcheck would
+    # flag the container unhealthy. The backend answers /health for the gate.
+    app = _load_compose()["services"]["app"]
+    assert app.get("healthcheck", {}).get("disable") is True
+
+
+def test_ui_maps_host_port_to_nginx_80():
+    # nginx listens on port 80 in the container; the host's 8080 must map to 80, or
+    # the kiosk UI is unreachable (8080:8080 hits nothing inside the container).
+    ui = _load_compose()["services"]["ui"]
+    ports = [str(p) for p in ui.get("ports", [])]
+    assert any(p.endswith(":80") for p in ports), f"ui must map to nginx port 80, got {ports}"
+
+
 def test_has_no_watchtower():
     compose = _load_compose()
     # Greengrass owns updates now — no watchtower service, no enable labels.
@@ -91,18 +121,25 @@ def _sources(mounts):
     return out
 
 
-def test_persists_state_on_named_volumes():
+def test_persists_state_on_host_binds():
+    # State is bind-mounted from /opt/aquila (version-independent), NOT relative
+    # named volumes. Greengrass runs compose from a per-VERSION artifact dir, so a
+    # relative named volume gets a version-scoped project prefix (0114_aquila-data,
+    # 0117_aquila-data, …) and every update would start on a fresh EMPTY volume,
+    # abandoning prior runs + the unsynced sync-outbox. Host binds persist across
+    # updates and carry an existing device's data over on migration.
     compose = _load_compose()
-    named = compose.get("volumes") or {}
-    assert named, "no top-level named volumes defined"
+    assert not compose.get("volumes"), "no top-level named volumes — state must be host-bound"
 
-    backend = compose["services"]["backend"]
-    sources = _sources(backend.get("volumes"))
-    assert sources, "backend persists nothing"
-    # Named volumes, not host binds — Greengrass state must not depend on /opt paths.
-    # (The Greengrass IPC socket is a runtime bind, not app state — exclude it.)
-    for src in sources:
-        if "AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT" in src:
-            continue
-        assert not src.startswith("/"), f"backend uses a host bind ({src}); use a named volume"
-        assert src in named, f"backend mounts '{src}' but it is not a declared named volume"
+    for name in ("backend", "app"):
+        binds = _sources(compose["services"][name].get("volumes"))
+        assert binds, f"{name} persists nothing"
+        # The sync outbox must be a stable /opt/aquila host bind.
+        assert "/opt/aquila/data" in binds, f"{name} sync outbox is not a /opt/aquila host bind"
+        # Every state mount (excluding the runtime IPC socket) is an /opt/aquila host bind.
+        for src in binds:
+            if "AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT" in src:
+                continue
+            assert src.startswith("/opt/aquila/"), (
+                f"{name} mounts '{src}' — state must bind /opt/aquila for cross-update persistence"
+            )
