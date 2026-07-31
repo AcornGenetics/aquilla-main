@@ -14,14 +14,15 @@ document.addEventListener("click", (event) => {
   link.blur();
 });
 
-// Show a red "1" badge on the Settings nav item when an OTA update is available
+// Show a red "1" badge on the Settings nav item when Greengrass has a version
+// pending the operator's approval (am#382). Cleared once approved (or applied).
 (function checkUpdateBadge() {
   const links = document.querySelectorAll("a.settings-link");
   if (!links.length) return;
-  fetch("/update/status")
+  fetch("/update/gate")
     .then(r => r.ok ? r.json() : null)
     .then(data => {
-      if (!data || !data.available || data.dismissed) return;
+      if (!data || !data.pending || data.approved) return;
       links.forEach(link => {
         if (!link.querySelector(".help-badge")) {
           const badge = document.createElement("span");
