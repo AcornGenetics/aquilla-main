@@ -28,6 +28,23 @@ def _seed_event(local_db, tmp_path):
     local_db.enqueue_event("run_complete", {"run_name": "Run 1", "profile": "p.json", "result": "ok"})
 
 
+def test_startup_initializes_sync_outbox_schema(tmp_path, monkeypatch):
+    # Regression: on a fresh device — or a fresh Greengrass named volume — the
+    # events table did not exist until the first run completed, so the background
+    # sync poller logged "no such table: events" every tick. App startup must
+    # create the schema so the outbox is readable immediately.
+    monkeypatch.setenv("AQ_LOCAL_DB_PATH", str(tmp_path / "fresh.db"))
+    from aquila_web import local_db, main as web_main
+
+    # Deliberately NO explicit init_local_db() here — the app's startup hook must
+    # do it. Entering the TestClient context runs the startup events.
+    with TestClient(web_main.app):
+        pass
+
+    # Reading the outbox works (returns empty) instead of raising "no such table".
+    assert local_db.get_pending_events() == []
+
+
 class TestClientCertificate:
     """Sync authenticates with the Device Certificate (mTLS), not x-api-key."""
 
