@@ -62,13 +62,22 @@ def build_recipe(component_name, version, compose_artifact_uri, image_refs=None)
                 "Platform": {"os": "linux"},
                 "Artifacts": artifacts,
                 "Lifecycle": {
-                    # Bring the stack up, then foreground a /health monitor: while
+                    # Bring the stack up, wait out a startup buffer (the backend
+                    # takes ~15s to boot, so checking immediately would flap the
+                    # component BROKEN), then foreground a /health monitor: while
                     # the app is healthy the component stays RUNNING; when /health
-                    # fails the loop exits non-zero and Greengrass marks the
-                    # component broken (feeds rollback in af#4).
+                    # fails the loop exits non-zero and Greengrass marks it broken
+                    # (feeds rollback in af#4).
                     "Run": (
-                        "docker compose -f %s up -d && "
-                        "while curl -fsS http://localhost:8090/health >/dev/null; "
+                        "docker compose -f %s up -d; "
+                        # buffer: do not check /health for the first 60s (boot time)
+                        "sleep 60; "
+                        # grace: then poll up to ~1 min for the first healthy response
+                        "for i in $(seq 1 12); do "
+                        "curl -fsS http://localhost:8090/health >/dev/null 2>&1 && break; "
+                        "sleep 5; done; "
+                        # monitor: stay RUNNING while healthy; exit non-zero when it fails
+                        "while curl -fsS http://localhost:8090/health >/dev/null 2>&1; "
                         "do sleep 30; done; exit 1" % compose_path
                     ),
                     "Shutdown": "docker compose -f %s down" % compose_path,
