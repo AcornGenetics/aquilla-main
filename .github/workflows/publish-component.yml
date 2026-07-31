@@ -42,6 +42,13 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Stamp the build identity (#351) into both images so /health, /version.json,
+      # and the Device Shadow report the real running build. github.sha is the
+      # commit; BUILD_TIME is computed here (github.event.head_commit is absent on
+      # workflow_dispatch).
+      - name: Compute build time
+        run: echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
       # arm64 only — the whole fleet is arm64 Raspberry Pis; the published images
       # are consumed only by Greengrass, never run on amd64. (Local dev builds
       # from source for its own arch, so this doesn't affect it.) push returns the
@@ -54,6 +61,9 @@ jobs:
           file: docker/Dockerfile.api
           platforms: linux/arm64
           push: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ env.BUILD_TIME }}
           tags: ${{ env.ECR_REGISTRY }}/aquilla-main-api:${{ github.sha }}
       - name: Build + push ui image
         id: ui
@@ -63,6 +73,9 @@ jobs:
           file: docker/Dockerfile.ui
           platforms: linux/arm64
           push: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ env.BUILD_TIME }}
           tags: ${{ env.ECR_REGISTRY }}/aquilla-main-ui:${{ github.sha }}
 
       - name: Version + artifact URI

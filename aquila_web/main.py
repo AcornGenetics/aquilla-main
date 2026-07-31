@@ -845,9 +845,44 @@ async def timer(payload: TimerControl):
         raise HTTPException(status_code=400, detail="Invalid action")
 
 
+def _read_build_identity() -> dict:
+    """This image's own baked provenance (#351).
+
+    Written into config_files/version.json at build time by docker/Dockerfile.api.
+    config_files/ is not a mounted volume, so nothing can overwrite it at runtime
+    — unlike RUNNING_IMAGE_DIGEST, which is an env var supplied by whoever started
+    the container and is written by /update/apply BEFORE the swap, recording
+    intent rather than outcome.
+
+    Tolerates the keys being absent: images built before #351 have only
+    app_version, and a device running one must not crash on startup.
+    """
+    identity = {"app_version": "unknown", "git_sha": "unknown", "build_time": "unknown"}
+    try:
+        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
+        for key in identity:
+            if data.get(key):
+                identity[key] = str(data[key])
+    except Exception:  # noqa: BLE001 - identity must never break startup
+        logger.warning("could not read build identity from version.json")
+    return identity
+
+
+# Resolved once: the values are baked into the image and cannot change while the
+# container runs, and /health is polled every 30s by the Docker healthcheck.
+_BUILD_IDENTITY = _read_build_identity()
+
+
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        **_BUILD_IDENTITY,
+        # Deliberately reported alongside the baked values rather than instead of
+        # them: their disagreement is the signal that a device is not running what
+        # the fleet config claims. See #352.
+        "running_image_digest": os.getenv("RUNNING_IMAGE_DIGEST") or "unknown",
+    }
 
 
 def _read_app_version() -> str:
@@ -1254,13 +1289,39 @@ async def button_open():
 from aquila_web.version_health import runs_allowed
 
 
-def _running_container_shas():
-    """(api_build_sha, ui_build_sha) of the running containers, or None if unknown.
+# The UI container serves its own baked git_sha at /version.json (nginx, #351).
+# Overridable for local dev; on-device the app reaches the UI by compose service name.
+_UI_VERSION_URL = os.getenv("AQ_UI_VERSION_URL", "http://ui:8080/version.json")
 
-    Sourced from the baked build identity (am#365); unknown during migration, in
-    which case the run gate cannot enforce and allows the run.
+
+def _read_ui_git_sha():
+    """The UI container's baked git_sha, from its nginx-served /version.json (#351).
+
+    Best-effort with a short timeout: the UI being briefly unreachable must never
+    block a run or crash the shadow reporter, so unknown degrades to None (reported
+    as an unmatched pair, never a fabricated match).
     """
-    return (os.getenv("RUNNING_BUILD_SHA"), os.getenv("RUNNING_BUILD_SHA_UI"))
+    try:
+        resp = httpx.get(_UI_VERSION_URL, timeout=2.0)
+        sha = resp.json().get("git_sha")
+        return sha if sha and sha != "unknown" else None
+    except Exception:  # noqa: BLE001 - identity lookup must never break a run/report
+        return None
+
+
+def _running_container_shas():
+    """(api_build_sha, ui_build_sha) of the running containers, or None when unknown.
+
+    api: this container's own baked git_sha (config_files/version.json, #351).
+    ui:  the UI container's baked git_sha, fetched from its /version.json.
+    A SHA is None when unknown (pre-#351 image / UI unreachable): the run gate
+    treats that as "cannot enforce -> allow", and Container Health reports it as
+    not-a-matched-pair rather than inventing a match.
+    """
+    api_sha = _BUILD_IDENTITY.get("git_sha")
+    if not api_sha or api_sha == "unknown":
+        api_sha = None
+    return (api_sha, _read_ui_git_sha())
 
 
 @app.post("/button/run")
