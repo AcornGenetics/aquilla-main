@@ -19,6 +19,15 @@ CERT_FILENAME = "device.crt"
 KEY_FILENAME = "device.key"
 ENV_FILENAME = "device.env"
 
+# Dropped in config_dir on a successful rotation. Greengrass loads device.crt once
+# at startup and holds a long-lived MQTT connection, so it won't pick up a renewed
+# cert until greengrass.service restarts. The renewal runs in a container and can't
+# touch the host's systemd, so it leaves this marker in the (bind-mounted) config
+# dir; a host-side hook (aquila-cert-renew.service ExecStartPost) sees it, restarts
+# Greengrass, and clears it. Written ONLY when the cert actually rotated — a no-op
+# or failed run leaves no marker, so a healthy connection is never bounced.
+ROTATION_MARKER = ".cert-rotated"
+
 # The prod acorn-ca renew front. device.env may override via AQ_RENEW_ENDPOINT.
 DEFAULT_RENEW_ENDPOINT = "https://renew.cloud.acorngenetics.com/renew"
 
@@ -92,6 +101,7 @@ def renew_device_cert(
     new_cert_pem = response.json()["certificate"]
 
     _install_pair(cert_path, new_cert_pem, key_path, new_key_pem)
+    _signal_greengrass_reconnect(config_dir)
     return new_cert_pem
 
 
@@ -115,6 +125,15 @@ def _install_pair(cert_path, cert_pem, key_path, key_pem):
     """
     _write_0600(key_path, key_pem if isinstance(key_pem, bytes) else key_pem.encode())
     _write_0600(cert_path, cert_pem if isinstance(cert_pem, bytes) else cert_pem.encode())
+
+
+def _signal_greengrass_reconnect(config_dir):
+    """Drop the reconnect marker so the host bounces Greengrass onto the new cert.
+
+    Called only after a rotation actually installed a new pair. See ``ROTATION_MARKER``.
+    """
+    with open(os.path.join(config_dir, ROTATION_MARKER), "w") as f:
+        f.write("cert rotated; restart greengrass to reconnect with the new cert\n")
 
 
 def _read_env(config_dir):
