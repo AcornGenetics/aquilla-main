@@ -21,6 +21,14 @@ services:
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
       - "/dev/gpiomem:/dev/gpiomem"
+    # Greengrass Core IPC: the update agent (am#382) connects to the nucleus over
+    # its domain socket to publish the Device Shadow and defer component updates.
+    # SVCUID + the socket path are set by Greengrass on the component process (and
+    # inherited by docker compose); AWS_IOT_THING_NAME is exported by the recipe.
+    environment:
+      - SVCUID
+      - AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT
+      - AWS_IOT_THING_NAME
     volumes:
       - aquila-results:/opt/aquila/results
       - aquila-logs:/opt/aquila/logs
@@ -28,6 +36,9 @@ services:
       - aquila-config:/opt/aquila/config
       # The sync outbox (completed runs not yet pushed) — must survive recreate.
       - aquila-data:/opt/aquila/data
+      # The nucleus IPC socket, mounted at the same path the env var names so the
+      # client inside the container connects to the same socket.
+      - ${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}:${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}
 
   app:
     image: aquilla-main-api
@@ -41,12 +52,18 @@ services:
       - "/dev/spidev0.0:/dev/spidev0.0"
       - "/dev/spidev0.1:/dev/spidev0.1"
       - "/dev/gpiomem:/dev/gpiomem"
+    # Greengrass Core IPC (see backend) — the update agent runs here too.
+    environment:
+      - SVCUID
+      - AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT
+      - AWS_IOT_THING_NAME
     volumes:
       - aquila-results:/opt/aquila/results
       - aquila-logs:/opt/aquila/logs
       - aquila-profiles:/opt/aquila/profiles
       - aquila-config:/opt/aquila/config
       - aquila-data:/opt/aquila/data
+      - ${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}:${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}
 
   ui:
     image: aquilla-main-ui

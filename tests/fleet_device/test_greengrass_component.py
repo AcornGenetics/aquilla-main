@@ -45,6 +45,27 @@ def test_app_containers_have_pcr_hardware_access():
             assert dev in mapped, f"{name} missing device mapping {dev}"
 
 
+def test_app_containers_reach_greengrass_ipc():
+    # The update agent (am#382) talks to the nucleus over Core IPC to publish the
+    # Device Shadow and defer component updates. Inside a container that needs the
+    # IPC socket bind-mounted plus SVCUID + the socket-path + thing-name env, or the
+    # agent can't connect and silently no-ops (no shadow, no operator update gate).
+    services = _load_compose()["services"]
+    for name in ("backend", "app"):
+        svc = services[name]
+        env = " ".join(svc.get("environment", []))
+        for var in (
+            "SVCUID",
+            "AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT",
+            "AWS_IOT_THING_NAME",
+        ):
+            assert var in env, f"{name} missing IPC env {var}"
+        vols = " ".join(svc.get("volumes", []))
+        assert "AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT" in vols, (
+            f"{name} does not bind-mount the Greengrass IPC socket"
+        )
+
+
 def test_has_no_watchtower():
     compose = _load_compose()
     # Greengrass owns updates now — no watchtower service, no enable labels.
@@ -79,6 +100,9 @@ def test_persists_state_on_named_volumes():
     sources = _sources(backend.get("volumes"))
     assert sources, "backend persists nothing"
     # Named volumes, not host binds — Greengrass state must not depend on /opt paths.
+    # (The Greengrass IPC socket is a runtime bind, not app state — exclude it.)
     for src in sources:
+        if "AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT" in src:
+            continue
         assert not src.startswith("/"), f"backend uses a host bind ({src}); use a named volume"
         assert src in named, f"backend mounts '{src}' but it is not a declared named volume"

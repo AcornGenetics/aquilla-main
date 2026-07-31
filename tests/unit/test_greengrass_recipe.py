@@ -144,3 +144,14 @@ def test_recipe_health_gate_waits_for_startup():
     # component (the app takes ~15s to become healthy after compose up).
     assert "sleep 25" in run  # buffer before the first health check
     assert "seq" in run       # grace loop after the buffer
+
+
+def test_recipe_exports_thing_name_for_ipc():
+    # The container reaches Greengrass Core IPC (to publish its shadow + defer
+    # updates, am#382) using SVCUID + the nucleus socket path — both already in the
+    # component process env, so compose passes them through. The thing name is not,
+    # so the recipe exports it (via the {iot:thingName} recipe variable) for the
+    # agent to address its own Device Shadow.
+    run = _recipe_with_images()["Manifests"][0]["Lifecycle"]["Run"]
+    assert "AWS_IOT_THING_NAME" in run
+    assert "{iot:thingName}" in run
