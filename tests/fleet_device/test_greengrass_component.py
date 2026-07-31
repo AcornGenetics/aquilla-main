@@ -33,6 +33,18 @@ def test_runs_the_app_stack():
         assert name in services, f"greengrass compose missing service: {name}"
 
 
+def test_app_containers_have_pcr_hardware_access():
+    # Without privileged + the device mappings the app serves but can't drive the
+    # instrument (Meerstetter serial, I2C, SPI, GPIO) — "can't run anything".
+    services = _load_compose()["services"]
+    for name in ("backend", "app"):
+        svc = services[name]
+        assert svc.get("privileged") is True, f"{name} needs privileged for hardware"
+        mapped = " ".join(svc.get("devices", []))
+        for dev in ("/dev/ttyUSB0", "/dev/i2c-1", "/dev/spidev0.0", "/dev/gpiomem"):
+            assert dev in mapped, f"{name} missing device mapping {dev}"
+
+
 def test_has_no_watchtower():
     compose = _load_compose()
     # Greengrass owns updates now — no watchtower service, no enable labels.
