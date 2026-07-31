@@ -42,15 +42,17 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Multi-arch: the Sentri is arm64, CI/dev is amd64. push returns the
-      # manifest-list digest we pin on (the device resolves its own arch from it).
+      # arm64 only — the whole fleet is arm64 Raspberry Pis; the published images
+      # are consumed only by Greengrass, never run on amd64. (Local dev builds
+      # from source for its own arch, so this doesn't affect it.) push returns the
+      # image digest we pin on.
       - name: Build + push api image
         id: api
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile.api
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
           push: true
           tags: ${{ env.ECR_REGISTRY }}/aquilla-main-api:${{ github.sha }}
       - name: Build + push ui image
@@ -59,14 +61,17 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.ui
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
           push: true
           tags: ${{ env.ECR_REGISTRY }}/aquilla-main-ui:${{ github.sha }}
 
       - name: Version + artifact URI
         id: meta
         run: |
-          VERSION="0.0.${{ github.run_number }}"
+          # CI publishes in the 0.1.x lane so ad-hoc/hotfix versions (0.0.x, made
+          # by hand outside CI) can never collide with CI's run-number scheme —
+          # the ConflictException that failed run #11 (0.0.11 already existed).
+          VERSION="0.1.${{ github.run_number }}"
           ARTIFACT_URI="s3://${{ vars.ARTIFACTS_BUCKET }}/${COMPONENT_NAME}/${VERSION}/compose.yaml"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "artifact_uri=$ARTIFACT_URI" >> "$GITHUB_OUTPUT"
