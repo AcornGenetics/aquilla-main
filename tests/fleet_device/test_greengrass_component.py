@@ -66,6 +66,15 @@ def test_app_containers_reach_greengrass_ipc():
         )
 
 
+def test_image_includes_the_ipc_sdk():
+    # The update agent imports awsiot.greengrasscoreipc to reach the nucleus over
+    # Core IPC. If awsiotsdk isn't installed in the api image the import raises,
+    # the agent catches it and silently no-ops — no Device Shadow, no operator
+    # Update gate (the sn01 symptom: IPC env wired, but ModuleNotFoundError: awsiot).
+    reqs = Path("requirements-backend.txt").read_text()
+    assert "awsiotsdk" in reqs, "awsiotsdk missing — the IPC update agent can't import awsiot"
+
+
 def test_app_runs_the_hardware_controller():
     # The `app` service must run application.py (the AssayInterface ready/run/end
     # loop that drives the instrument), NOT the default web-server CMD. If it falls

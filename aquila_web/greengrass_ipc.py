@@ -66,7 +66,12 @@ def start_update_agent(gate, running_shas, assay_running, publish_interval_s=60)
     except Exception as e:  # noqa: BLE001 - off-device / IPC unavailable is fine
         import logging
 
-        logging.getLogger(__name__).info("Greengrass IPC unavailable, agent not started: %s", e)
+        # WARNING, not INFO: off-device this is expected, but on a real Sentri it
+        # means the agent silently did nothing (no shadow, no operator Update gate)
+        # — e.g. a missing awsiotsdk import. Make that visible in the logs.
+        logging.getLogger(__name__).warning(
+            "Greengrass IPC unavailable, update agent not started: %s", e
+        )
         return None
 
     agent = UpdateAgent(ipc, gate, running_shas, assay_running)
