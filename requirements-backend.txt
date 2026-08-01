@@ -12,3 +12,8 @@ spidev
 smbus2
 simple-rpc
 cryptography
+# AWS IoT Device SDK v2 — provides awsiot.greengrasscoreipc, which the on-device
+# update agent (am#382) uses to talk to the Greengrass nucleus over Core IPC
+# (publish the Device Shadow, defer component updates). Without it the agent's
+# import fails and it silently no-ops — no shadow, no operator Update gate.
+awsiotsdk
