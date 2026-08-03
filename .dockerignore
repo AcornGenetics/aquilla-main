@@ -17,7 +17,12 @@ data/
 ruvector.db
 
 # Python build artifacts
+# Both spellings: the repo's own virtualenv is `venv/` (448 MB), and only
+# `.venv/` was excluded — so a local `docker compose build` copied a host
+# virtualenv into an ARM device image. CI is unaffected (venv/ is gitignored,
+# so a fresh checkout never has it), but local builds were shipping it.
 .venv/
+venv/
 __pycache__/
 *.pyc
 *.pyo
