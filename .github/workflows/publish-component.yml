@@ -86,8 +86,10 @@ jobs:
           # the ConflictException that failed run #11 (0.0.11 already existed).
           VERSION="0.1.${{ github.run_number }}"
           ARTIFACT_URI="s3://${{ vars.ARTIFACTS_BUCKET }}/${COMPONENT_NAME}/${VERSION}/compose.yaml"
+          PRUNE_URI="s3://${{ vars.ARTIFACTS_BUCKET }}/${COMPONENT_NAME}/${VERSION}/prune-images.sh"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "artifact_uri=$ARTIFACT_URI" >> "$GITHUB_OUTPUT"
+          echo "prune_uri=$PRUNE_URI" >> "$GITHUB_OUTPUT"
 
       - name: Generate pinned compose + recipe
         run: |
@@ -98,11 +100,16 @@ jobs:
             --component-name "$COMPONENT_NAME" \
             --version "${{ steps.meta.outputs.version }}" \
             --artifact-uri "${{ steps.meta.outputs.artifact_uri }}" \
+            --prune-artifact-uri "${{ steps.meta.outputs.prune_uri }}" \
             --out-compose pinned-compose.yaml \
             --out-recipe recipe.json
 
       # Upload BEFORE publishing so the recipe's artifact is fetchable at deploy.
       - name: Upload compose artifact
         run: aws s3 cp pinned-compose.yaml "${{ steps.meta.outputs.artifact_uri }}"
+      # Ships with the component so image retention is versioned and ring-promoted
+      # like everything else, rather than frozen at provisioning time (#397).
+      - name: Upload image-retention script
+        run: aws s3 cp scripts/greengrass/prune-images.sh "${{ steps.meta.outputs.prune_uri }}"
       - name: Publish Greengrass component version
         run: aws greengrassv2 create-component-version --inline-recipe fileb://recipe.json --region "$AWS_REGION"
