@@ -100,7 +100,13 @@ select_removals() {
 # collect_images -- emit the records select_removals expects, from the local daemon.
 collect_images() {
     local ids
-    ids="$(docker images --quiet | sort -u)"
+    # `docker images --quiet` alone omits dangling images -- measured on sn01 (docker
+    # 29.7.0): 11 listed, 9 dangling, 20 in `docker system df`. Those 9 were 4.85 GB of
+    # the 5.9 GB reclaimable, i.e. most of the problem. The union is used rather than
+    # `--all`, which also surfaces intermediate layers that must never be removed
+    # individually.
+    ids="$( { docker images --quiet; docker images --filter dangling=true --quiet; } \
+        | sort -u )"
     [[ -z "${ids}" ]] && return 0
     # .Created is RFC3339 UTC, which sorts lexically; RepoTags/RepoDigests are absent
     # on a dangling image, leaving the refs field empty.

@@ -235,3 +235,33 @@ def test_a_failed_removal_is_reported_not_swallowed() -> None:
     assert "could not remove old" in result.stdout
     assert "0 removed" in result.stdout
     assert result.returncode == 0, "a stuck image must not fail the deployment"
+
+
+def test_dangling_images_are_enumerated() -> None:
+    """Regression from hardware: `docker images -q` omits dangling images.
+
+    Measured on sn01 (docker 29.7.0): 11 listed, 9 dangling, 20 total — and those 9
+    held 4.85 GB of the 5.9 GB reclaimable. Collecting only the listed set silently
+    ignored most of the problem while reporting success.
+    """
+    script = textwrap.dedent(f"""
+        source {SCRIPT}
+        docker() {{
+            if [ "$1" = images ]; then
+                case "$*" in
+                    *dangling*) echo "sha_dangling" ;;
+                    *--quiet*)  echo "sha_tagged" ;;
+                esac
+            elif [ "$1" = inspect ]; then
+                shift 2   # drop `inspect --format <fmt>`
+                for id in "$@"; do printf '%s\\t2026-01-01T00:00:00Z\\t\\n' "$id"; done
+            fi
+        }}
+        collect_images | cut -f1 | sort
+    """)
+    out = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, timeout=60
+    ).stdout.split()
+
+    assert "sha_dangling" in out, "dangling images must be collected"
+    assert "sha_tagged" in out
