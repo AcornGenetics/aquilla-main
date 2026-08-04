@@ -41,20 +41,27 @@ class GreengrassIpc:
             payload=json.dumps({"state": {"reported": payload}}).encode(),
         )
 
-    def subscribe_to_component_updates(self, on_pre_update):
+    def subscribe_to_component_updates(self, on_pre_update, on_post_update=None):
         # PreComponentUpdateEvent carries the deploymentId; the handler decides
-        # whether to defer. Returns after establishing the stream.
-        self._client.subscribe_to_component_updates(
-            on_stream_event=lambda ev: (
+        # whether to defer. PostComponentUpdateEvent fires once a deployment
+        # completes — used to re-resolve the "last update failed" banner (am#394)
+        # without waiting for a reboot. Returns after establishing the stream.
+        def _handle(ev):
+            if getattr(ev, "pre_update_event", None):
                 on_pre_update(ev.pre_update_event.deployment_id)
-                if getattr(ev, "pre_update_event", None)
-                else None
-            )
-        )
+            elif on_post_update and getattr(ev, "post_update_event", None):
+                on_post_update(ev.post_update_event.deployment_id)
+
+        self._client.subscribe_to_component_updates(on_stream_event=_handle)
 
 
-def start_update_agent(gate, running_shas, assay_running, publish_interval_s=60):
+def start_update_agent(gate, running_shas, assay_running, record_pre_update=None,
+                       on_post_update=None, publish_interval_s=60):
     """Bring up the on-device agent: defer-gate on updates + periodic shadow publish.
+
+    ``record_pre_update`` persists the build running just before a switch; the agent
+    calls it when it lets an update apply. ``on_post_update`` fires when a Greengrass
+    deployment completes, so the banner is re-resolved immediately (am#394).
 
     Best-effort — if Greengrass IPC isn't available (off-device), it logs and
     returns without starting, so it never breaks a non-Greengrass boot.
@@ -74,10 +81,13 @@ def start_update_agent(gate, running_shas, assay_running, publish_interval_s=60)
         )
         return None
 
-    agent = UpdateAgent(ipc, gate, running_shas, assay_running)
-    # Defer/apply each offered update via the gate.
+    agent = UpdateAgent(ipc, gate, running_shas, assay_running,
+                        record_pre_update=record_pre_update)
+    # Defer/apply each offered update via the gate; re-resolve the banner on the
+    # post-update event.
     ipc.subscribe_to_component_updates(
-        lambda deployment_id: agent.handle_update_offer(deployment_id, deployment_id)
+        lambda deployment_id: agent.handle_update_offer(deployment_id, deployment_id),
+        on_post_update=on_post_update,
     )
 
     # Report health (running SHAs + Container Health) on an interval.

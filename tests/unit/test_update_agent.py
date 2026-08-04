@@ -72,6 +72,26 @@ def test_defers_during_an_assay_even_when_approved():
     assert action == "deferred"  # never interrupt a run
 
 
+def test_records_the_pre_update_sha_when_it_lets_an_update_apply():
+    # Just before the switch takes, the agent records the build it's running now,
+    # so that after the switch (or a rollback) it can tell what Greengrass left it
+    # on — the signal that drives the "last update failed" banner (am#394).
+    ipc = FakeIpc()
+    gate = UpdateGate()
+    recorded = []
+    agent = UpdateAgent(
+        ipc, gate, running_shas=lambda: ("cur_sha", "cur_sha"),
+        assay_running=lambda: False, record_pre_update=recorded.append,
+    )
+    gate.mark_pending("0.1.20")
+    gate.approve()
+
+    action = agent.handle_update_offer("deploy-1", "0.1.20")
+
+    assert action == "applied"
+    assert recorded == ["cur_sha"]  # the (api) build running just before the switch
+
+
 def test_publish_health_reports_matched_pair_to_the_shadow():
     ipc = FakeIpc()
     agent = UpdateAgent(

@@ -275,6 +275,11 @@
         `;
         return;
       }
+      // Non-blocking notice when the last update failed and the device reverted
+      // to the previous version (am#394). Reused across the states below.
+      const bannerHtml = (data.banner && data.banner.message)
+        ? `<div style="margin:0 0 16px;padding:10px 14px;border-radius:8px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;font-size:14px;font-weight:600;">${_escHtml(data.banner.message)}</div>`
+        : "";
       if (data.pending && data.approved) {
         // Already approved — the deferred switch will apply when idle and restart
         // the app; hold the overlay until it does.
@@ -285,7 +290,7 @@
         if (dot) dot.style.display = "block";
         const ver = data.target_version
           ? ` (version ${_escHtml(String(data.target_version))})` : "";
-        area.innerHTML = `
+        area.innerHTML = bannerHtml + `
           <p style="font-size:15px;color:#1a1c1c;line-height:1.6;margin:0 0 18px;">
             A software update${ver} is ready to install. It applies when the instrument is idle.
           </p>
@@ -300,7 +305,7 @@
         `;
       } else {
         if (dot) dot.style.display = "none";
-        area.innerHTML = '<p style="color:#16a34a;font-size:15px;font-weight:600;">✓ Software is up to date.</p>';
+        area.innerHTML = bannerHtml + '<p style="color:#16a34a;font-size:15px;font-weight:600;">✓ Software is up to date.</p>';
       }
     }
 

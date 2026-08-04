@@ -19,7 +19,36 @@ from aquila_web.version_health import (
     runs_allowed,
     should_defer_update,
     update_banner,
+    update_outcome,
 )
+
+
+class TestUpdateOutcome:
+    """Did the last update apply, or did Greengrass roll it back? (am#394)
+
+    The device records the git_sha it was running just before it let an update
+    apply. On the next boot (or a post-update event) it compares that to the sha
+    it's actually running now — the ground truth of what Greengrass left it on.
+    """
+
+    def test_rolled_back_when_still_on_the_pre_update_build(self):
+        # Recorded "old" before applying, but we're STILL "old" — Greengrass
+        # reverted us. The last update failed.
+        assert update_outcome("old_sha", "old_sha") == "rolled_back"
+
+    def test_none_when_no_update_was_in_flight(self):
+        # No pre-apply sha recorded ⇒ this is a normal boot, not a post-update one.
+        # Must never surface a banner.
+        assert update_outcome(None, "any_sha") == "none"
+
+    def test_succeeded_when_now_on_a_different_build(self):
+        # Recorded "old", now running "new" — the switch took. No banner.
+        assert update_outcome("old_sha", "new_sha") == "succeeded"
+
+    def test_none_when_current_build_is_unknown(self):
+        # We recorded a pre-apply sha but can't read our own build now — don't
+        # guess a failure (fail safe: no banner).
+        assert update_outcome("old_sha", None) == "none"
 
 
 @pytest.mark.parametrize(
