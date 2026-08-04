@@ -72,10 +72,70 @@ def test_no_meerstetter_tuning_in_provisioning():
     # tuning CODE is gone (not the word, which may appear in explanatory comments).
     assert "find_meer" not in SCRIPT
     assert "MeerStetter(" not in SCRIPT
-    assert "docker exec" not in SCRIPT  # no exec into the app during provisioning
+
+    # No exec into the app *as a provisioning step*. Narrowed from a blanket
+    # "docker exec" not in SCRIPT (#401): the cert-renew unit's ExecStart now execs
+    # into the running backend, but that is a systemd unit written here and run
+    # daily afterwards — not something provisioning does to a container.
+    provisioning_execs = [
+        line for line in SCRIPT.splitlines()
+        if line.strip().startswith(("docker exec", "sudo docker exec"))
+    ]
+    assert not provisioning_execs, f"exec run during provisioning: {provisioning_execs}"
 
 
 def test_retains_deployment2_device_build():
     # Everything else from deployment2 is kept (spot-check across phases).
     for marker in ("I2C", "Tailscale", "aquila-cert-renew", "security.sh", "Plymouth"):
         assert marker in SCRIPT, f"deployment3 dropped a shared step: {marker}"
+
+
+# ── Certificate renewal (#401) ────────────────────────────────────────────────
+# The renewal timer used to launch a throwaway container from a GHCR image. On a
+# Greengrass device that tag is frozen at provisioning, the registry is the wrong
+# one, and nothing holds the image — so any cleanup could delete it and renewal
+# would fail silently until the certificate expired.
+
+
+def _cert_renew_unit() -> str:
+    """The aquila-cert-renew.service heredoc, as deployment3 writes it."""
+    start = SCRIPT.index("cat > /etc/systemd/system/aquila-cert-renew.service")
+    body = SCRIPT[SCRIPT.index("\n", start):]      # skip the heredoc opener line
+    return body[:body.index("\nEOF")]
+
+
+def test_cert_renewal_execs_into_the_running_backend():
+    """No new container, so no image to keep alive and no registry to reach."""
+    unit = _cert_renew_unit()
+
+    assert "docker exec aquila-backend" in unit
+    assert "docker run" not in unit
+
+
+def test_cert_renewal_does_not_depend_on_a_registry():
+    """A device that has migrated to ECR may no longer hold working GHCR
+    credentials; the failure would be silent until the certificate expired."""
+    unit = _cert_renew_unit()
+
+    assert "ghcr.io" not in unit
+    assert "IMAGE_TAG" not in unit
+
+
+def test_cert_renewal_uses_the_backends_config_path():
+    """Regression, and an easy one to get wrong: the old form bind-mounted
+    /opt/aquila/config to /config inside a throwaway container. The backend has it
+    at /opt/aquila/config, so carrying the old argument over would point the
+    renewer at a directory that does not exist inside that container."""
+    unit = _cert_renew_unit()
+
+    assert "aq_lib.renew /opt/aquila/config" in unit
+    assert "aq_lib.renew /config" not in unit
+
+
+def test_cert_rotation_still_restarts_greengrass():
+    """Greengrass holds a long-lived MQTT connection and won't pick up a renewed
+    cert on its own (#363). The marker-driven restart must survive this change."""
+    unit = _cert_renew_unit()
+
+    assert ".cert-rotated" in unit
+    assert "systemctl restart greengrass" in unit

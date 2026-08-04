@@ -832,10 +832,33 @@ phase_pass "app stack owned by the Greengrass component (com.acorn.sentri)"
 phase_start "10b" "Device Certificate Auto-Renewal Timer"
 
 # The renewer runs in the app image (which carries the crypto + requests deps the
-# host lacks), mounting /opt/aquila/config so it reads the current cert/key +
-# device.env and installs the rotated pair in place. It presents the current cert
-# to acorn-ca /renew over mTLS — no operator, no AWS creds. renewal_due() no-ops
-# until the cert is past ~2/3 of its life, so a daily run is cheap.
+# host lacks) and reads /opt/aquila/config for the current cert/key + device.env,
+# installing the rotated pair in place. It presents the current cert to acorn-ca
+# /renew over mTLS — no operator, no AWS creds. renewal_due() no-ops until the
+# cert is past ~2/3 of its life, so a daily run is cheap.
+#
+# `docker exec` into the running backend rather than `docker run` from a fresh
+# container (#401). The old form named ghcr.io/<repo>-api:${IMAGE_TAG}, which on a
+# Greengrass device is wrong in three ways:
+#
+#   * It pins a tag interpolated at provisioning, so the renewal keeps running the
+#     build that tag pointed at on setup day. A fix to aq_lib.renew would reach the
+#     deployed app and never reach this job.
+#   * It names GHCR on a device that now pulls from ECR via the token exchange
+#     service. The image is only present as a pre-migration leftover; if it is ever
+#     removed, the re-pull needs GHCR credentials that may have lapsed, and the
+#     failure is silent until the certificate expires and the device leaves the fleet.
+#   * `--rm` means nothing holds that image, so any image cleanup can delete it. The
+#     retention rule in #397 keeps it alive only incidentally, by it happening to be
+#     the newest in its repository.
+#
+# Executing in the already-running container removes all three: no tag, no registry,
+# no credentials, no image to preserve — and it always runs the version the device is
+# actually running.
+#
+# NOTE the path. The old form bind-mounted /opt/aquila/config to /config inside a
+# throwaway container; the backend has it mounted at /opt/aquila/config, so the
+# argument must match the backend's view, not the old container's.
 cat > /etc/systemd/system/aquila-cert-renew.service <<EOF
 [Unit]
 Description=Renew Sentri Device Certificate (acorn-ca /renew)
@@ -845,10 +868,7 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker run --rm \\
-    -v /opt/aquila/config:/config \\
-    ghcr.io/${GHCR_REPO}-api:${IMAGE_TAG} \\
-    python -m aq_lib.renew /config
+ExecStart=/usr/bin/docker exec aquila-backend python -m aq_lib.renew /opt/aquila/config
 # Greengrass loads device.crt once at startup and holds a long-lived MQTT
 # connection, so it won't pick up a renewed cert on its own (#363). The renewal
 # runs in the container above and can't touch host systemd; on a rotation it drops
