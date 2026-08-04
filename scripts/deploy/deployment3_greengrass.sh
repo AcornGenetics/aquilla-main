@@ -113,7 +113,38 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     chromium openbox \
     xserver-xorg x11-xserver-utils xinput \
     python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 \
-    xterm unclutter
+    xterm unclutter \
+    fake-hwclock
+
+# ── Device clock (#353) ───────────────────────────────────────────────────────
+# A Pi has no battery-backed RTC, so on every power loss the clock resets and stays
+# wrong until NTP resyncs. Two consequences, and the second is the serious one:
+#
+#   * Every Event on the sync outbox is stamped with the local clock, so a device
+#     that boots wrong writes wrong timestamps into the analytics warehouse —
+#     permanently, and indistinguishable from real data afterwards.
+#
+#   * TLS checks a certificate's notBefore/notAfter against system time. A device
+#     that boots believing it is outside its own certificate's validity window
+#     rejects its own credential, and authenticates to neither AWS IoT nor
+#     acorn-ca. The device is then unreachable by the very channel that would fix
+#     it, and cannot renew (renewal authenticates with the current cert).
+#
+# fake-hwclock saves the time at shutdown and restores it at boot, before NTP has
+# synced; systemd-timesyncd then corrects it precisely once the network is up.
+# Neither helps a device that never reaches an NTP server, which is why the backend
+# also reports its clock state (clock_health.py, ships in the image).
+#
+# NTP and timesyncd are already enabled on measured devices (sn01, sn08), so those
+# two commands are no-ops there — they are here so a fresh install is deterministic
+# rather than relying on the OS image's defaults.
+systemctl enable --now fake-hwclock 2>/dev/null || true
+timedatectl set-ntp true 2>/dev/null || true
+systemctl enable --now systemd-timesyncd 2>/dev/null || true
+
+run_test "fake-hwclock installed" "dpkg -l fake-hwclock | grep -q '^ii'"
+run_test "NTP enabled"            "timedatectl show -p NTP --value | grep -q yes"
+run_test "timesyncd active"       "systemctl is-active systemd-timesyncd | grep -q active"
 
 run_test "curl installed"       "which curl"
 run_test "chromium installed"   "which chromium"

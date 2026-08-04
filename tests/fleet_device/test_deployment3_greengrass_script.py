@@ -79,3 +79,36 @@ def test_retains_deployment2_device_build():
     # Everything else from deployment2 is kept (spot-check across phases).
     for marker in ("I2C", "Tailscale", "aquila-cert-renew", "security.sh", "Plymouth"):
         assert marker in SCRIPT, f"deployment3 dropped a shared step: {marker}"
+
+
+# ── Device clock (#353) ───────────────────────────────────────────────────────
+# A Pi has no battery-backed RTC. A wrong clock corrupts warehouse timestamps and,
+# more seriously, breaks TLS: a device that boots outside its own certificate's
+# validity window authenticates to neither AWS IoT nor acorn-ca, and cannot renew
+# its way out because renewal authenticates with that same certificate.
+
+
+def test_installs_fake_hwclock():
+    """The only part of the clock fix that genuinely needs host provisioning.
+
+    It must run in the host's boot sequence before Docker exists, and it sets the
+    system clock — neither of which a container can do. Measured absent on sn01 and
+    sn08, so this is a real gap rather than a codification of the status quo.
+    """
+    assert "fake-hwclock" in SCRIPT
+    assert "systemctl enable --now fake-hwclock" in SCRIPT
+
+
+def test_ntp_is_enabled_deterministically():
+    """Already true on measured devices, so these are no-ops there — present so a
+    fresh install does not depend on the OS image's defaults."""
+    assert "timedatectl set-ntp true" in SCRIPT
+    assert "systemctl enable --now systemd-timesyncd" in SCRIPT
+
+
+def test_clock_setup_is_verified_not_just_attempted():
+    """The enable commands are `|| true` so provisioning survives an odd image;
+    without assertions a silently unconfigured clock would pass provisioning."""
+    assert 'run_test "fake-hwclock installed"' in SCRIPT
+    assert 'run_test "NTP enabled"' in SCRIPT
+    assert 'run_test "timesyncd active"' in SCRIPT
