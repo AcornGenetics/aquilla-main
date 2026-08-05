@@ -99,16 +99,14 @@ def test_no_banner_when_update_healthy():
 
 
 @pytest.mark.parametrize(
-    "assay_running, operator_approved, expected_defer",
+    "operator_approved, expected_defer",
     [
-        (True, True, True),    # never switch mid-run, even if approved
-        (True, False, True),   # running + not approved → defer
-        (False, False, True),  # idle but waiting on the operator gate → defer
-        (False, True, False),  # idle AND approved → apply the pre-staged switch
+        (False, True),   # not yet approved → defer (hold at the badge)
+        (True, False),   # approved → apply; run state is not a factor (am#382 follow-up)
     ],
 )
-def test_should_defer_update(assay_running, operator_approved, expected_defer):
-    assert should_defer_update(assay_running, operator_approved) is expected_defer
+def test_should_defer_update(operator_approved, expected_defer):
+    assert should_defer_update(operator_approved) is expected_defer
 
 
 @pytest.mark.parametrize(

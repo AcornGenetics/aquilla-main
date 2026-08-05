@@ -30,11 +30,11 @@ class UpdateGate:
         """The operator tapped Update — release the deferred switch."""
         self._approved = True
 
-    def should_apply(self, assay_running):
-        """Apply the pre-staged switch only when idle AND operator-approved."""
+    def should_apply(self):
+        """Apply the pre-staged switch once the operator has approved."""
         if self._pending_version is None:
             return False
-        return not should_defer_update(assay_running, self._approved)
+        return not should_defer_update(self._approved)
 
     def status(self):
         """Operator-facing gate state (served to the UI)."""

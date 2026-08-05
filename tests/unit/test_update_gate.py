@@ -45,28 +45,31 @@ def test_resolve_is_a_noop_when_no_update_was_in_flight():
     assert cleared == []
 
 
-def test_approved_pending_update_applies_when_idle():
+def test_approved_pending_update_applies():
     gate = UpdateGate()
     gate.mark_pending("0.1.20")
     gate.approve()
 
-    # Idle + approved + a pending update → apply the pre-staged switch.
-    assert gate.should_apply(assay_running=False) is True
+    # Approved + a pending update → apply the pre-staged switch.
+    assert gate.should_apply() is True
 
 
-def test_never_applies_during_an_assay_even_if_approved():
+def test_applies_once_approved_regardless_of_device_state():
+    # Pressing "Update" IS the operator's go-ahead — the gate must not second-guess
+    # it against device state (a stale 'running' screen could otherwise wedge an
+    # already-approved update forever). Approval is the only condition to apply.
     gate = UpdateGate()
     gate.mark_pending("0.1.20")
     gate.approve()
 
-    assert gate.should_apply(assay_running=True) is False
+    assert gate.should_apply() is True
 
 
 def test_does_not_apply_until_the_operator_approves():
     gate = UpdateGate()
     gate.mark_pending("0.1.20")
 
-    assert gate.should_apply(assay_running=False) is False
+    assert gate.should_apply() is False
 
 
 def test_a_newer_pending_update_requires_fresh_approval():
@@ -75,7 +78,7 @@ def test_a_newer_pending_update_requires_fresh_approval():
     gate.approve()
 
     gate.mark_pending("0.1.21")  # a newer version supersedes — re-approve required
-    assert gate.should_apply(assay_running=False) is False
+    assert gate.should_apply() is False
 
 
 def test_re_offering_the_same_version_keeps_approval():
@@ -85,11 +88,11 @@ def test_re_offering_the_same_version_keeps_approval():
 
     # Greengrass re-offers the same version after each defer — must not reset approval.
     gate.mark_pending("0.1.20")
-    assert gate.should_apply(assay_running=False) is True
+    assert gate.should_apply() is True
 
 
 def test_nothing_to_apply_when_no_update_pending():
-    assert UpdateGate().should_apply(assay_running=False) is False
+    assert UpdateGate().should_apply() is False
 
 
 def test_status_reports_pending_and_approval():

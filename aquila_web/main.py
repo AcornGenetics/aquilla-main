@@ -2536,10 +2536,11 @@ async def start_greengrass_update_agent() -> None:
     start_update_agent(
         update_gate.GATE,
         running_shas=_running_container_shas,
-        assay_running=lambda: current_item.screen == "running",
+        # No idle-gate: the operator pressing "Update" is the go-ahead, so an
+        # approved update applies rather than being held on device state (am#382
+        # follow-up — a stale on-screen "running" flag used to wedge it).
         # The agent records the build we're leaving behind just before a switch,
-        # and re-resolves the banner immediately on a Greengrass post-update event
-        # (so a rollback shows without waiting for a reboot).
+        # and re-resolves the banner immediately on a Greengrass post-update event.
         record_pre_update=_write_pre_update_sha,
         on_post_update=lambda deployment_id: _resolve_update_banner(),
     )
