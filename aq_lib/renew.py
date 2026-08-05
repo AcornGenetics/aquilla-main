@@ -12,6 +12,7 @@ import os
 
 import requests
 from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 
 from aq_lib.device_csr import generate_device_csr
 
@@ -65,6 +66,7 @@ def renew_device_cert(
     now: dt.datetime,
     http_post=None,
     renew_at: float = DEFAULT_RENEW_AT,
+    verify=None,
 ):
     """Renew the installed Device Certificate if it is due; otherwise do nothing.
 
@@ -100,7 +102,20 @@ def renew_device_cert(
         )
     new_cert_pem = response.json()["certificate"]
 
+    # Back up the current (working) pair before overwriting, verify the new one,
+    # and roll back if it doesn't check out — so a bad rotation never bricks the
+    # device (am#405). The previous cert is still valid (renewal fires at ~2/3 of
+    # life), so rollback keeps it working until the next attempt.
+    if verify is None:
+        verify = _pair_is_valid
+    _backup_pair(cert_path, key_path)
     _install_pair(cert_path, new_cert_pem, key_path, new_key_pem)
+    if not verify(cert_path, key_path, now):
+        _restore_from_backup(cert_path, key_path)
+        raise RenewalError(
+            "renewed certificate failed verification; rolled back to the previous cert"
+        )
+    _clear_backup(cert_path, key_path)
     _signal_greengrass_reconnect(config_dir)
     return new_cert_pem
 
@@ -125,6 +140,70 @@ def _install_pair(cert_path, cert_pem, key_path, key_pem):
     """
     _write_0600(key_path, key_pem if isinstance(key_pem, bytes) else key_pem.encode())
     _write_0600(cert_path, cert_pem if isinstance(cert_pem, bytes) else cert_pem.encode())
+
+
+def _backup_pair(cert_path, key_path):
+    """Copy the current cert+key to ``.bak`` siblings before overwriting them.
+
+    Persisted (not in-memory) so a crash mid-install leaves recovery material on
+    disk — see ``recover_if_broken``.
+    """
+    for path in (cert_path, key_path):
+        with open(path, "rb") as f:
+            _write_0600(f"{path}.bak", f.read())
+
+
+def _restore_from_backup(cert_path, key_path):
+    """Roll the cert+key back to the ``.bak`` copies, then drop the backups."""
+    for path in (cert_path, key_path):
+        bak = f"{path}.bak"
+        with open(bak, "rb") as f:
+            _write_0600(path, f.read())
+        os.remove(bak)
+
+
+def _clear_backup(cert_path, key_path):
+    """Drop the ``.bak`` copies once the new pair is confirmed good. Idempotent."""
+    for path in (cert_path, key_path):
+        try:
+            os.remove(f"{path}.bak")
+        except OSError:
+            pass
+
+
+def _pair_is_valid(cert_path, key_path, now: dt.datetime) -> bool:
+    """Default verify: the installed cert+key are a matching, currently-valid pair.
+
+    Catches a partial/crashed install (new key + old cert don't match) and a
+    malformed or out-of-date cert. No network — deterministic. Any error => invalid.
+    """
+    try:
+        with open(cert_path, "rb") as f:
+            cert = x509.load_pem_x509_certificate(f.read())
+        with open(key_path, "rb") as f:
+            key = serialization.load_pem_private_key(f.read(), password=None)
+        if cert.public_key().public_numbers() != key.public_key().public_numbers():
+            return False
+        return cert.not_valid_before_utc <= now <= cert.not_valid_after_utc
+    except Exception:  # noqa: BLE001 - any failure to load/parse => not a valid pair
+        return False
+
+
+def recover_if_broken(config_dir, *, now: dt.datetime = None):
+    """Heal a crash mid-install: restore the backup if the installed pair is broken.
+
+    A crash between writing the new key and the new cert leaves a mismatched pair
+    (new key + old cert) with no rollback in that dead process. Run at renewal
+    entry: if the installed cert/key don't verify AND a ``.bak`` exists, restore
+    the previous good pair (am#405). A healthy pair is left untouched.
+    """
+    if now is None:
+        now = dt.datetime.now(dt.timezone.utc)
+    cert_path = os.path.join(config_dir, CERT_FILENAME)
+    key_path = os.path.join(config_dir, KEY_FILENAME)
+    have_backup = os.path.exists(f"{cert_path}.bak") and os.path.exists(f"{key_path}.bak")
+    if have_backup and not _pair_is_valid(cert_path, key_path, now):
+        _restore_from_backup(cert_path, key_path)
 
 
 def _signal_greengrass_reconnect(config_dir):
@@ -162,6 +241,9 @@ def run_renewal(config_dir, *, now: dt.datetime = None, http_post=None, renew_at
     """
     if now is None:
         now = dt.datetime.now(dt.timezone.utc)
+    # Heal a crash from a previous renewal before doing anything (am#405): if the
+    # installed pair is broken but a backup survives, restore the last-good pair.
+    recover_if_broken(config_dir, now=now)
     env = _read_env(config_dir)
     device_id = env.get("DEVICE_ID")
     if not device_id:

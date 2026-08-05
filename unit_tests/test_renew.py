@@ -19,6 +19,7 @@ from cryptography.x509.oid import NameOID
 from aq_lib.renew import (
     ROTATION_MARKER,
     RenewalError,
+    recover_if_broken,
     renew_device_cert,
     renewal_due,
     run_renewal,
@@ -61,6 +62,30 @@ def make_keypair_pem():
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption(),
     )
+
+
+def make_matching_pair(now: dt.datetime) -> tuple[bytes, bytes]:
+    """A genuinely consistent (cert, key) pair, in-date at ``now`` — the cert is
+    signed for the returned key's public key (unlike make_cert_pem, whose key is
+    internal and discarded)."""
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, DEVICE_ID)])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - dt.timedelta(days=1))
+        .not_valid_after(now + dt.timedelta(days=13))
+        .sign(key, hashes.SHA256())
+    )
+    key_pem = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    return cert.public_bytes(serialization.Encoding.PEM), key_pem
 
 
 def write_config(config_dir, cert_pem, key_pem=None):
@@ -265,6 +290,80 @@ class TestRenewDeviceCert:
         )
         (cn,) = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
         assert cn.value == DEVICE_ID
+
+
+class TestRenewalRollback:
+    """A rotation the device can't verify must NOT brick it (am#405).
+
+    Before overwriting, the renewer backs up the current (working) pair. After
+    installing the new one it verifies it; if verification fails it rolls back to
+    the previous cert/key — which is still valid (renewal fires at ~2/3 of life) —
+    so a bad rotation is survivable instead of needing offline re-enrollment.
+    """
+
+    def test_rolls_back_to_the_previous_pair_when_verification_fails(self, tmp_path):
+        now = dt.datetime(2026, 7, 11, tzinfo=dt.timezone.utc)
+        config = tmp_path / "config"
+        write_config(config, due_cert(now), key_pem=make_keypair_pem())
+        before_crt = (config / "device.crt").read_bytes()
+        before_key = (config / "device.key").read_bytes()
+
+        with pytest.raises(RenewalError):
+            renew_device_cert(
+                RENEW_ENDPOINT, config_dir=str(config), device_id=DEVICE_ID,
+                now=now, http_post=issuing_post(now),
+                verify=lambda cert_path, key_path, now: False,
+            )
+
+        # The installed pair is the ORIGINAL one — the unverifiable cert was not kept.
+        assert (config / "device.crt").read_bytes() == before_crt
+        assert (config / "device.key").read_bytes() == before_key
+
+    def test_clears_the_backup_after_a_verified_renewal(self, tmp_path):
+        # Once the new cert is confirmed good, the .bak copies are dropped — no
+        # stale backup lingers to confuse a later crash-recovery check.
+        now = dt.datetime(2026, 7, 11, tzinfo=dt.timezone.utc)
+        config = tmp_path / "config"
+        write_config(config, due_cert(now))
+
+        renew_device_cert(
+            RENEW_ENDPOINT, config_dir=str(config), device_id=DEVICE_ID,
+            now=now, http_post=issuing_post(now),  # default verify passes
+        )
+
+        assert not (config / "device.crt.bak").exists()
+        assert not (config / "device.key.bak").exists()
+
+    def test_recover_if_broken_restores_a_mismatched_pair_from_backup(self, tmp_path):
+        # Crash mid-install: installed = new key + old cert (they don't match); the
+        # .bak still holds the previous good pair. Recovery restores the good pair.
+        now = dt.datetime(2026, 7, 11, tzinfo=dt.timezone.utc)
+        config = tmp_path / "config"
+        good_cert, good_key = make_matching_pair(now)
+        write_config(config, good_cert, key_pem=good_key)
+        (config / "device.crt.bak").write_bytes(good_cert)
+        (config / "device.key.bak").write_bytes(good_key)
+        # Clobber the installed key with a different one → mismatched (crash state).
+        (config / "device.key").write_bytes(make_keypair_pem())
+
+        recover_if_broken(str(config), now=now)
+
+        assert (config / "device.crt").read_bytes() == good_cert
+        assert (config / "device.key").read_bytes() == good_key
+        assert not (config / "device.key.bak").exists()
+
+    def test_recover_if_broken_leaves_a_valid_pair_untouched(self, tmp_path):
+        # A healthy installed pair must never be clobbered by a stale backup.
+        now = dt.datetime(2026, 7, 11, tzinfo=dt.timezone.utc)
+        config = tmp_path / "config"
+        good_cert, good_key = make_matching_pair(now)
+        write_config(config, good_cert, key_pem=good_key)  # matching, in-date
+        (config / "device.crt.bak").write_bytes(b"STALE")
+        (config / "device.key.bak").write_bytes(b"STALE")
+
+        recover_if_broken(str(config), now=now)
+
+        assert (config / "device.crt").read_bytes() == good_cert  # untouched
 
 
 class TestGreengrassReconnectMarker:
