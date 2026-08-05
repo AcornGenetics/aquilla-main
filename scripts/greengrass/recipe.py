@@ -55,8 +55,19 @@ def build_recipe(
 
     # Nothing has ever removed an image from these devices and Greengrass does not
     # either — sn01 was measured still holding its previous deployment's 1.17 GB image
-    # after a later one. Pruning here, right after the stack is up, is the moment an
-    # image has just been superseded.
+    # after a later one.
+    #
+    # Placed *after* the health gate, not straight after `compose up -d`. By the time
+    # compose has recreated the containers, the previous image is referenced by nothing
+    # and has lost "newest per repository" to the one just deployed — so pruning there
+    # deletes it. That is precisely the image Greengrass rolls back to when the new
+    # version then fails /health, and the rollback would be left re-pulling it on a
+    # device whose update has just failed.
+    #
+    # Gated on a probe rather than merely sequenced after the grace loop: that loop
+    # falls through on exhaustion as well as on success, so position alone would still
+    # prune an unhealthy deployment. A deployment that never answers /health prunes
+    # nothing and keeps its predecessor on disk.
     prune_step = ""
     if prune_artifact_uri:
         artifacts.append({"URI": prune_artifact_uri})
@@ -66,9 +77,12 @@ def build_recipe(
         # script reports its own outcome, so failures stay visible in the logs.
         # `bash`, not `sh`: on Debian /bin/sh is dash, and the script uses [[ ]] and
         # here-strings. Naming the interpreter also avoids depending on Greengrass
-        # preserving the artifact's executable bit.
+        # preserving the artifact's executable bit. The `if` wrapper stays POSIX, since
+        # Greengrass runs the lifecycle string itself with /bin/sh.
         prune_step = (
-            'bash "{artifacts:path}/' + prune_file + '" || true; '
+            "if curl -fsS http://localhost:8090/health >/dev/null 2>&1; then "
+            + 'bash "{artifacts:path}/' + prune_file + '" || true; '
+            + "fi; "
         )
     recipe = {
         "RecipeFormatVersion": RECIPE_FORMAT_VERSION,
@@ -105,14 +119,15 @@ def build_recipe(
                         # them through; the thing name is not, so export it here.
                         'export AWS_IOT_THING_NAME="{iot:thingName}"; '
                         + ("docker compose -f %s up -d; " % compose_path)
-                        # reclaim images the deployment just superseded (#397)
-                        + prune_step
                         # buffer: do not check /health for the first 25s (boot ~15s)
                         + "sleep 25; "
                         # grace: then poll up to ~1 min for the first healthy response
                         + "for i in $(seq 1 12); do "
                         + "curl -fsS http://localhost:8090/health >/dev/null 2>&1 && break; "
                         + "sleep 5; done; "
+                        # reclaim images this deployment superseded, but only once it has
+                        # proven healthy — until then its predecessor is the rollback (#397)
+                        + prune_step
                         # monitor: stay RUNNING while healthy; exit non-zero when it fails
                         + "while curl -fsS http://localhost:8090/health >/dev/null 2>&1; "
                         + "do sleep 30; done; exit 1"
