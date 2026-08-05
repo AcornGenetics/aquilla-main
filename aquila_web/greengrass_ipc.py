@@ -92,11 +92,21 @@ def start_update_agent(gate, running_shas, assay_running, record_pre_update=None
 
     # Report health (running SHAs + Container Health) on an interval.
     def _publish_loop():
+        import logging
+
+        log = logging.getLogger(__name__)
+        warned = False
         while True:
             try:
                 agent.publish_health()
-            except Exception:  # noqa: BLE001 - a transient IPC error must not kill the loop
-                pass
+                warned = False
+            except Exception as e:  # noqa: BLE001 - must not kill the loop
+                # Log the FIRST failure of a run at WARNING (a persistently failing
+                # shadow — e.g. missing ShadowManager/accessControl, #395 — must be
+                # visible, not silently swallowed), then stay quiet to avoid spam.
+                if not warned:
+                    log.warning("Device Shadow publish failed: %s", e)
+                    warned = True
             time.sleep(publish_interval_s)
 
     threading.Thread(target=_publish_loop, daemon=True).start()
