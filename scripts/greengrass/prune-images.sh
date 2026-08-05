@@ -128,7 +128,7 @@ protected_ids() {
 }
 
 main() {
-    local records protected removals count=0 removed=0
+    local records protected removals count=0 removed=0 rmi_err rc
 
     records="$(collect_images)"
     if [[ -z "${records}" ]]; then
@@ -156,7 +156,27 @@ main() {
         fi
         # Failure is expected and fine: docker refuses to remove an image another
         # image layers on, and that is a floor beneath this script's own logic.
-        if docker rmi "${id}" >/dev/null 2>&1; then
+        #
+        # One refusal is not a real conflict and must be retried with -f: an image
+        # carrying more than one tag gives
+        #     conflict: unable to delete <id> (must be forced) -
+        #     image is referenced in multiple repositories
+        # despite the wording, this fires on multiple tags within a SINGLE repository
+        # too. CI pushes :latest and :<sha> on every build, so a migrated device
+        # routinely holds images under two tags -- and without the retry the script
+        # logs "could not remove" and keeps exactly the stale GHCR images it exists
+        # to shed.
+        #
+        # Forced only for that message, never blanket. `docker rmi -f` on an image a
+        # stopped container references removes it and orphans the container; the
+        # protected set already excludes those, so -f here is a second line rather
+        # than the first, and any other refusal still stops the removal.
+        rmi_err="$(docker rmi "${id}" 2>&1 >/dev/null)" && rc=0 || rc=$?
+        if (( rc != 0 )) && [[ "${rmi_err}" == *"must be forced"* ]]; then
+            rmi_err="$(docker rmi -f "${id}" 2>&1 >/dev/null)" && rc=0 || rc=$?
+            (( rc == 0 )) && log "removed ${id} (forced: image had several tags)"
+        fi
+        if (( rc == 0 )); then
             removed=$((removed + 1))
         else
             log "could not remove ${id} (still referenced)"
