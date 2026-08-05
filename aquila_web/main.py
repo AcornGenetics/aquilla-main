@@ -2232,6 +2232,48 @@ async def _do_check_update() -> None:
 
 from aquila_web import update_gate
 
+# Persisted (host-bind) record of the build running just before a switch is
+# allowed. Written by the agent when it lets an update apply; read on the next
+# boot / post-update event to tell whether Greengrass applied it or rolled back —
+# the signal behind the "last update failed" banner (am#394). On /opt/aquila/data
+# so it survives the container recreate an update causes.
+_PRE_UPDATE_SHA_PATH = os.getenv("AQ_PRE_UPDATE_SHA_PATH", "/opt/aquila/data/.pre_update_sha")
+
+
+def _write_pre_update_sha(sha: str | None) -> None:
+    try:
+        with open(_PRE_UPDATE_SHA_PATH, "w") as f:
+            f.write(sha or "")
+    except OSError as e:
+        logger.warning("could not record pre-update sha: %s", e)
+
+
+def _read_pre_update_sha() -> str | None:
+    try:
+        with open(_PRE_UPDATE_SHA_PATH) as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def _clear_pre_update_sha() -> None:
+    try:
+        os.remove(_PRE_UPDATE_SHA_PATH)
+    except OSError:
+        pass
+
+
+def _resolve_update_banner() -> None:
+    """Raise/clear the 'last update failed' banner from the pre-update record.
+
+    Run on boot and on each Greengrass post-update event: compare the recorded
+    pre-apply build to the one running now (baked git_sha) and mark the gate.
+    """
+    running_sha = _running_container_shas()[0]  # this image's baked git_sha
+    update_gate.resolve_update_result(
+        _read_pre_update_sha(), running_sha, update_gate.GATE, _clear_pre_update_sha
+    )
+
 
 @app.get("/update/gate")
 async def get_update_gate():
@@ -2487,8 +2529,17 @@ async def start_greengrass_update_agent() -> None:
     No-ops off-device (Greengrass IPC unavailable) so local/dev boots are unaffected."""
     from aquila_web.greengrass_ipc import start_update_agent
 
+    # Boot-time trigger: if we came back on the pre-update build, an update rolled
+    # back → raise the banner (am#394). Safe no-op when nothing was in flight.
+    _resolve_update_banner()
+
     start_update_agent(
         update_gate.GATE,
         running_shas=_running_container_shas,
         assay_running=lambda: current_item.screen == "running",
+        # The agent records the build we're leaving behind just before a switch,
+        # and re-resolves the banner immediately on a Greengrass post-update event
+        # (so a rollback shows without waiting for a reboot).
+        record_pre_update=_write_pre_update_sha,
+        on_post_update=lambda deployment_id: _resolve_update_banner(),
     )

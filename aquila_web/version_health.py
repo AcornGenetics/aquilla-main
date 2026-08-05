@@ -52,6 +52,22 @@ def update_banner(last_update_failed):
     }
 
 
+def update_outcome(recorded_sha, running_sha):
+    """Did the last update apply, given the git_sha recorded just before the switch?
+
+    ``recorded_sha`` is the build the device was running when it let an update
+    apply (``None`` if no update was in flight); ``running_sha`` is the build it is
+    running now — the ground truth of what Greengrass actually left it on.
+
+    - ``none`` — nothing was in flight, or the current build is unknown (fail safe)
+    - ``succeeded`` — now on a different build ⇒ the switch took
+    - ``rolled_back`` — same build as before ⇒ Greengrass reverted us (update failed)
+    """
+    if not recorded_sha or not running_sha:
+        return "none"
+    return "succeeded" if running_sha != recorded_sha else "rolled_back"
+
+
 def should_defer_update(assay_running, operator_approved):
     """Whether to DeferComponentUpdate instead of switching now.
 

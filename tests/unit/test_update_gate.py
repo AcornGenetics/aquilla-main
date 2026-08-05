@@ -14,7 +14,35 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from aquila_web.update_gate import UpdateGate
+from aquila_web.update_gate import UpdateGate, resolve_update_result
+
+
+def test_resolve_marks_failed_and_keeps_record_on_rollback():
+    # Recorded "old" before applying, still "old" now ⇒ Greengrass rolled back.
+    # The banner shows, and the record is KEPT so the banner persists across
+    # reboots until a later successful update clears it (am#394).
+    gate = UpdateGate()
+    cleared = []
+    resolve_update_result("old", "old", gate, clear_record=lambda: cleared.append(True))
+    assert gate.status()["banner"] is not None
+    assert cleared == []
+
+
+def test_resolve_clears_and_no_banner_on_success():
+    # Now on a different build ⇒ the switch took. Forget the record, no banner.
+    gate = UpdateGate()
+    cleared = []
+    resolve_update_result("old", "new", gate, clear_record=lambda: cleared.append(True))
+    assert gate.status()["banner"] is None
+    assert cleared == [True]
+
+
+def test_resolve_is_a_noop_when_no_update_was_in_flight():
+    gate = UpdateGate()
+    cleared = []
+    resolve_update_result(None, "new", gate, clear_record=lambda: cleared.append(True))
+    assert gate.status()["banner"] is None
+    assert cleared == []
 
 
 def test_approved_pending_update_applies_when_idle():

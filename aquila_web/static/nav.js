@@ -14,6 +14,30 @@ document.addEventListener("click", (event) => {
   link.blur();
 });
 
+// Non-blocking banner when the last update failed and the Sentri rolled back to
+// the previous version (am#394). Shown on every screen so the operator knows
+// which version they're on; it never blocks runs. Sourced from /update/gate.
+(function showUpdateFailedBanner() {
+  if (document.getElementById("update-failed-banner")) return;
+  fetch("/update/gate")
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      const banner = data && data.banner;
+      if (!banner || !banner.message) return;
+      const bar = document.createElement("div");
+      bar.id = "update-failed-banner";
+      bar.textContent = banner.message;
+      bar.style.cssText = [
+        "position:fixed", "top:0", "left:0", "width:100%", "z-index:9998",
+        "box-sizing:border-box", "padding:8px 16px", "text-align:center",
+        "font-size:14px", "font-weight:600", "background:#fef3c7",
+        "color:#92400e", "border-bottom:1px solid #f59e0b",
+      ].join(";");
+      document.body.appendChild(bar);
+    })
+    .catch(() => {});
+})();
+
 // Show a red "1" badge on the Settings nav item when Greengrass has a version
 // pending the operator's approval (am#382). Cleared once approved (or applied).
 (function checkUpdateBadge() {
