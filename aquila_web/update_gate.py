@@ -26,6 +26,15 @@ class UpdateGate:
         """Record that the last update did not take (running the previous version)."""
         self._last_update_failed = True
 
+    def mark_update_succeeded(self):
+        """A deployment completed for this component → clear any failure banner.
+
+        A Greengrass post-update event means the update the operator approved DID
+        apply (even one that only added a component like ShadowManager and left the
+        app image — and its git_sha — unchanged). That must NOT read as a rollback.
+        """
+        self._last_update_failed = False
+
     def approve(self):
         """The operator tapped Update — release the deferred switch."""
         self._approved = True
