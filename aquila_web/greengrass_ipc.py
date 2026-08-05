@@ -55,7 +55,7 @@ class GreengrassIpc:
         self._client.subscribe_to_component_updates(on_stream_event=_handle)
 
 
-def start_update_agent(gate, running_shas, assay_running, record_pre_update=None,
+def start_update_agent(gate, running_shas, record_pre_update=None,
                        on_post_update=None, publish_interval_s=60):
     """Bring up the on-device agent: defer-gate on updates + periodic shadow publish.
 
@@ -81,8 +81,7 @@ def start_update_agent(gate, running_shas, assay_running, record_pre_update=None
         )
         return None
 
-    agent = UpdateAgent(ipc, gate, running_shas, assay_running,
-                        record_pre_update=record_pre_update)
+    agent = UpdateAgent(ipc, gate, running_shas, record_pre_update=record_pre_update)
     # Defer/apply each offered update via the gate; re-resolve the banner on the
     # post-update event.
     ipc.subscribe_to_component_updates(

@@ -68,11 +68,13 @@ def update_outcome(recorded_sha, running_sha):
     return "succeeded" if running_sha != recorded_sha else "rolled_back"
 
 
-def should_defer_update(assay_running, operator_approved):
+def should_defer_update(operator_approved):
     """Whether to DeferComponentUpdate instead of switching now.
 
-    The image is pre-staged; the switch is held (deferred) until the device is
-    idle AND the operator has approved. So "Update" is instant when tapped, and a
-    running assay is never interrupted.
+    The image is pre-staged; the switch is held (deferred) until the operator
+    approves. Pressing "Update" IS the operator's go-ahead — we do NOT also gate on
+    device state, because a stale on-screen "running" flag could otherwise wedge an
+    already-approved update indefinitely (am#382 follow-up). "Update" is instant
+    when tapped.
     """
-    return assay_running or not operator_approved
+    return not operator_approved

@@ -11,20 +11,19 @@ from aquila_web.version_health import build_shadow_report
 
 
 class UpdateAgent:
-    def __init__(self, ipc, gate, running_shas, assay_running, record_pre_update=None):
+    def __init__(self, ipc, gate, running_shas, record_pre_update=None):
         self._ipc = ipc
         self._gate = gate
         self._running_shas = running_shas
-        self._assay_running = assay_running
         # Records the build running just before a switch is allowed, so a later
         # boot/post-update event can tell whether Greengrass applied or rolled back
         # (am#394). No-op by default (off-device / tests that don't care).
         self._record_pre_update = record_pre_update or (lambda sha: None)
 
     def handle_update_offer(self, deployment_id, version):
-        """Greengrass offers `version` — hold it until idle AND operator-approved."""
+        """Greengrass offers `version` — hold it until the operator approves."""
         self._gate.mark_pending(version)
-        if not self._gate.should_apply(self._assay_running()):
+        if not self._gate.should_apply():
             self._ipc.defer_component_update(deployment_id)
             return "deferred"
         # About to let the switch take — record the build we're leaving behind.

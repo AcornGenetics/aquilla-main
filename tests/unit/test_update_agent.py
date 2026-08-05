@@ -34,7 +34,6 @@ def test_defers_an_update_the_operator_has_not_approved():
         ipc,
         gate=UpdateGate(),
         running_shas=lambda: ("abc", "abc"),
-        assay_running=lambda: False,
     )
 
     action = agent.handle_update_offer("deploy-1", "0.1.20")
@@ -47,7 +46,7 @@ def test_applies_on_re_offer_once_the_operator_approves():
     ipc = FakeIpc()
     gate = UpdateGate()
     agent = UpdateAgent(
-        ipc, gate, running_shas=lambda: ("a", "a"), assay_running=lambda: False
+        ipc, gate, running_shas=lambda: ("a", "a")
     )
 
     agent.handle_update_offer("deploy-1", "0.1.20")  # 1st offer → deferred (unapproved)
@@ -56,20 +55,6 @@ def test_applies_on_re_offer_once_the_operator_approves():
 
     assert action == "applied"
     assert ipc.deferred == ["deploy-1"]  # only the first was deferred
-
-
-def test_defers_during_an_assay_even_when_approved():
-    ipc = FakeIpc()
-    gate = UpdateGate()
-    agent = UpdateAgent(
-        ipc, gate, running_shas=lambda: ("a", "a"), assay_running=lambda: True
-    )
-    gate.mark_pending("0.1.20")
-    gate.approve()
-
-    action = agent.handle_update_offer("deploy-1", "0.1.20")
-
-    assert action == "deferred"  # never interrupt a run
 
 
 def test_records_the_pre_update_sha_when_it_lets_an_update_apply():
@@ -81,7 +66,7 @@ def test_records_the_pre_update_sha_when_it_lets_an_update_apply():
     recorded = []
     agent = UpdateAgent(
         ipc, gate, running_shas=lambda: ("cur_sha", "cur_sha"),
-        assay_running=lambda: False, record_pre_update=recorded.append,
+        record_pre_update=recorded.append,
     )
     gate.mark_pending("0.1.20")
     gate.approve()
@@ -95,7 +80,7 @@ def test_records_the_pre_update_sha_when_it_lets_an_update_apply():
 def test_publish_health_reports_matched_pair_to_the_shadow():
     ipc = FakeIpc()
     agent = UpdateAgent(
-        ipc, UpdateGate(), running_shas=lambda: ("sha1", "sha1"), assay_running=lambda: False
+        ipc, UpdateGate(), running_shas=lambda: ("sha1", "sha1")
     )
 
     agent.publish_health()
