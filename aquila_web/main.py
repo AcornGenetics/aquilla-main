@@ -2266,13 +2266,27 @@ def _clear_pre_update_sha() -> None:
 def _resolve_update_banner() -> None:
     """Raise/clear the 'last update failed' banner from the pre-update record.
 
-    Run on boot and on each Greengrass post-update event: compare the recorded
-    pre-apply build to the one running now (baked git_sha) and mark the gate.
+    Run at BOOT only: if we came back on the pre-update build with the record still
+    present, Greengrass rolled us back (the new build failed health and reverted, so
+    no post-update event fired) → banner. A clean boot (no record) is a no-op.
     """
     running_sha = _running_container_shas()[0]  # this image's baked git_sha
     update_gate.resolve_update_result(
         _read_pre_update_sha(), running_sha, update_gate.GATE, _clear_pre_update_sha
     )
+
+
+def _mark_update_succeeded() -> None:
+    """A Greengrass post-update event fired → the approved deployment applied.
+
+    Treat it as success and clear the pre-update record + any failure banner. Do
+    NOT re-run the git_sha compare here: a deployment that only adds a component
+    (e.g. ShadowManager) leaves the app image — and its git_sha — unchanged, which
+    the compare would misread as a rollback (the sn01 false banner). A real rollback
+    sends no post-update event and is caught on boot instead.
+    """
+    _clear_pre_update_sha()
+    update_gate.GATE.mark_update_succeeded()
 
 
 @app.get("/update/gate")
@@ -2541,5 +2555,5 @@ async def start_greengrass_update_agent() -> None:
         # and re-resolves the banner immediately on a Greengrass post-update event
         # (so a rollback shows without waiting for a reboot).
         record_pre_update=_write_pre_update_sha,
-        on_post_update=lambda deployment_id: _resolve_update_banner(),
+        on_post_update=lambda deployment_id: _mark_update_succeeded(),
     )

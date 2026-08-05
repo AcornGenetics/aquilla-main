@@ -114,3 +114,15 @@ def test_status_carries_a_non_blocking_banner_after_a_failed_update():
     banner = gate.status()["banner"]
     assert banner is not None
     assert banner["blocking"] is False  # informational — the operator can still run
+
+
+def test_mark_update_succeeded_clears_the_failure_banner():
+    # A post-update event means the approved deployment applied — even one that only
+    # added ShadowManager and left the app git_sha unchanged. That must clear the
+    # banner, not read as a rollback (the sn01 false positive).
+    gate = UpdateGate()
+    gate.mark_update_failed()
+    assert gate.status()["banner"] is not None
+
+    gate.mark_update_succeeded()
+    assert gate.status()["banner"] is None

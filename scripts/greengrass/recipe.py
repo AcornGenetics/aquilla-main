@@ -46,22 +46,25 @@ def build_recipe(component_name, version, compose_artifact_uri, image_refs=None)
         "ComponentName": component_name,
         "ComponentVersion": version,
         # Authorize the Device-Shadow IPC ops the update agent uses. Without this
-        # policy the nucleus denies UpdateThingShadow and publish_health() fails
-        # silently (the sn04-shadow gap). Scoped to THIS core device's own classic
-        # shadow (least privilege) — {iot:thingName} resolves on-device.
+        # policy ShadowManager denies UpdateThingShadow and publish_health() fails
+        # (the shadow stays dark — #395). NOTE: recipe variables like {iot:thingName}
+        # are NOT interpolated inside accessControl resources, so a scoped
+        # "$aws/things/{iot:thingName}/shadow" never matches and is denied. The
+        # resource must be "*" — the component only ever writes its own core
+        # device's shadow, so this stays effectively the device's own shadow.
         "ComponentConfiguration": {
             "DefaultConfiguration": {
                 "accessControl": {
                     "aws.greengrass.ShadowManager": {
                         component_name + ":shadow:1": {
                             "policyDescription": (
-                                "Access this core device's own classic shadow"
+                                "Read/write this core device's own shadow"
                             ),
                             "operations": [
                                 "aws.greengrass#GetThingShadow",
                                 "aws.greengrass#UpdateThingShadow",
                             ],
-                            "resources": ["$aws/things/{iot:thingName}/shadow"],
+                            "resources": ["*"],
                         }
                     }
                 }

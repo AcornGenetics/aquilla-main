@@ -146,13 +146,15 @@ def test_recipe_authorizes_the_shadow_ipc_operations():
     assert "aws.greengrass#GetThingShadow" in ops
 
 
-def test_shadow_access_is_scoped_to_the_devices_own_shadow():
-    # Least privilege (PRD testing decision): the component may touch only THIS
-    # core device's classic shadow, not every thing's shadow.
+def test_shadow_access_grants_a_matchable_resource():
+    # {iot:thingName} is NOT interpolated inside accessControl, so a scoped
+    # "$aws/things/{iot:thingName}/shadow" resource is denied on-device (the sn01
+    # AuthorizationException). The resource must be "*" so the grant actually
+    # matches the core device's own shadow — never an unsubstituted path.
     policies = _shadow_access_policies(_recipe_with_images())
     resources = [r for pol in policies.values() for r in pol["resources"]]
-    assert "*" not in resources
-    assert any("{iot:thingName}" in r and r.endswith("/shadow") for r in resources)
+    assert resources == ["*"]
+    assert not any("{iot:thingName}" in r for r in resources)
 
 
 def test_recipe_declares_images_as_docker_artifacts():
