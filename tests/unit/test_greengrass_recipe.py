@@ -124,6 +124,39 @@ def test_recipe_depends_on_token_exchange_service():
     assert "aws.greengrass.TokenExchangeService" in deps
 
 
+def test_recipe_depends_on_shadow_manager():
+    deps = _recipe_with_images()["ComponentDependencies"]
+    # The update agent publishes the Device Shadow over IPC (am#382/#395); the
+    # ShadowManager component is what services those shadow IPC ops on-device.
+    # As a recipe dependency it ships with every deployment.
+    assert "aws.greengrass.ShadowManager" in deps
+
+
+def _shadow_access_policies(recipe):
+    ac = recipe["ComponentConfiguration"]["DefaultConfiguration"]["accessControl"]
+    return ac["aws.greengrass.ShadowManager"]
+
+
+def test_recipe_authorizes_the_shadow_ipc_operations():
+    # Shadow IPC ops are denied without an accessControl policy — this is exactly
+    # why publish_health() failed silently on sn01. Grant get + update.
+    policies = _shadow_access_policies(_recipe_with_images())
+    ops = [op for pol in policies.values() for op in pol["operations"]]
+    assert "aws.greengrass#UpdateThingShadow" in ops
+    assert "aws.greengrass#GetThingShadow" in ops
+
+
+def test_shadow_access_grants_a_matchable_resource():
+    # {iot:thingName} is NOT interpolated inside accessControl, so a scoped
+    # "$aws/things/{iot:thingName}/shadow" resource is denied on-device (the sn01
+    # AuthorizationException). The resource must be "*" so the grant actually
+    # matches the core device's own shadow — never an unsubstituted path.
+    policies = _shadow_access_policies(_recipe_with_images())
+    resources = [r for pol in policies.values() for r in pol["resources"]]
+    assert resources == ["*"]
+    assert not any("{iot:thingName}" in r for r in resources)
+
+
 def test_recipe_declares_images_as_docker_artifacts():
     artifacts = _recipe_with_images()["Manifests"][0]["Artifacts"]
     uris = [a["URI"] for a in artifacts]

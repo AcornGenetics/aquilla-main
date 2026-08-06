@@ -88,6 +88,31 @@ def build_recipe(
         "RecipeFormatVersion": RECIPE_FORMAT_VERSION,
         "ComponentName": component_name,
         "ComponentVersion": version,
+        # Authorize the Device-Shadow IPC ops the update agent uses. Without this
+        # policy ShadowManager denies UpdateThingShadow and publish_health() fails
+        # (the shadow stays dark — #395). NOTE: recipe variables like {iot:thingName}
+        # are NOT interpolated inside accessControl resources, so a scoped
+        # "$aws/things/{iot:thingName}/shadow" never matches and is denied. The
+        # resource must be "*" — the component only ever writes its own core
+        # device's shadow, so this stays effectively the device's own shadow.
+        "ComponentConfiguration": {
+            "DefaultConfiguration": {
+                "accessControl": {
+                    "aws.greengrass.ShadowManager": {
+                        component_name + ":shadow:1": {
+                            "policyDescription": (
+                                "Read/write this core device's own shadow"
+                            ),
+                            "operations": [
+                                "aws.greengrass#GetThingShadow",
+                                "aws.greengrass#UpdateThingShadow",
+                            ],
+                            "resources": ["*"],
+                        }
+                    }
+                }
+            }
+        },
         # Greengrass pulls/pre-stages the ECR images (via the device's token
         # exchange creds) before the compose stack runs. TokenExchangeService is
         # what mints those creds from the device cert — required for private ECR,
@@ -97,6 +122,13 @@ def build_recipe(
                 "VersionRequirement": ">=2.0.0",
             },
             "aws.greengrass.TokenExchangeService": {
+                "VersionRequirement": ">=2.0.0",
+            },
+            # Services the Device-Shadow IPC ops the update agent uses (am#382/#395)
+            # — publishing running SHAs + Container Health. As a recipe dependency it
+            # ships with every deployment; the deployment configures it to sync the
+            # core device's classic shadow to the cloud.
+            "aws.greengrass.ShadowManager": {
                 "VersionRequirement": ">=2.0.0",
             },
         },
