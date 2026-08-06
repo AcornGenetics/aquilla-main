@@ -214,13 +214,44 @@ def test_prune_failure_cannot_break_the_component():
     assert prune_call.startswith('prune-images.sh" || true')
 
 
-def test_prune_does_not_delay_the_health_gate():
-    """The health monitor is what keeps the component RUNNING; pruning ahead of the
-    startup buffer would eat into it, so it must come before the sleep, not inside
-    the polling loop."""
+def test_prune_waits_for_the_health_gate():
+    """The superseded image is the one Greengrass rolls back to. Once `compose up -d`
+    has recreated the containers it is referenced by nothing and is no longer newest of
+    its repository, so pruning straight after the stack starts deletes exactly the image
+    a failed deployment needs. It must come after the health poll instead."""
     run = _run_step(_recipe_with_prune())
 
-    assert run.index("prune-images.sh") < run.index("sleep 25")
+    assert run.index("sleep 25") < run.index("prune-images.sh")
+    assert run.index("seq 1 12") < run.index("prune-images.sh")
+
+
+def test_prune_is_gated_on_a_health_probe_not_merely_sequenced():
+    """Position alone is not enough: the grace loop falls through on exhaustion as well
+    as on success, so a deployment that never came up would still reach the prune and
+    delete its own rollback target. The call must sit inside a health check."""
+    run = _run_step(_recipe_with_prune())
+    before_prune = run[: run.index("prune-images.sh")]
+
+    assert before_prune.endswith(
+        "if curl -fsS http://localhost:8090/health >/dev/null 2>&1; then bash \"{artifacts:path}/"
+    )
+
+
+def test_prune_is_reachable_before_the_monitor_loop():
+    """The monitor is an unbounded foreground loop that only exits to mark the component
+    BROKEN. Anything sequenced after it never runs at all."""
+    run = _run_step(_recipe_with_prune())
+
+    assert run.index("prune-images.sh") < run.index("while curl")
+
+
+def test_prune_guard_is_closed_so_the_monitor_still_runs():
+    """Regression: an unterminated `if` would swallow the monitor loop into the guard,
+    so an unhealthy device would never mark itself BROKEN."""
+    run = _run_step(_recipe_with_prune())
+
+    assert "fi; " in run
+    assert run.index("fi; ") < run.index("while curl")
 
 
 def test_recipe_without_a_prune_uri_is_unchanged():
