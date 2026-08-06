@@ -265,3 +265,159 @@ def test_dangling_images_are_enumerated() -> None:
 
     assert "sha_dangling" in out, "dangling images must be collected"
     assert "sha_tagged" in out
+
+
+# --- multi-tag removals (review of #408) ------------------------------------
+# `docker rmi <id>` refuses an image carrying more than one tag. The message says
+# "referenced in multiple repositories", but it fires for two tags in a SINGLE
+# repository too — verified against docker directly. CI pushes :latest and :<sha>
+# on every build, so this is the common case on a migrated device, not an edge one.
+
+_MULTI_TAG_ERROR = (
+    "Error response from daemon: conflict: unable to delete old (must be forced) "
+    "- image is referenced in multiple repositories"
+)
+
+
+def _run(script: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", "-c", textwrap.dedent(script)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
+def test_a_multi_tagged_image_is_removed_with_force() -> None:
+    """Without the retry the script keeps exactly the stale GHCR images #397 exists
+    to shed, and reports it as a benign 'could not remove'."""
+    result = _run(f"""
+        source {SCRIPT}
+        collect_images() {{
+            printf 'new\t2026-08-03T09:35:43Z\tghcr.io/x/api:dev\\n'
+            printf 'old\t2026-01-01T00:00:00Z\tghcr.io/x/api:old\\n'
+        }}
+        protected_ids() {{ printf ''; }}
+        docker() {{
+            if [[ "$1" == "rmi" && "$2" == "-f" ]]; then return 0; fi
+            echo "{_MULTI_TAG_ERROR}" >&2
+            return 1
+        }}
+        main
+    """)
+
+    assert "forced: image had several tags" in result.stdout
+    assert "1 removed" in result.stdout
+    assert "could not remove" not in result.stdout
+
+
+def test_force_is_not_used_for_other_refusals() -> None:
+    """The protected set is the first line; docker's own refusal is the second. A
+    blanket -f would remove that backstop, so anything but the multi-tag conflict
+    must still be left alone."""
+    result = _run(f"""
+        source {SCRIPT}
+        collect_images() {{
+            printf 'new\t2026-08-03T09:35:43Z\tghcr.io/x/api:dev\\n'
+            printf 'old\t2026-01-01T00:00:00Z\tghcr.io/x/api:old\\n'
+        }}
+        protected_ids() {{ printf ''; }}
+        docker() {{
+            if [[ "$1" == "rmi" && "$2" == "-f" ]]; then echo "FORCED" ; return 0; fi
+            echo "conflict: unable to delete old (must be forced) - image is being used by stopped container abc" >&2
+            return 1
+        }}
+        main
+    """)
+
+    assert "FORCED" not in result.stdout, "must not force a container-referenced image"
+    assert "could not remove old" in result.stdout
+    assert "0 removed" in result.stdout
+
+
+def test_a_forced_removal_that_still_fails_is_reported() -> None:
+    """-f is a retry, not a guarantee. If it also fails the image must be reported,
+    not silently counted as removed."""
+    result = _run(f"""
+        source {SCRIPT}
+        collect_images() {{
+            printf 'new\t2026-08-03T09:35:43Z\tghcr.io/x/api:dev\\n'
+            printf 'old\t2026-01-01T00:00:00Z\tghcr.io/x/api:old\\n'
+        }}
+        protected_ids() {{ printf ''; }}
+        docker() {{ echo "{_MULTI_TAG_ERROR}" >&2; return 1; }}
+        main
+    """)
+
+    assert "could not remove old" in result.stdout
+    assert "0 removed" in result.stdout
+    assert result.returncode == 0, "a stuck image must not fail the deployment"
+
+
+def test_dry_run_never_forces() -> None:
+    result = _run(f"""
+        source {SCRIPT}
+        DRY_RUN=1
+        collect_images() {{
+            printf 'new\t2026-08-03T09:35:43Z\tghcr.io/x/api:dev\\n'
+            printf 'old\t2026-01-01T00:00:00Z\tghcr.io/x/api:old\\n'
+        }}
+        protected_ids() {{ printf ''; }}
+        docker() {{ echo "DOCKER CALLED: $*"; }}
+        main
+    """)
+
+    assert "DOCKER CALLED" not in result.stdout
+    assert "would remove old" in result.stdout
+
+
+def test_stopped_container_refusal_is_never_forced() -> None:
+    """Regression for the #411 review.
+
+    Verified against docker 28.4.0: a stopped-container reference produces
+        conflict: unable to delete <id> (must be forced) -
+        image is being used by stopped container <cid>
+    Matching only "must be forced" therefore fires here, and `-f` succeeds — removing
+    the image and leaving the container pointing at nothing. The protected set does not
+    save this: it is a start-of-run snapshot, so a container created after it (the daily
+    aquila-cert-renew one) is not in it.
+    """
+    result = _run(f"""
+        source {SCRIPT}
+        collect_images() {{
+            printf 'new\t2026-08-03T09:35:43Z\tghcr.io/x/api:dev\\n'
+            printf 'old\t2026-01-01T00:00:00Z\tghcr.io/x/api:old\\n'
+        }}
+        protected_ids() {{ printf ''; }}
+        docker() {{
+            if [[ "$1" == "rmi" && "$2" == "-f" ]]; then echo "FORCED"; return 0; fi
+            echo "conflict: unable to delete old (must be forced) - image is being used by stopped container abc" >&2
+            return 1
+        }}
+        main
+    """)
+
+    assert "FORCED" not in result.stdout, "a container-referenced image must never be forced"
+    assert "0 removed" in result.stdout
+
+
+def test_failure_reports_dockers_own_reason() -> None:
+    """'still referenced' was hardcoded, so a failed -f retry or a dependent-child
+    refusal both reported a reason that was not true — misleading anyone asking why
+    space is not being reclaimed."""
+    result = _run(f"""
+        source {SCRIPT}
+        collect_images() {{
+            printf 'new\t2026-08-03T09:35:43Z\tghcr.io/x/api:dev\\n'
+            printf 'old\t2026-01-01T00:00:00Z\tghcr.io/x/api:old\\n'
+        }}
+        protected_ids() {{ printf ''; }}
+        docker() {{
+            echo "conflict: unable to delete old (cannot be forced) - image has dependent child images" >&2
+            return 1
+        }}
+        main
+    """)
+
+    assert "dependent child images" in result.stdout, "docker's reason must reach the log"
+    assert "still referenced" not in result.stdout
