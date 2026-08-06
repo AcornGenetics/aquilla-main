@@ -1170,11 +1170,13 @@ phase_start "14c" "Bootloader Setup Screen (EEPROM)"
 # late to hide it. NET_INSTALL_ENABLED=0 additionally skips the USB enumeration
 # the network-install keyboard probe performs, saving ~1s of boot.
 #
-# Applied to every device, not just affected ones: Phase 1 runs `apt-get upgrade`,
-# which can pull a newer rpi-eeprom and update the bootloader on an older board —
-# so a device that does not show the screen today can inherit the new defaults
-# from this very script. Setting the keys explicitly pins the behaviour instead
-# of depending on whichever bootloader the board happens to carry.
+# Applied to every device, not just affected ones: `rpi-eeprom-config --apply`
+# updates the bootloader to the LATEST available image, not only its config.
+# Measured on sn01 and sn03 — both jumped from a 2025 bootloader to 2026/01/09
+# (d76c4603) when this ran. Newer bootloaders are precisely the ones that default
+# the setup screen on, so an old board that is fine today can inherit the problem
+# from this very phase. Writing the key in the same operation pins the behaviour
+# rather than leaving it to whichever bootloader the board ends up carrying.
 #
 # This config lives in the on-board SPI EEPROM, NOT on the SD card: it survives
 # reimaging and is not undone by --revert. rpi-eeprom-config --apply does not
