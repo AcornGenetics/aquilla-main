@@ -24,6 +24,10 @@ def main(argv=None):
     p.add_argument("--component-name", required=True)
     p.add_argument("--version", required=True)
     p.add_argument("--artifact-uri", required=True, help="s3:// URI of the compose artifact")
+    p.add_argument(
+        "--prune-artifact-uri",
+        help="s3:// URI of the image-retention script (#397); omit to publish without it",
+    )
     p.add_argument("--out-compose", required=True, help="write the pinned compose here")
     p.add_argument("--out-recipe", required=True, help="write the recipe JSON here")
     args = p.parse_args(argv)
@@ -37,6 +41,7 @@ def main(argv=None):
         args.version,
         args.artifact_uri,
         image_refs=[args.api_ref, args.ui_ref],
+        prune_artifact_uri=args.prune_artifact_uri,
     )
     Path(args.out_recipe).write_text(json.dumps(recipe, indent=2))
 

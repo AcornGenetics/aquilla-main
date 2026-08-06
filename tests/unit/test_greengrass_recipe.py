@@ -188,3 +188,123 @@ def test_recipe_exports_thing_name_for_ipc():
     run = _recipe_with_images()["Manifests"][0]["Lifecycle"]["Run"]
     assert "AWS_IOT_THING_NAME" in run
     assert "{iot:thingName}" in run
+
+
+# --- image retention (#397) -------------------------------------------------
+# Nothing has ever removed an image from these devices, and Greengrass does not do
+# it either: sn01 was measured still holding its previous deployment's 1.17 GB ECR
+# image after a later deployment. The recipe is what makes the prune run.
+
+PRUNE_URI = "s3://bucket/com.acorn.sentri/0.1.5/prune-images.sh"
+
+
+def _recipe_with_prune():
+    return build_recipe(
+        "com.acorn.sentri",
+        "0.1.5",
+        "s3://bucket/com.acorn.sentri/0.1.5/compose.yaml",
+        image_refs=["ecr/api@sha256:a", "ecr/ui@sha256:b"],
+        prune_artifact_uri=PRUNE_URI,
+    )
+
+
+def _run_step(recipe):
+    return recipe["Manifests"][0]["Lifecycle"]["Run"]
+
+
+def test_recipe_declares_the_prune_script_as_an_artifact():
+    """Shipped with the component so it is versioned and ring-promoted, rather than
+    frozen at provisioning like every other host script."""
+    uris = [a["URI"] for a in _recipe_with_prune()["Manifests"][0]["Artifacts"]]
+
+    assert PRUNE_URI in uris
+
+
+def test_prune_runs_after_the_stack_is_up():
+    """It must run once the new containers hold their images — that is both when an
+    image has just been superseded and what protects the current one from removal."""
+    run = _run_step(_recipe_with_prune())
+
+    assert "prune-images.sh" in run
+    assert run.index("docker compose") < run.index("prune-images.sh")
+
+
+def test_prune_is_run_with_bash_not_sh():
+    """On Debian /bin/sh is dash; the script uses [[ ]] and here-strings, so invoking
+    it with sh would fail on every device. Naming the interpreter also avoids relying
+    on Greengrass preserving the artifact's executable bit."""
+    run = _run_step(_recipe_with_prune())
+
+    assert 'bash "{artifacts:path}/prune-images.sh"' in run
+
+
+def test_prune_failure_cannot_break_the_component():
+    """A non-zero exit from Run marks the component BROKEN and triggers a rollback.
+    Disk cleanup must never be able to take the instrument down."""
+    run = _run_step(_recipe_with_prune())
+    prune_call = run[run.index("prune-images.sh"):]
+
+    assert prune_call.startswith('prune-images.sh" || true')
+
+
+def test_prune_waits_for_the_health_gate():
+    """The superseded image is the one Greengrass rolls back to. Once `compose up -d`
+    has recreated the containers it is referenced by nothing and is no longer newest of
+    its repository, so pruning straight after the stack starts deletes exactly the image
+    a failed deployment needs. It must come after the health poll instead."""
+    run = _run_step(_recipe_with_prune())
+
+    assert run.index("sleep 25") < run.index("prune-images.sh")
+    assert run.index("seq 1 12") < run.index("prune-images.sh")
+
+
+def test_prune_is_gated_on_a_health_probe_not_merely_sequenced():
+    """Position alone is not enough: the grace loop falls through on exhaustion as well
+    as on success, so a deployment that never came up would still reach the prune and
+    delete its own rollback target. The call must sit inside a health check."""
+    run = _run_step(_recipe_with_prune())
+    before_prune = run[: run.index("prune-images.sh")]
+
+    assert before_prune.endswith(
+        "if curl -fsS http://localhost:8090/health >/dev/null 2>&1; then bash \"{artifacts:path}/"
+    )
+
+
+def test_prune_is_reachable_before_the_monitor_loop():
+    """The monitor is an unbounded foreground loop that only exits to mark the component
+    BROKEN. Anything sequenced after it never runs at all."""
+    run = _run_step(_recipe_with_prune())
+
+    assert run.index("prune-images.sh") < run.index("while curl")
+
+
+def test_prune_guard_is_closed_so_the_monitor_still_runs():
+    """Regression: an unterminated `if` would swallow the monitor loop into the guard,
+    so an unhealthy device would never mark itself BROKEN."""
+    run = _run_step(_recipe_with_prune())
+
+    assert "fi; " in run
+    assert run.index("fi; ") < run.index("while curl")
+
+
+def test_recipe_without_a_prune_uri_is_unchanged():
+    """Publishing without the script must still yield a working recipe — the device
+    simply does not prune."""
+    recipe = build_recipe(
+        "com.acorn.sentri",
+        "0.1.5",
+        "s3://bucket/com.acorn.sentri/0.1.5/compose.yaml",
+        image_refs=["ecr/api@sha256:a"],
+    )
+
+    assert "prune-images.sh" not in _run_step(recipe)
+    assert "docker compose" in _run_step(recipe)
+
+
+def test_compose_path_is_still_formatted_correctly_with_the_prune_step():
+    """Regression: the Run string is built by concatenation, and `%` binds tighter
+    than `+` — a stray format operator would leave a literal %s in the command."""
+    run = _run_step(_recipe_with_prune())
+
+    assert "%s" not in run
+    assert "{artifacts:path}/compose.yaml" in run

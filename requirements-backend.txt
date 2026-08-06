@@ -4,13 +4,11 @@ pydantic
 requests
 httpx
 numpy
-pandas
 matplotlib
 pyserial
 RPi.GPIO
 spidev
 smbus2
-simple-rpc
 cryptography
 # AWS IoT Device SDK v2 — provides awsiot.greengrasscoreipc, which the on-device
 # update agent (am#382) uses to talk to the Greengrass nucleus over Core IPC

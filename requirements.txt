@@ -10,5 +10,4 @@ pyserial
 RPi.GPIO
 spidev
 smbus2
-simple-rpc
 pytest
