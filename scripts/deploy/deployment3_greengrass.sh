@@ -711,7 +711,23 @@ usermod -aG docker ggc_user
 chgrp ggc_group /opt/aquila/config/device.env && chmod 640 /opt/aquila/config/device.env
 chmod o+rx /opt/aquila /opt/aquila/config
 
+# Let the kiosk reach the screen before the nucleus starts its heavy first-boot
+# work (JRE, JITP registration, ~497 MB image pull). The installer registers
+# greengrass.service as WantedBy=multi-user.target, which is ordered BEFORE
+# graphical.target — so the nucleus races ahead of LightDM/X/Chromium and the
+# operator sees console text instead of the splash. This drop-in only *orders*
+# greengrass after the graphical target (the kiosk is already drawing by then);
+# greengrass still starts, just once the screen is covered. On a headless boot
+# (graphical.target not in the transaction) the ordering is simply ignored.
+install -d -m 755 /etc/systemd/system/greengrass.service.d
+cat > /etc/systemd/system/greengrass.service.d/10-after-kiosk.conf <<'EOF'
+[Unit]
+After=graphical.target
+EOF
+systemctl daemon-reload
+
 run_test "greengrass root created"        "test -d ${GG_ROOT}"
+run_test "greengrass ordered after kiosk" "systemctl show -p After greengrass.service | grep -q graphical.target"
 run_test "greengrass service installed"   "test -f /etc/systemd/system/greengrass.service"
 run_test "provisioned with device cert"   "grep -q 'device.crt' /opt/aquila/config/greengrass-config.yaml"
 run_test "role alias configured"          "grep -q '${GG_ROLE_ALIAS}' /opt/aquila/config/greengrass-config.yaml"
@@ -1071,11 +1087,29 @@ if ! grep -q "vt.global_cursor_default=0" "${CMDLINE_FILE}"; then
     sed -i 's/$/ vt.global_cursor_default=0/' "${CMDLINE_FILE}"
 fi
 
+# Plymouth only draws if `splash` is on the kernel command line, and only stays
+# silent if `quiet` suppresses kernel log spam. Without them the base image's boot
+# text scrolls on the primary display until the kiosk starts — the "programming
+# writing" screen operators see on first power-on, made worse under Greengrass
+# because the app (and its :8090 redirect) is minutes away. `console=tty3` above
+# keeps stray messages off the primary VT; `plymouth.ignore-serial-consoles` keeps
+# the splash on the framebuffer when a serial console is attached. cmdline.txt is a
+# single space-separated line, so each token is appended at most once (idempotent).
+for _cmdline_token in quiet splash plymouth.ignore-serial-consoles; do
+    case " $(cat "${CMDLINE_FILE}") " in
+        *" ${_cmdline_token} "*) ;;                                   # already present
+        *) sed -i "s/\$/ ${_cmdline_token}/" "${CMDLINE_FILE}" ;;
+    esac
+done
+
 run_test "tty3 in cmdline"          "grep -q 'console=tty3' ${CMDLINE_FILE}"
 run_test "tty1 not in cmdline"      "! grep -q 'console=tty1' ${CMDLINE_FILE}"
 run_test "cursor hidden in cmdline" "grep -q 'vt.global_cursor_default=0' ${CMDLINE_FILE}"
+run_test "quiet in cmdline"         "grep -qw 'quiet' ${CMDLINE_FILE}"
+run_test "splash in cmdline"        "grep -qw 'splash' ${CMDLINE_FILE}"
+run_test "plymouth serial ignore"   "grep -q 'plymouth.ignore-serial-consoles' ${CMDLINE_FILE}"
 
-phase_pass "quiet boot configured (tty3, cursor hidden)"
+phase_pass "quiet boot configured (tty3, cursor hidden, plymouth splash on)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 14b — Plymouth Acorn Boot Theme
