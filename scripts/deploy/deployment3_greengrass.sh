@@ -729,6 +729,28 @@ phase_start "9b" "Chromium Kiosk (Openbox autostart)"
 rm -f "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
 rm -f "${PI_HOME}/.config/labwc/autostart"
 
+# Neutralise the SYSTEM-WIDE Openbox autostart. Openbox runs /etc/xdg/openbox/
+# autostart BEFORE the per-user file written below, and both run — the user file
+# does not replace it. deployment1.sh wrote the legacy kiosk there, so any device
+# provisioned before this phase existed starts two browsers, not one.
+#
+# Measured on sn03: `python3 /home/pi/kiosk.py` (WebKit) and the Chromium kiosk
+# both running. kiosk.py loads http://localhost:8090 directly with no retry and
+# no error handling, so before the backend is listening it paints WebKit's default
+# error page ("Error receiving data: Connection reset by peer") over the splash.
+# The same file also ran `xrandr --rotate left` against this phase's `--rotate
+# right`, and `unclutter`, which the user autostart below deliberately avoids.
+#
+# Overwritten rather than deleted: openbox ships this path as a dpkg conffile, so
+# a removed file can come back on package upgrade while a modified one is kept.
+if [[ -f /etc/xdg/openbox/autostart ]]; then
+    cat > /etc/xdg/openbox/autostart <<'EOF'
+# Intentionally empty — the Aquila kiosk launches from the per-user autostart at
+# ~/.config/openbox/autostart. Openbox runs this system-wide file first and runs
+# BOTH, so anything added here starts in addition to the kiosk, not instead of it.
+EOF
+fi
+
 # Install boot splash page
 curl -fsSL \
     -H "Authorization: token ${GHCR_TOKEN}" \
@@ -805,6 +827,10 @@ run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
 run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
 run_test "no stale Wayland .desktop"   "test ! -f ${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
 run_test "correct file ownership"      "stat -c '%U' ${AUTOSTART} | grep -q pi"
+run_test "no legacy kiosk.py launch"   "! grep -q kiosk.py /etc/xdg/openbox/autostart 2>/dev/null"
+run_test "no system-wide unclutter"    "! grep -q '^unclutter' /etc/xdg/openbox/autostart 2>/dev/null"
+run_test "no system-wide xrandr"       "! grep -q '^xrandr' /etc/xdg/openbox/autostart 2>/dev/null"
+run_test "one kiosk launcher only"     "! grep -q 'chromium' /etc/xdg/openbox/autostart 2>/dev/null"
 
 phase_pass "Openbox autostart configured — X11 kiosk with rotation and touch mapping"
 
