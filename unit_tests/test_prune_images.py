@@ -324,7 +324,7 @@ def test_force_is_not_used_for_other_refusals() -> None:
         protected_ids() {{ printf ''; }}
         docker() {{
             if [[ "$1" == "rmi" && "$2" == "-f" ]]; then echo "FORCED" ; return 0; fi
-            echo "conflict: unable to delete old - image is being used by stopped container abc" >&2
+            echo "conflict: unable to delete old (must be forced) - image is being used by stopped container abc" >&2
             return 1
         }}
         main
@@ -369,3 +369,55 @@ def test_dry_run_never_forces() -> None:
 
     assert "DOCKER CALLED" not in result.stdout
     assert "would remove old" in result.stdout
+
+
+def test_stopped_container_refusal_is_never_forced() -> None:
+    """Regression for the #411 review.
+
+    Verified against docker 28.4.0: a stopped-container reference produces
+        conflict: unable to delete <id> (must be forced) -
+        image is being used by stopped container <cid>
+    Matching only "must be forced" therefore fires here, and `-f` succeeds — removing
+    the image and leaving the container pointing at nothing. The protected set does not
+    save this: it is a start-of-run snapshot, so a container created after it (the daily
+    aquila-cert-renew one) is not in it.
+    """
+    result = _run(f"""
+        source {SCRIPT}
+        collect_images() {{
+            printf 'new\t2026-08-03T09:35:43Z\tghcr.io/x/api:dev\\n'
+            printf 'old\t2026-01-01T00:00:00Z\tghcr.io/x/api:old\\n'
+        }}
+        protected_ids() {{ printf ''; }}
+        docker() {{
+            if [[ "$1" == "rmi" && "$2" == "-f" ]]; then echo "FORCED"; return 0; fi
+            echo "conflict: unable to delete old (must be forced) - image is being used by stopped container abc" >&2
+            return 1
+        }}
+        main
+    """)
+
+    assert "FORCED" not in result.stdout, "a container-referenced image must never be forced"
+    assert "0 removed" in result.stdout
+
+
+def test_failure_reports_dockers_own_reason() -> None:
+    """'still referenced' was hardcoded, so a failed -f retry or a dependent-child
+    refusal both reported a reason that was not true — misleading anyone asking why
+    space is not being reclaimed."""
+    result = _run(f"""
+        source {SCRIPT}
+        collect_images() {{
+            printf 'new\t2026-08-03T09:35:43Z\tghcr.io/x/api:dev\\n'
+            printf 'old\t2026-01-01T00:00:00Z\tghcr.io/x/api:old\\n'
+        }}
+        protected_ids() {{ printf ''; }}
+        docker() {{
+            echo "conflict: unable to delete old (cannot be forced) - image has dependent child images" >&2
+            return 1
+        }}
+        main
+    """)
+
+    assert "dependent child images" in result.stdout, "docker's reason must reach the log"
+    assert "still referenced" not in result.stdout

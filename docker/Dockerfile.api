@@ -1,6 +1,13 @@
 # syntax=docker/dockerfile:1.4
 # Pins the BuildKit frontend so `RUN --mount=type=bind,from=...` below is understood
 # regardless of the builder's default Dockerfile version.
+#
+# BUILDKIT IS REQUIRED to build this image. Both the syntax directive above and the
+# bind mount below are BuildKit features, so a legacy build --
+#     DOCKER_BUILDKIT=0 docker build ...
+# or a Docker old enough to default to the classic builder -- fails with
+# `unknown flag: mount`. CI (docker/build-push-action) and modern `docker compose
+# build` use BuildKit by default, so the normal paths are unaffected.
 
 # ── Build stage ───────────────────────────────────────────────────────────────
 # build-essential exists solely to compile RPi.GPIO and spidev from source: both

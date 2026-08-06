@@ -167,19 +167,38 @@ main() {
         # logs "could not remove" and keeps exactly the stale GHCR images it exists
         # to shed.
         #
-        # Forced only for that message, never blanket. `docker rmi -f` on an image a
-        # stopped container references removes it and orphans the container; the
-        # protected set already excludes those, so -f here is a second line rather
-        # than the first, and any other refusal still stops the removal.
+        # Forced only for that message, never blanket -- and "must be forced" alone is
+        # NOT specific enough. Verified against docker 28.4.0, a stopped-container
+        # reference produces:
+        #     conflict: unable to delete <id> (must be forced) -
+        #     image is being used by stopped container <cid>
+        # which also contains "must be forced", and `-f` on it succeeds: the image goes
+        # and the container is left pointing at nothing. That is the precise case this
+        # retry must avoid, so the guard additionally requires the refusal NOT to be a
+        # container reference.
+        #
+        # Excluding "being used by" rather than matching "referenced in multiple
+        # repositories" positively: unfamiliar wording from a future docker then means
+        # no force, which is the safe direction to be wrong in. A positive match would
+        # silently stop reclaiming multi-tag images if the phrasing ever changed.
+        #
+        # The protected set already excludes container-referenced images, but it is a
+        # start-of-run snapshot -- a container appearing after it (aquila-cert-renew
+        # runs one daily) would slip through. This guard is what actually holds.
         rmi_err="$(docker rmi "${id}" 2>&1 >/dev/null)" && rc=0 || rc=$?
-        if (( rc != 0 )) && [[ "${rmi_err}" == *"must be forced"* ]]; then
+        if (( rc != 0 )) \
+            && [[ "${rmi_err}" == *"must be forced"* ]] \
+            && [[ "${rmi_err}" != *"being used by"* ]]; then
             rmi_err="$(docker rmi -f "${id}" 2>&1 >/dev/null)" && rc=0 || rc=$?
             (( rc == 0 )) && log "removed ${id} (forced: image had several tags)"
         fi
         if (( rc == 0 )); then
             removed=$((removed + 1))
         else
-            log "could not remove ${id} (still referenced)"
+            # Log docker's own reason rather than assuming "still referenced": a failed
+            # -f retry and "cannot be forced - dependent child images" are neither, and
+            # a wrong reason misleads whoever is asking why space is not being reclaimed.
+            log "could not remove ${id}: ${rmi_err}"
         fi
     done <<< "${removals}"
 
