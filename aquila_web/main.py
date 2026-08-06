@@ -4,8 +4,10 @@ from aquila_web.local_db import enqueue_event, init_local_db, _utc_now
 from aquila_web.optics_readings import build_optics_readings, count_data_lines
 from aq_curve.curve import ALGO_VERSION
 from aquila_web.profile_assembly import assemble_steps, validate_stages
-from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pathlib import Path
 from fastapi import WebSocket
 import asyncio
@@ -1141,6 +1143,44 @@ async def index():
 @app.get("/complete")
 async def run_page_2():
     return FileResponse(static_dir / "complete.html")
+
+@app.get("/error")
+async def error_page():
+    # The single operator-facing failure screen (issue #421). Reached from a
+    # fault state, an unhandled exception, or a failed navigation — so it must
+    # render standalone and never fetch anything on load.
+    return FileResponse(static_dir / "error.html")
+
+
+def _error_page_response(status_code: int) -> HTMLResponse:
+    return HTMLResponse(
+        (static_dir / "error.html").read_text(encoding="utf-8"),
+        status_code=status_code,
+    )
+
+
+def _is_navigation(request) -> bool:
+    # A browser navigating names text/html explicitly; the frontend's own
+    # fetch() calls send */* and still need their JSON bodies (#421).
+    return "text/html" in request.headers.get("accept", "")
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_page(request, exc):
+    # Without this the operator gets a plain-text "Internal Server Error" on the
+    # kiosk. Log the real cause; show the operator the general error page.
+    logger.exception("unhandled exception serving %s", request.url.path)
+    return _error_page_response(500)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_page(request, exc):
+    # Navigations get the error page instead of a raw {"detail": ...} blob
+    # painted across the screen. API callers keep their JSON contract.
+    if _is_navigation(request):
+        logger.warning("navigation to %s failed: %s", request.url.path, exc.detail)
+        return _error_page_response(exc.status_code)
+    return await http_exception_handler(request, exc)
 
 @app.get("/login")
 async def login_page():
