@@ -1159,6 +1159,70 @@ run_test "acorn theme is default"       "plymouth-set-default-theme | grep -q ac
 phase_pass "Plymouth Acorn theme installed (takes effect on next reboot)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phase 14c — Bootloader Setup Screen (EEPROM)
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "14c" "Bootloader Setup Screen (EEPROM)"
+
+# Boards with a newer factory bootloader ship NET_INSTALL_AT_POWER_ON=1, which
+# paints a "Configure this Raspberry Pi 4 Model B" panel over the whole display
+# on every cold boot. The bootloader draws it before the kernel loads, so the
+# suppression in Phases 6, 14 and 14b (piwiz, cmdline, Plymouth) all runs far too
+# late to hide it. NET_INSTALL_ENABLED=0 additionally skips the USB enumeration
+# the network-install keyboard probe performs, saving ~1s of boot.
+#
+# Applied to every device, not just affected ones: Phase 1 runs `apt-get upgrade`,
+# which can pull a newer rpi-eeprom and update the bootloader on an older board —
+# so a device that does not show the screen today can inherit the new defaults
+# from this very script. Setting the keys explicitly pins the behaviour instead
+# of depending on whichever bootloader the board happens to carry.
+#
+# This config lives in the on-board SPI EEPROM, NOT on the SD card: it survives
+# reimaging and is not undone by --revert. rpi-eeprom-config --apply does not
+# write the chip directly; it stages pieeprom.upd + recovery.bin on the boot
+# partition and the ROM programs the EEPROM during the next reboot. A power cut
+# in that window needs physical recovery, so the write is skipped entirely
+# whenever the config already matches — re-running this script never reflashes.
+
+EEPROM_CONF_CURRENT="/tmp/aquila-eeprom-current.conf"
+EEPROM_CONF_DESIRED="/tmp/aquila-eeprom-desired.conf"
+
+if ! command -v rpi-eeprom-config &>/dev/null; then
+    echo "  ⚠ rpi-eeprom-config not present — skipping (no Pi bootloader EEPROM)"
+    phase_pass "bootloader EEPROM not applicable on this hardware"
+elif ! rpi-eeprom-config > "${EEPROM_CONF_CURRENT}" 2>/dev/null \
+        || [[ ! -s "${EEPROM_CONF_CURRENT}" ]]; then
+    echo "  ⚠ could not read EEPROM config — skipping rather than writing blind"
+    phase_pass "bootloader EEPROM left untouched (config unreadable)"
+else
+    # Desired state: drop both keys wherever they sit, then pin network install
+    # off at the end. Deterministic ordering keeps this diff-stable on re-runs.
+    grep -v -E '^(NET_INSTALL_AT_POWER_ON|NET_INSTALL_ENABLED)=' \
+        "${EEPROM_CONF_CURRENT}" > "${EEPROM_CONF_DESIRED}" || true
+    echo "NET_INSTALL_ENABLED=0" >> "${EEPROM_CONF_DESIRED}"
+
+    if diff -q "${EEPROM_CONF_CURRENT}" "${EEPROM_CONF_DESIRED}" &>/dev/null; then
+        echo "  ✓ EEPROM config already correct — no update staged"
+    else
+        if rpi-eeprom-config --apply "${EEPROM_CONF_DESIRED}" &>/dev/null; then
+            echo "  ✓ EEPROM update staged — the ROM flashes it on the next reboot"
+            echo "    previous config: /var/lib/raspberrypi/bootloader/backup/"
+        else
+            phase_fail "rpi-eeprom-config --apply failed"
+        fi
+    fi
+
+    # Assert against the staged config, not the live chip: rpi-eeprom-config
+    # reads the CURRENT EEPROM, which still holds the old values until the
+    # flashing reboot, so asserting there would fail on an affected device.
+    run_test "power-on setup screen off" \
+        "! grep -q '^NET_INSTALL_AT_POWER_ON' ${EEPROM_CONF_DESIRED}"
+    run_test "network install disabled" \
+        "grep -q '^NET_INSTALL_ENABLED=0' ${EEPROM_CONF_DESIRED}"
+
+    phase_pass "bootloader setup screen suppressed (takes effect after reboot)"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 15 — Download Security Script
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 15 "Download Security Script"

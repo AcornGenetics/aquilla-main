@@ -79,3 +79,39 @@ def test_retains_deployment2_device_build():
     # Everything else from deployment2 is kept (spot-check across phases).
     for marker in ("I2C", "Tailscale", "aquila-cert-renew", "security.sh", "Plymouth"):
         assert marker in SCRIPT, f"deployment3 dropped a shared step: {marker}"
+
+
+# --- Bootloader setup screen (EEPROM), #418 ----------------------------------
+# Newer factory bootloaders ship NET_INSTALL_AT_POWER_ON=1, which paints a
+# "Configure this Raspberry Pi" panel over the display on every cold boot. The
+# bootloader draws it pre-kernel, so the piwiz/cmdline/Plymouth suppression in
+# Phases 6, 14 and 14b all run too late to hide it.
+
+def test_disables_power_on_network_install_ui():
+    # Both keys are stripped, then network install is pinned off.
+    assert "NET_INSTALL_AT_POWER_ON" in SCRIPT
+    assert "NET_INSTALL_ENABLED=0" in SCRIPT
+    assert "rpi-eeprom-config --apply" in SCRIPT
+
+
+def test_eeprom_write_is_skipped_when_already_correct():
+    # The risk is the flash, not the setting: a power cut mid-write needs
+    # physical recovery. Re-running deployment3 must not reflash a correct chip.
+    assert "diff -q" in SCRIPT
+    assert "already correct" in SCRIPT
+
+
+def test_eeprom_phase_degrades_instead_of_writing_blind():
+    # No rpi-eeprom-config, or an unreadable config, must skip the phase rather
+    # than apply a config built from nothing.
+    assert "command -v rpi-eeprom-config" in SCRIPT
+    assert "writing blind" in SCRIPT
+
+
+def test_eeprom_asserts_against_staged_config_not_live_chip():
+    # rpi-eeprom-config reads the CURRENT EEPROM, which still holds the old
+    # values until the flashing reboot — asserting there fails on an affected
+    # device. The run_tests must check the staged file instead.
+    assert "EEPROM_CONF_DESIRED" in SCRIPT
+    assert 'run_test "power-on setup screen off"' in SCRIPT
+    assert 'run_test "network install disabled"' in SCRIPT
