@@ -3401,3 +3401,50 @@ select{
     padding: 4px 8px;
     text-align: center;
 }
+
+/* General error page (issue #421) — the single operator-facing failure screen.
+   Follows the .login-shell / .login-card pattern so it reads as part of the app. */
+.error-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background-color: #f6f6f6;
+}
+
+.error-card {
+  width: min(520px, 100%);
+  background-color: var(--icon-white);
+  border-radius: 24px;
+  padding: 48px 40px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+  text-align: center;
+}
+
+.error-logo {
+  width: 62px;
+  height: 70px;
+  margin-bottom: 28px;
+  /* The mark is filled with currentColor, so it follows this one declaration
+     rather than carrying a hard-coded hex in the markup. Acorn green matches
+     the logo on the boot splash and the Run button. */
+  color: var(--icon-acorn-green);
+}
+
+.error-card h1 {
+  margin: 0 0 20px;
+  font-size: 34px;
+  color: #000000;
+}
+
+.error-card p {
+  margin: 0 0 12px;
+  color: #505050;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.error-card p:last-child {
+  margin-bottom: 0;
+}

@@ -726,33 +726,19 @@ function wsHandleMessage(event) {
         if (isDashboard) {
           setDrawerActionsVisibility(screen !== "running");
         }
-        let targetPath = window.location.pathname;
-
         currentScreen = screen;
 
-        if (isDashboard) {
-            updateDashboardSections(screen);
+        // A fault pulls the operator to the general error page from any screen;
+        // the dashboard keeps handling its own screens in place (#421).
+        const targetPath = screenDestination(screen, isDashboard);
+        if (targetPath && targetPath !== window.location.pathname){
+            window.location.href = targetPath;
+            console.log("href" , window.location.href)
             return;
         }
 
-        if (screen === "init"){
-            targetPath = "/";
-            console.log("INIT PATH", targetPath);
-        } else if (screen === "ready"){
-            targetPath = "/ready";
-            console.log("READY PATH", targetPath);
-        } else if (screen === "running"){
-            targetPath = "/run";
-            console.log("RUN PATH", targetPath);
-        } else if (screen === "complete"){
-            targetPath = "/complete";
-            console.log("COMPLETE PATH", targetPath);
-        }
-
-        if (targetPath !== window.location.pathname){
-            currentScreen = screen;
-            window.location.href = targetPath;
-            console.log("href" , window.location.href)
+        if (isDashboard) {
+            updateDashboardSections(screen);
             return;
         }
     }
