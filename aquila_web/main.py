@@ -2049,10 +2049,24 @@ _OTA_GHCR_REPO_UI  = _OTA_GHCR_BASE + "-ui"
 _OTA_IMAGE_TAG = os.getenv("IMAGE_TAG", "")   # dev | pilot | prod — set by device.env
 _OTA_POLL_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL", "300"))  # seconds
 
+# Operator-facing update messages (issue #423). The technical cause always goes
+# to the log; only these ever reach the screen.
+UPDATE_CHECK_FAILED = "Could not check for updates"
+UPDATE_APPLY_FAILED = "Update failed. Please try again."
+# A missing registry token or ring tag means the device was provisioned wrong.
+# Restarting cannot fix it, so this omits the general page's "try again or
+# restart the device" line and sends the operator straight to support.
+UPDATE_NOT_CONFIGURED = (
+    "Something went wrong. Please contact Acorn Genetics for support."
+)
+
 _update_available: bool = False
 _update_dismissed: bool = False
 _update_status: str = "idle"   # idle | checking | available | updating | error
 _update_error: str | None = None
+# Kept apart so an apply failure can never be reported as a check failure (#423).
+_check_error: str | None = None
+_apply_error: str | None = None
 _update_last_checked: str | None = None
 # Digests of the images actually running — injected at deploy time via env vars.
 # Fall back to the first GHCR poll result if not set.
@@ -2154,14 +2168,41 @@ async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> s
         return None
 
 
+def _fail_check(message: str) -> None:
+    """Record a failed check so the panel renders it as a failure.
+
+    Check and apply keep their errors apart (#423): they shared one slot, so a
+    failed update could surface to the operator under a "could not check for
+    updates" heading.
+    """
+    global _update_status, _update_error, _update_available, _check_error, _apply_error
+    _update_available = False
+    _check_error = message
+    # The check just ran and failed; an older apply failure is no longer what
+    # the operator is looking at.
+    _apply_error = None
+    _update_status = "error"
+    _update_error = message
+
+
+def _fail_apply(message: str) -> None:
+    global _update_status, _update_error, _apply_error, _check_error
+    _apply_error = message
+    _check_error = None
+    _update_status = "error"
+    _update_error = message
+
+
 async def _do_check_update() -> None:
     global _update_available, _update_status, _update_error, _update_last_checked
     global _startup_image_digest, _startup_image_digest_ui, _latest_ghcr_digest, _latest_ghcr_digest_ui
     _update_status = "checking"
     try:
         if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
-            _update_status = "idle"
-            _update_error = "Registry credentials or IMAGE_TAG not configured"
+            # Provisioned wrong, not a transient fault: retrying and restarting
+            # will not help, so the operator is pointed straight at support.
+            logger.error("update check: registry credentials or IMAGE_TAG not configured")
+            _fail_check(UPDATE_NOT_CONFIGURED)
             return
         latest_api, latest_ui = await asyncio.gather(
             _ghcr_manifest_digest(_OTA_GHCR_REPO_API, _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN),
@@ -2169,8 +2210,10 @@ async def _do_check_update() -> None:
         )
         _update_last_checked = datetime.utcnow().isoformat() + "Z"
         if latest_api is None and latest_ui is None:
-            _update_status = "idle"
-            _update_error = "Registry unreachable or credentials invalid"
+            # Left the status at "idle" until #423, which the panel renders as
+            # a green "Software is up to date." — a failed check reported success.
+            logger.warning("update check: registry unreachable or credentials invalid")
+            _fail_check(UPDATE_CHECK_FAILED)
             return
         if latest_api is not None:
             _latest_ghcr_digest = latest_api
@@ -2189,9 +2232,11 @@ async def _do_check_update() -> None:
             _update_available = False
             _update_status = "idle"
         _update_error = None
+        _check_error = None
+        _apply_error = None
     except Exception as e:
-        _update_status = "error"
-        _update_error = str(e)
+        logger.exception("update check failed: %s", e)
+        _fail_check(UPDATE_CHECK_FAILED)
 
 
 @app.get("/update/status")
@@ -2209,6 +2254,9 @@ async def get_update_status():
         "available": available,
         "dismissed": _update_dismissed,
         "status": status,
+        # Which flow produced the error, so the panel cannot render an apply
+        # failure under a "could not check for updates" heading (#423).
+        "error_kind": "check" if _check_error else ("apply" if _apply_error else None),
         "error": _update_error,
         "last_checked": _update_last_checked,
     }
@@ -2217,7 +2265,14 @@ async def get_update_status():
 @app.post("/update/check")
 async def trigger_update_check():
     if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
-        return {"ok": False, "error": "Registry credentials or IMAGE_TAG not configured"}
+        # Answered 200 with ok=false until #423, so the page's error branch —
+        # which tests the HTTP status — never fired and this was unreachable.
+        logger.error("update check requested but registry credentials/IMAGE_TAG are unset")
+        _fail_check(UPDATE_NOT_CONFIGURED)
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "error": UPDATE_NOT_CONFIGURED},
+        )
     asyncio.create_task(_do_check_update())
     return {"ok": True, "message": "checking"}
 
@@ -2276,13 +2331,13 @@ async def apply_update():
                     await _do_check_update()
             asyncio.create_task(_deferred_status_reset())
             return {"ok": True, "message": "Update triggered — containers will restart shortly."}
-        _update_status = "error"
-        _update_error = f"Watchtower returned HTTP {r.status_code}"
-        return {"ok": False, "error": _update_error}
+        logger.error("update apply: watchtower returned HTTP %s", r.status_code)
+        _fail_apply(UPDATE_APPLY_FAILED)
+        return {"ok": False, "error": UPDATE_APPLY_FAILED}
     except Exception as e:
-        _update_status = "error"
-        _update_error = str(e)
-        return {"ok": False, "error": str(e)}
+        logger.exception("update apply failed: %s", e)
+        _fail_apply(UPDATE_APPLY_FAILED)
+        return {"ok": False, "error": UPDATE_APPLY_FAILED}
 
 
 @app.post("/update/dismiss")
