@@ -212,6 +212,19 @@ def _delete_profiles_for_ssid(ssid: str) -> None:
             _nmcli("connection", "delete", name)
 
 
+def _connect_failed(ssid: str, stage: str, err: str) -> dict:
+    """Log what nmcli actually said; hand the operator something actionable.
+
+    nmcli reports a too-short password when the profile is created
+    ("802-11-wireless-security.psk: property is invalid") and a wrong-but-valid
+    password when the profile is activated ("Secrets were required, but not
+    provided"). Both used to be painted verbatim onto the kiosk. The operator's
+    next step is identical either way, so both give one message (#422).
+    """
+    log.warning("wifi connect failed for %r at %s: %s", ssid, stage, err)
+    return {"ok": False, "error": f'Failed to add "{ssid}". Please try again'}
+
+
 def _wifi_connect(ssid: str, password: str) -> dict:
     _delete_profiles_for_ssid(ssid)
     if password:
@@ -227,7 +240,7 @@ def _wifi_connect(ssid: str, password: str) -> dict:
             "802-11-wireless.bssid", "",
         )
         if code != 0:
-            return {"ok": False, "error": err}
+            return _connect_failed(ssid, "add", err)
         code, _, err = _nmcli("connection", "up", ssid)
     else:
         code, _, err = _nmcli(
@@ -239,11 +252,12 @@ def _wifi_connect(ssid: str, password: str) -> dict:
             "connection.permissions", "",
         )
         if code != 0:
-            return {"ok": False, "error": err}
+            return _connect_failed(ssid, "add", err)
         code, _, err = _nmcli("connection", "up", ssid)
-    if code == 0:
-        _nmcli("connection", "modify", ssid, "802-11-wireless.bssid", "")
-    return {"ok": code == 0, "error": err if code != 0 else None}
+    if code != 0:
+        return _connect_failed(ssid, "up", err)
+    _nmcli("connection", "modify", ssid, "802-11-wireless.bssid", "")
+    return {"ok": True, "error": None}
 
 
 def _wifi_forget(ssid: str) -> dict:

@@ -1299,13 +1299,13 @@ async def button_run():
     logger.info("Run button pressed")
     if not selected_profile:
         run_requested = False
-        return {"ok": False, "message": "Select a profile before running"}
+        return {"ok": False, "message": "Select a profile before running."}
     if not run_name or not run_name.strip():
         run_requested = False
-        return {"ok": False, "message": "Enter a run name before running"}
+        return {"ok": False, "message": "Enter a run name before running."}
     if drawer_state_open and not drawer_state_closed:
         run_requested = False
-        return {"ok": False, "message": "Close the drawer before running"}
+        return {"ok": False, "message": "Close the drawer before running."}
     if DEV_SIMULATE:
         if run_in_progress:
             return {"ok": False, "message": "Run already in progress"}
@@ -2008,7 +2008,10 @@ async def wifi_connect(body: WifiConnect):
     try:
         return await _kiosk_post("/wifi/connect", {"ssid": body.ssid, "password": body.password})
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        # kiosk-control is down — a different failure from a bad password, and
+        # the operator must not be shown the raw Python error (#422).
+        logger.warning("wifi connect proxy failed for %r: %s", body.ssid, e)
+        return {"ok": False, "error": "Connection failed"}
 
 class WifiForget(BaseModel):
     ssid: str
@@ -2018,7 +2021,9 @@ async def wifi_forget(body: WifiForget):
     try:
         return await _kiosk_post("/wifi/forget", {"ssid": body.ssid})
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        # This one also feeds a raw alert() box on the saved-networks list.
+        logger.warning("wifi forget proxy failed for %r: %s", body.ssid, e)
+        return {"ok": False, "error": "Connection failed"}
 
 @app.get("/wifi/saved")
 async def wifi_saved():

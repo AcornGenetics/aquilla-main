@@ -277,24 +277,70 @@ class TestWifiConnect:
         assert result["ok"] is True
         assert result["error"] is None
 
-    def test_returns_ok_false_when_connection_add_fails(self):
+    # A password that is too short fails when the profile is created; a password
+    # that is well-formed but wrong fails when the profile is activated. nmcli
+    # words those two very differently, and the operator was shown the raw text
+    # ("802-11-wireless-security.psk: property is invalid"). Both now give the
+    # same actionable message (#422).
+    OPERATOR_MESSAGE = 'Failed to add "HomeNet". Please try again'
+
+    def test_malformed_password_gives_the_operator_message(self):
         side_effects = self._no_profiles() + [
-            _nmcli_result(1, "", "Error: failed to add connection"),
+            _nmcli_result(
+                1, "",
+                "Error: Failed to add 'HomeNet' connection: "
+                "802-11-wireless-security.psk: property is invalid",
+            ),
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects):
-            result = kc._wifi_connect("HomeNet", "wrongpass")
+            result = kc._wifi_connect("HomeNet", "short")
         assert result["ok"] is False
-        assert "failed to add" in result["error"]
+        assert result["error"] == self.OPERATOR_MESSAGE
 
-    def test_returns_ok_false_when_connection_up_fails(self):
+    def test_wrong_password_gives_the_same_operator_message(self):
         side_effects = self._no_profiles() + [
             _nmcli_result(0, ""),                              # connection add OK
-            _nmcli_result(1, "", "Secrets were required"),     # connection up fails
+            _nmcli_result(
+                1, "",
+                "Error: Connection activation failed: (7) Secrets were required, "
+                "but not provided.",
+            ),
         ]
         with patch.object(kc, "_nmcli", side_effect=side_effects):
             result = kc._wifi_connect("HomeNet", "wrongpass")
         assert result["ok"] is False
-        assert "Secrets were required" in result["error"]
+        assert result["error"] == self.OPERATOR_MESSAGE
+
+    def test_raw_nmcli_output_never_reaches_the_operator(self):
+        raw = "802-11-wireless-security.psk: property is invalid"
+        side_effects = self._no_profiles() + [_nmcli_result(1, "", raw)]
+        with patch.object(kc, "_nmcli", side_effect=side_effects):
+            result = kc._wifi_connect("HomeNet", "short")
+        assert raw not in result["error"]
+        assert "nmcli" not in result["error"]
+        assert "802-11" not in result["error"]
+
+    def test_the_network_name_is_named_back_to_the_operator(self):
+        side_effects = self._no_profiles() + [_nmcli_result(1, "", "boom")]
+        with patch.object(kc, "_nmcli", side_effect=side_effects):
+            result = kc._wifi_connect("acorn-wifi", "short")
+        assert result["error"] == 'Failed to add "acorn-wifi". Please try again'
+
+    def test_raw_nmcli_output_is_kept_in_the_log(self):
+        """Hiding it from the operator must not lose it for diagnosis.
+
+        Asserts against the logger rather than caplog: other modules in the
+        suite call logging.config.dictConfig, which disables existing loggers by
+        default, so caplog captures nothing here once those have been imported.
+        """
+        raw = "802-11-wireless-security.psk: property is invalid"
+        side_effects = self._no_profiles() + [_nmcli_result(1, "", raw)]
+        with patch.object(kc, "log") as mock_log:
+            with patch.object(kc, "_nmcli", side_effect=side_effects):
+                kc._wifi_connect("HomeNet", "short")
+        logged = " ".join(str(a) for c in mock_log.warning.call_args_list for a in c[0])
+        assert raw in logged
+        assert "HomeNet" in logged
 
     def test_purges_existing_stale_profile_before_connecting(self):
         side_effects = [

@@ -634,7 +634,7 @@ async function saveProfile() {
     });
     if (!response.ok) {
       const error = await response.json();
-      saveStatus.textContent = error.detail || "Failed to save";
+      saveStatus.textContent = formatSaveError(error.detail);
       return;
     }
     saveStatus.textContent = "Saved";
