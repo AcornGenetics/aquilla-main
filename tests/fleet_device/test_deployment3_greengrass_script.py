@@ -79,3 +79,38 @@ def test_retains_deployment2_device_build():
     # Everything else from deployment2 is kept (spot-check across phases).
     for marker in ("I2C", "Tailscale", "aquila-cert-renew", "security.sh", "Plymouth"):
         assert marker in SCRIPT, f"deployment3 dropped a shared step: {marker}"
+
+
+# --- Openbox window decorations, #428 ----------------------------------------
+# Openbox decorates every window by default and --kiosk does not survive a window
+# being re-mapped, so Chromium's window briefly wears a title bar reading
+# "Untitled — Chromium" at startup. Verified on sn03.
+
+def test_disables_window_decorations():
+    assert "aquila-kiosk-no-decor" in SCRIPT
+    assert "<decor>no</decor>" in SCRIPT
+
+
+def test_rc_xml_copied_from_distro_not_written_from_scratch():
+    # Openbox needs a complete rc.xml; hand-writing one would drop every other
+    # distro default (theme, keybinds, mouse behaviour).
+    assert "cp /etc/xdg/openbox/rc.xml" in SCRIPT
+
+
+def test_rc_xml_rule_inserted_inside_applications_block():
+    # A second top-level <applications> element is invalid and silently ignored,
+    # so the rule must go inside the existing one.
+    assert "s|</applications>|" in SCRIPT
+
+
+def test_rc_xml_validated_before_reboot():
+    # A malformed rc.xml leaves Openbox unable to start — blank screen on a
+    # device that may not be physically reachable. Validate and roll back.
+    assert "xml.etree.ElementTree" in SCRIPT
+    assert "restoring stock file" in SCRIPT
+    assert 'run_test "rc.xml is valid XML"' in SCRIPT
+
+
+def test_rc_xml_edit_is_idempotent():
+    # Re-running deployment3 must not stack duplicate rules into rc.xml.
+    assert "grep -q 'aquila-kiosk-no-decor'" in SCRIPT

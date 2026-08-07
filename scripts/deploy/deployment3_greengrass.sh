@@ -791,10 +791,43 @@ if [ ! -f /tmp/kiosk_disabled ]; then
 fi
 EOF
 
+# Openbox decorates every window by default, and --kiosk does not survive a
+# window being re-mapped: at startup Chromium's window appears briefly before it
+# is fullscreened, and Openbox paints a title bar reading "Untitled — Chromium"
+# across the top of the display (#428). The legacy WebKit kiosk guarded against
+# this explicitly (server_web/kiosk.py, set_decorated(False)); the Chromium path
+# relies on --kiosk alone and had no equivalent until now.
+#
+# A kiosk never wants decoration on anything, so the rule is unconditional.
+# Openbox has no drop-in config directory — the only way to set a window rule is
+# to own a copy of rc.xml, which is why this copies the distro file rather than
+# patching it in place. That is the same "copied file drifts from upstream"
+# pattern that caused #424 and #426, so it is deliberate and documented here.
+#
+# Verified on sn03: title bar gone, kiosk otherwise unaffected.
+OPENBOX_RC="${PI_HOME}/.config/openbox/rc.xml"
+if [[ ! -f "${OPENBOX_RC}" && -f /etc/xdg/openbox/rc.xml ]]; then
+    cp /etc/xdg/openbox/rc.xml "${OPENBOX_RC}"
+fi
+if [[ -f "${OPENBOX_RC}" ]] && ! grep -q 'aquila-kiosk-no-decor' "${OPENBOX_RC}"; then
+    # Insert inside the existing <applications> block; a second top-level
+    # <applications> element would be invalid and silently ignored.
+    sed -i 's|</applications>|  <!-- aquila-kiosk-no-decor: see #428 -->\n  <application class="*">\n    <decor>no</decor>\n  </application>\n</applications>|' "${OPENBOX_RC}"
+    # A malformed rc.xml leaves Openbox with no window manager, so validate
+    # before letting it reach a reboot. Restore the stock file if we broke it.
+    if ! python3 -c "import xml.etree.ElementTree as ET; ET.parse('${OPENBOX_RC}')" 2>/dev/null; then
+        echo "  ✗ rc.xml failed XML validation — restoring stock file"
+        cp /etc/xdg/openbox/rc.xml "${OPENBOX_RC}"
+    fi
+fi
+
 chown -R pi:pi "${PI_HOME}/.config/openbox"
 
 AUTOSTART="${PI_HOME}/.config/openbox/autostart"
 run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
+run_test "openbox rc.xml exists"       "test -f ${OPENBOX_RC}"
+run_test "window decorations disabled" "grep -q 'aquila-kiosk-no-decor' ${OPENBOX_RC}"
+run_test "rc.xml is valid XML"         "python3 -c \"import xml.etree.ElementTree as ET; ET.parse('${OPENBOX_RC}')\""
 run_test "splash page installed"       "test -f /opt/aquila/splash.html"
 run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
 run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
