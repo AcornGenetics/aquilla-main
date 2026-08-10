@@ -79,3 +79,37 @@ def test_retains_deployment2_device_build():
     # Everything else from deployment2 is kept (spot-check across phases).
     for marker in ("I2C", "Tailscale", "aquila-cert-renew", "security.sh", "Plymouth"):
         assert marker in SCRIPT, f"deployment3 dropped a shared step: {marker}"
+
+
+# --- Same-origin splash via nginx, #431 --------------------------------------
+# The splash used to load from file:// and redirect to http://localhost:8090.
+# That crosses an origin boundary, so Chromium discards the renderer it just
+# warmed up and builds a second one for the app — the visible blank between
+# splash and app. Measured A/B on sn11: same-origin is seamless, file:// is not.
+
+def test_kiosk_opens_the_nginx_origin():
+    assert "--kiosk http://localhost:8080/" in SCRIPT
+
+
+def test_no_file_url_splash():
+    # The kiosk must not open the splash as a local file — that is the origin
+    # boundary this change removes.
+    assert "file:///opt/aquila/splash.html" not in SCRIPT.replace(
+        "! grep -q 'file:///opt/aquila/splash.html'", ""
+    )
+
+
+def test_splash_not_installed_on_host():
+    # It ships in the UI image (Dockerfile.ui copies aquila_web/static/), so a
+    # host copy would be a second file drifting from the repo — how #424 and
+    # #426 happened.
+    assert "-o /opt/aquila/splash.html" not in SCRIPT
+
+
+def test_web_security_no_longer_disabled():
+    # A file:// page fetching http://localhost:8090/health is cross-origin, so
+    # the old splash only worked because Chromium ran with web security off, on
+    # a device holding device certificates. Same-origin needs neither flag.
+    launch = SCRIPT.split("chromium \\")[1] if "chromium \\" in SCRIPT else ""
+    assert "--disable-web-security" not in launch
+    assert "--allow-file-access-from-files" not in launch

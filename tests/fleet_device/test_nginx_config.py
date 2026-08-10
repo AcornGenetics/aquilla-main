@@ -87,15 +87,57 @@ def test_no_bare_host_docker_internal_in_proxy_pass():
 
 def test_backend_upstream_uses_container_name():
     """
-    The main backend proxy_pass must use the Docker service name
-    (aquila-backend), not localhost or a host IP. Container-to-container
-    traffic must go via the Docker network.
+    The backend upstream must be the Docker service name (aquila-backend), not
+    localhost or a host IP. Container-to-container traffic goes via the Docker
+    network.
+
+    The name now appears in a `set $aq_backend http://aquila-backend:8090`
+    directive rather than inline in proxy_pass, so nginx resolves it per request
+    instead of at startup (#431). The container-name requirement is unchanged —
+    only where the name is written has moved.
     """
     conf = _read_conf()
-    assert "proxy_pass http://aquila-backend:" in conf, (
-        "Main backend proxy_pass should use the container name 'aquila-backend', "
+    assert "http://aquila-backend:8090" in conf, (
+        "Backend upstream should use the container name 'aquila-backend', "
         "not localhost or a hardcoded IP."
     )
+    assert "proxy_pass http://localhost" not in conf
+    assert "proxy_pass http://127.0.0.1" not in conf
+
+
+def test_backend_upstream_resolved_per_request():
+    """
+    Every proxy_pass to aquila-backend must go through a variable, so the name is
+    resolved at request time. A literal upstream is resolved once at startup and
+    nginx refuses to start if the backend container does not exist yet — which is
+    exactly the state during boot, and the whole point of the splash fallback.
+
+    Same failure mode that took down aquila-ui on sn01, previously only guarded
+    for host.docker.internal.
+    """
+    conf = _read_conf()
+    for line in conf.splitlines():
+        line = line.strip()
+        if line.startswith("proxy_pass") and "aquila-backend" in line:
+            assert "$" in line, (
+                "proxy_pass to aquila-backend must use a variable so the name is "
+                f"resolved per request, not at startup:\n  {line}"
+            )
+
+
+def test_root_falls_back_to_splash_when_backend_is_down():
+    """
+    The kiosk opens / and never navigates away (#431). While the backend is
+    starting nginx cannot connect, and that must serve the boot splash rather
+    than an error page — otherwise the device shows a connection failure for the
+    several seconds the app takes to come up.
+    """
+    conf = _read_conf()
+    assert "error_page" in conf and "@splash" in conf, (
+        "location = / must fall back to @splash on upstream failure"
+    )
+    assert "location @splash" in conf
+    assert "/splash.html" in conf
 
 
 def test_no_hardcoded_host_ips():

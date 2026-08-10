@@ -729,11 +729,11 @@ phase_start "9b" "Chromium Kiosk (Openbox autostart)"
 rm -f "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
 rm -f "${PI_HOME}/.config/labwc/autostart"
 
-# Install boot splash page
-curl -fsSL \
-    -H "Authorization: token ${GHCR_TOKEN}" \
-    "${RAW_REPO_URL}/aquila_web/static/splash.html" \
-    -o /opt/aquila/splash.html
+# The boot splash is no longer installed on the host (#431). It ships inside the
+# UI image — Dockerfile.ui copies aquila_web/static/ into nginx's document root —
+# and nginx serves it on :8080 whenever the backend is not answering. Keeping a
+# second copy on the host would be one more file drifting from the repo, which is
+# how #424 and #426 happened.
 
 mkdir -p "${PI_HOME}/.config/openbox"
 
@@ -767,7 +767,7 @@ sleep 3
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
 if [ ! -f /tmp/kiosk_disabled ]; then
   chromium \
-    --kiosk file:///opt/aquila/splash.html \
+    --kiosk http://localhost:8080/ \
     --incognito \
     --noerrdialogs \
     --disable-infobars \
@@ -781,8 +781,6 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --enable-gpu-rasterization \
     --use-angle=gles \
     --ozone-platform=x11 \
-    --disable-web-security \
-    --allow-file-access-from-files \
     --user-data-dir=/tmp/chromium-kiosk \
     --disk-cache-size=0 \
     --start-maximized \
@@ -795,8 +793,10 @@ chown -R pi:pi "${PI_HOME}/.config/openbox"
 
 AUTOSTART="${PI_HOME}/.config/openbox/autostart"
 run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
-run_test "splash page installed"       "test -f /opt/aquila/splash.html"
-run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
+run_test "kiosk loads nginx origin"    "grep -q 'kiosk http://localhost:8080/' ${AUTOSTART}"
+run_test "no file:// splash"           "! grep -q 'file:///opt/aquila/splash.html' ${AUTOSTART}"
+run_test "web security not disabled"   "! grep -q 'disable-web-security' ${AUTOSTART}"
+run_test "no file access override"     "! grep -q 'allow-file-access-from-files' ${AUTOSTART}"
 run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
 run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
 run_test "user-data-dir flag present"  "grep -q 'user-data-dir' ${AUTOSTART}"
