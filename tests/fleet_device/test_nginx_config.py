@@ -152,3 +152,46 @@ def test_no_hardcoded_host_ips():
         f"nginx.conf contains hardcoded Docker bridge IPs: {matches}. "
         "Use container service names or host.docker.internal with a resolver."
     )
+
+
+def test_static_prefix_maps_to_flat_document_root():
+    """
+    The app references its assets relatively (href="static/styles.css"), which
+    resolves to /static/… — but Dockerfile.ui copies aquila_web/static/ INTO the
+    document root, so the files are at the top level with no static/ subdir.
+
+    Serving that prefix with a plain root+try_files looks for
+    /usr/share/nginx/html/static/styles.css, which does not exist: measured on
+    sn10, /static/styles.css returned 404 and the app rendered unstyled.
+
+    try_files must NOT be combined with alias here — it resolves $uri against the
+    aliased path and reintroduces the same wrong directory.
+    """
+    conf = _read_conf()
+    blocks = [b for b in _location_blocks(conf) if b.lstrip().startswith("location /static/")]
+    assert blocks, "no location /static/ block found"
+    block = blocks[0]
+    assert "alias /usr/share/nginx/html/" in block, (
+        "/static/ must alias the flat document root, not use root+try_files"
+    )
+    assert "try_files" not in block, (
+        "try_files with alias resolves against the aliased path and breaks it"
+    )
+
+
+def test_backend_failure_is_fast():
+    """
+    While the backend container does not exist its name does not resolve. With
+    nginx's defaults (30s resolver, 60s proxy) every splash health poll hung for
+    a full minute — measured on sn10: 504 in 60.03s — so the splash stayed up
+    long after the app was ready.
+
+    The splash polls once a second and must not be blocked for longer than that
+    by a backend which is simply not up yet.
+    """
+    conf = _read_conf()
+    assert "resolver_timeout" in conf, (
+        "resolver_timeout must be set — the 30s default stalls every poll while "
+        "the backend container is absent"
+    )
+    assert "proxy_connect_timeout" in conf
