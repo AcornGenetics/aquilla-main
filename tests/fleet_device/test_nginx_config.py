@@ -21,21 +21,28 @@ def _read_conf() -> str:
 
 
 def _location_blocks(conf: str) -> list[str]:
-    """Extract each location { ... } block as a string."""
+    """
+    Extract each location { ... } block as a string.
+
+    The opening brace on the `location` line must be counted, otherwise depth
+    starts at 0 and the first body line closes the block — which silently
+    truncated every block to one line and let tests pass while inspecting almost
+    nothing.
+    """
     blocks = []
     depth = 0
     current: list[str] = []
     inside = False
     for line in conf.splitlines():
-        if re.match(r"\s*location\s+", line):
+        if not inside and re.match(r"\s*location\s+", line):
             inside = True
-            depth = 0
             current = [line]
+            depth = line.count("{") - line.count("}")
             continue
         if inside:
             current.append(line)
             depth += line.count("{") - line.count("}")
-            if depth <= 0 and "{" in "\n".join(current):
+            if depth <= 0:
                 blocks.append("\n".join(current))
                 inside = False
                 current = []
@@ -195,3 +202,18 @@ def test_backend_failure_is_fast():
         "the backend container is absent"
     )
     assert "proxy_connect_timeout" in conf
+
+
+def test_splash_fallback_is_not_cacheable():
+    """
+    / serves two different documents depending on whether the backend is up. The
+    transient one must carry no-store, or the browser may re-serve the splash
+    from cache when the page navigates back to / after the app is ready — leaving
+    the kiosk on the splash long after it should have moved on.
+    """
+    conf = _read_conf()
+    blocks = [b for b in _location_blocks(conf) if b.lstrip().startswith("location @splash")]
+    assert blocks, "no location @splash block found"
+    assert "no-store" in blocks[0], (
+        "@splash must send Cache-Control: no-store — one URL, two documents"
+    )
