@@ -705,11 +705,26 @@ java -Droot="${GG_ROOT}" -Dlog.store=FILE \
     --provision false
 
 # The component runs as ggc_user, which must (a) reach the Docker socket to run
-# the compose stack and (b) read the root-owned device.env the compose injects.
-# Without these the component goes BROKEN ("permission denied ... docker.sock").
+# the compose stack and (b) read the root-owned device.env the compose injects as
+# its env_file. Without these the component goes BROKEN ("permission denied").
 usermod -aG docker ggc_user
 chgrp ggc_group /opt/aquila/config/device.env && chmod 640 /opt/aquila/config/device.env
 chmod o+rx /opt/aquila /opt/aquila/config
+
+# ...but a one-time chmod is fragile: re-enrolment (enroll_device.py) and cert
+# renewal rewrite files under /opt/aquila/config and can leave device.env at
+# root:root 0600, which silently re-breaks the component (ggc_user can no longer
+# read the compose env_file) -- and a plain reboot does NOT heal it. Install a
+# tmpfiles.d rule so systemd re-asserts the correct group+mode on every boot; a
+# rewrite then self-heals on the next restart instead of bricking the app.
+cat > /etc/tmpfiles.d/aquila-device-env.conf <<'EOF'
+# Keep the compose env_file readable by the Greengrass component user: ggc_user is
+# in ggc_group, so 0640 root:ggc_group lets the component read it while the file
+# stays owner-write-only. Re-applied on every boot so a re-enrolment/renewal that
+# resets it to 0600 can't leave the component BROKEN.
+z /opt/aquila/config/device.env 0640 root ggc_group -
+EOF
+systemd-tmpfiles --create /etc/tmpfiles.d/aquila-device-env.conf 2>/dev/null || true
 
 # Let the kiosk reach the screen before the nucleus starts its heavy first-boot
 # work (JRE, JITP registration, ~497 MB image pull). The installer registers
@@ -733,6 +748,8 @@ run_test "provisioned with device cert"   "grep -q 'device.crt' /opt/aquila/conf
 run_test "role alias configured"          "grep -q '${GG_ROLE_ALIAS}' /opt/aquila/config/greengrass-config.yaml"
 run_test "ggc_user in docker group"       "id -nG ggc_user | grep -qw docker"
 run_test "device.env readable by ggc_group" "test \"\$(stat -c '%G' /opt/aquila/config/device.env)\" = ggc_group"
+run_test "device.env perms 0640 (ggc_user can read)" "test \"\$(stat -c '%a' /opt/aquila/config/device.env)\" = 640"
+run_test "device.env perms self-heal on boot" "grep -q '/opt/aquila/config/device.env 0640 root ggc_group' /etc/tmpfiles.d/aquila-device-env.conf"
 
 phase_pass "Greengrass nucleus installed + provisioned; ggc_user granted Docker + config access (JITP -> ${GG_THING_GROUP})"
 
