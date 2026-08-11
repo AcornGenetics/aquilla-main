@@ -61,6 +61,11 @@ OPTICS_LOG_DIR = (BASE_DIR / "logs" / "optics").resolve()
 # Cap the raw file read into memory (a normal run is ~1 MB); bounds a
 # huge-file / device.env-style read and the per-request memory spike.
 MAX_OPTICS_BYTES = 16 * 1024 * 1024
+# Profiles are 2-3 KB, so the body rides inline on run_complete rather than being
+# chunked like optics logs (#417). The cap is deliberately far above a real
+# profile: a pathological file sends profile_json: null instead of bloating the
+# outbox and the ingest payload.
+MAX_PROFILE_JSON_BYTES = 256 * 1024
 HISTORY_PATH = BASE_DIR / "logs" / "history.json"
 # Durable run state so the running profile survives a backend restart (#272
 # follow-up). run_name is re-derived from history on startup; selected_profile
@@ -81,12 +86,54 @@ def resolve_profile_dir() -> Path:
         return DEFAULT_PROFILE_DIR
     return LOCAL_PROFILE_DIR
 
-def _load_profile_labels(profile_name: str | None) -> dict:
+def _read_profile_at(path: Path) -> dict | None:
+    """Parse a profile file, or None if it is unreadable / not JSON."""
+    try:
+        with path.open() as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _profile_by_path(profile_dir: Path, profile_ref: str) -> tuple[Path, dict] | None:
+    """Resolve the reference AS A PATH under profile_dir — what the run itself does.
+
+    ``/profile/select`` stores the relative path ``GET /profiles`` emits
+    (``local/A3_Invalid_Temp.json``), and the run loads ``profiles/<ref>``
+    directly (state_run_assay.py). Trying the path first means the snapshot is
+    the exact file that drove the run, and disambiguates the duplicate stems
+    that ship in both ``profiles/`` and ``profiles/local/``.
+
+    The ref is device state, not a trusted path: anything resolving outside
+    profile_dir is refused rather than read (cf. /events/optics_readings).
+    """
+    candidate = (profile_dir / profile_ref).resolve()
+    if not candidate.is_relative_to(profile_dir.resolve()):
+        logger.warning("Profile ref %r escapes the profile dir; refusing to read", profile_ref)
+        return None
+    if not candidate.is_file():
+        return None
+    data = _read_profile_at(candidate)
+    return None if data is None else (candidate, data)
+
+
+def _find_profile(profile_name: str | None) -> tuple[Path, dict] | None:
+    """Locate the profile file the run used, and its parsed body.
+
+    The single resolution rule shared by every profile lookup. Path first (the
+    run's own rule), then a scan matching the body's ``name``/``title``, the
+    file stem, or the file name — because callers also pass display names, not
+    only ids. Extracted so the profile_json snapshot (#417) captures the EXACT
+    file that drove the run rather than a second rule that could drift.
+    """
     if not profile_name:
-        return {}
+        return None
     profile_dir = resolve_profile_dir()
     if not profile_dir.exists():
-        return {}
+        return None
+    direct = _profile_by_path(profile_dir, profile_name)
+    if direct is not None:
+        return direct
     for path in profile_dir.rglob("*.json"):
         try:
             with path.open() as f:
@@ -94,29 +141,55 @@ def _load_profile_labels(profile_name: str | None) -> dict:
             title = data.get("title", path.stem)
             profile_title = data.get("name", title)
             if profile_title == profile_name or path.stem == profile_name or path.name == profile_name:
-                labels = data.get("labels")
-                return labels if isinstance(labels, dict) else {}
+                return path, data
         except Exception:
             continue
-    return {}
+    return None
+
+def _load_profile_labels(profile_name: str | None) -> dict:
+    found = _find_profile(profile_name)
+    if found is None:
+        return {}
+    labels = found[1].get("labels")
+    return labels if isinstance(labels, dict) else {}
 
 def _profile_rox_unavailable(profile_name: str | None) -> bool:
+    found = _find_profile(profile_name)
+    if found is None:
+        return False
+    return bool(found[1].get("rox_unavailable", False))
+
+def _load_profile_json(profile_name: str | None) -> dict | None:
+    """The run's profile body, for the run_complete snapshot (#417).
+
+    Returns the parsed object so the loader stores it as JSONB without
+    re-parsing. NEVER raises: a missing, unreadable, oversize, or malformed
+    profile logs a warning and yields None, because a completed run must still
+    reach the cloud. Older devices simply omit the field, so the cloud already
+    tolerates its absence.
+    """
     if not profile_name:
-        return False
-    profile_dir = resolve_profile_dir()
-    if not profile_dir.exists():
-        return False
-    for path in profile_dir.rglob("*.json"):
-        try:
-            with path.open() as f:
-                data = json.load(f)
-            title = data.get("title", path.stem)
-            profile_title = data.get("name", title)
-            if profile_title == profile_name or path.stem == profile_name or path.name == profile_name:
-                return bool(data.get("rox_unavailable", False))
-        except Exception:
-            continue
-    return False
+        return None
+    found = _find_profile(profile_name)
+    if found is None:
+        logger.warning("No profile file found for %r; sending profile_json: null", profile_name)
+        return None
+    path, data = found
+    try:
+        size = path.stat().st_size
+    except OSError as e:
+        logger.warning("Could not stat profile %s: %s; sending profile_json: null", path, e)
+        return None
+    if size > MAX_PROFILE_JSON_BYTES:
+        logger.warning(
+            "Profile %s is %d bytes, over the %d-byte cap; sending profile_json: null",
+            path, size, MAX_PROFILE_JSON_BYTES,
+        )
+        return None
+    if not isinstance(data, dict):
+        logger.warning("Profile %s is not a JSON object; sending profile_json: null", path)
+        return None
+    return data
 
 def _resolve_profile_display_name(profile_ref: str | None) -> str:
     """Resolve a profile reference to its human-readable display name.
@@ -741,6 +814,9 @@ async def _simulate_run(profile_name: str) -> None:
             "run_timestamp": run_timestamp,
             "tube_names": _tube_names_by_well(),
             "calls": _calls_from_file(results_file),
+            # The profile body travels with the Run: the device is the only place
+            # it exists at run time, and `profile` alone is just a path (#417).
+            "profile_json": _load_profile_json(profile_name),
         },
     )
 
@@ -940,6 +1016,11 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "run_timestamp": run_timestamp,
             "tube_names": _tube_names_by_well(req.tube_names),
             "calls": _calls_from_file(results_file) if results_file else [],
+            # The real-device path resolves the body here rather than in
+            # state_requests.emit_run_complete: this process already owns profile
+            # resolution (resolve_profile_dir), so the caller doesn't POST a 3 KB
+            # body over localhost just to have it forwarded verbatim (#417).
+            "profile_json": _load_profile_json(req.profile),
         },
     )
     # Summary call_evidence rides alongside run_complete on the same run_id (#297).
