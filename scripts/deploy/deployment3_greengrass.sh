@@ -695,6 +695,12 @@ services:
       iotRoleAlias: "${GG_ROLE_ALIAS}"
       iotDataEndpoint: "${GG_IOT_DATA_ENDPOINT}"
       iotCredEndpoint: "${GG_IOT_CRED_ENDPOINT}"
+      # Pin the Greengrass data-plane to the account's IoT data endpoint. Left
+      # empty the nucleus SDK defaults to the shared greengrass-ats.iot.<region>
+      # endpoint, which completes mTLS then closes with no HTTP response for this
+      # device -- wedging every deployment at ListThingGroupsForCoreDevice
+      # (#442). Same host as iotDataEndpoint, data-plane port 8443.
+      greengrassDataPlaneEndpoint: "${GG_IOT_DATA_ENDPOINT}"
 EOF
 
 java -Droot="${GG_ROOT}" -Dlog.store=FILE \
@@ -746,6 +752,7 @@ run_test "greengrass ordered after kiosk" "systemctl show -p After greengrass.se
 run_test "greengrass service installed"   "test -f /etc/systemd/system/greengrass.service"
 run_test "provisioned with device cert"   "grep -q 'device.crt' /opt/aquila/config/greengrass-config.yaml"
 run_test "role alias configured"          "grep -q '${GG_ROLE_ALIAS}' /opt/aquila/config/greengrass-config.yaml"
+run_test "data-plane endpoint pinned"     "grep -q 'greengrassDataPlaneEndpoint: \"${GG_IOT_DATA_ENDPOINT}\"' /opt/aquila/config/greengrass-config.yaml"
 run_test "ggc_user in docker group"       "id -nG ggc_user | grep -qw docker"
 run_test "device.env readable by ggc_group" "test \"\$(stat -c '%G' /opt/aquila/config/device.env)\" = ggc_group"
 run_test "device.env perms 0640 (ggc_user can read)" "test \"\$(stat -c '%a' /opt/aquila/config/device.env)\" = 640"
