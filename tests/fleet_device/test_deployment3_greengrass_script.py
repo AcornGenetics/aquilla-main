@@ -99,11 +99,10 @@ def test_no_file_url_splash():
     )
 
 
-def test_splash_not_installed_on_host():
-    # It ships in the UI image (Dockerfile.ui copies aquila_web/static/), so a
-    # host copy would be a second file drifting from the repo — how #424 and
-    # #426 happened.
-    assert "-o /opt/aquila/splash.html" not in SCRIPT
+def test_splash_installed_on_host_for_nginx():
+    # Host nginx serves the splash in the first seconds of boot, before Docker
+    # exists, so the file must be on the host filesystem.
+    assert "-o /opt/aquila/splash.html" in SCRIPT
 
 
 def test_web_security_no_longer_disabled():
@@ -113,3 +112,42 @@ def test_web_security_no_longer_disabled():
     launch = SCRIPT.split("chromium \\")[1] if "chromium \\" in SCRIPT else ""
     assert "--disable-web-security" not in launch
     assert "--allow-file-access-from-files" not in launch
+
+
+# --- Host nginx front door, #431 ---------------------------------------------
+# The kiosk opens http://localhost:8080/ and never navigates away, so that
+# address must answer from the first seconds of boot. Measured on sn09: the
+# compose stack takes ~30-40s while Chromium launches at ~8s, so a containerised
+# front door is not listening when the kiosk asks.
+
+def test_nginx_runs_on_the_host_not_in_docker():
+    assert "apt-get install -y nginx" in SCRIPT
+    assert "/etc/nginx/conf.d/aquila-kiosk.conf" in SCRIPT
+    assert "systemctl enable nginx" in SCRIPT
+
+
+def test_nginx_restarted_not_just_enabled():
+    # The package starts nginx on install, before the config exists, and
+    # `enable --now` does nothing to a running service — so the config would
+    # never load. Cost an hour on sn09.
+    assert "systemctl restart nginx" in SCRIPT
+
+
+def test_nginx_proxies_to_backend_on_loopback():
+    # Host-side, so the backend is reached via its published host port, not a
+    # Docker service name.
+    assert "proxy_pass http://127.0.0.1:8090" in SCRIPT
+
+
+def test_nginx_falls_back_to_splash():
+    assert "error_page 502 503 504 = @splash" in SCRIPT
+    assert "location @splash" in SCRIPT
+    assert "no-store" in SCRIPT
+
+
+def test_ui_container_does_not_claim_8080():
+    # Host nginx owns 8080; both publishing it would leave them fighting for the
+    # port and the stack failing to start.
+    compose = Path("fleet-config/greengrass-compose.yaml").read_text()
+    assert '"8080:80"' not in compose
+    assert '"8082:80"' in compose
