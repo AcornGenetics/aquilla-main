@@ -798,13 +798,21 @@ EOF
 # this explicitly (server_web/kiosk.py, set_decorated(False)); the Chromium path
 # relies on --kiosk alone and had no equivalent until now.
 #
+# The rule also forces the window fullscreen at map time. Without it Chromium's
+# window is mapped small and then resized up to fullscreen, and you watch it grow
+# — this is the "quadrant fill" reported on #428, which was mistaken for a slow
+# repaint for some time. Frame-by-frame capture on sn09 showed a part-sized,
+# decorated window rather than a partially painted one. Mapping it fullscreen
+# removes the intermediate sizes entirely.
+#
 # A kiosk never wants decoration on anything, so the rule is unconditional.
 # Openbox has no drop-in config directory — the only way to set a window rule is
 # to own a copy of rc.xml, which is why this copies the distro file rather than
 # patching it in place. That is the same "copied file drifts from upstream"
 # pattern that caused #424 and #426, so it is deliberate and documented here.
 #
-# Verified on sn03: title bar gone, kiosk otherwise unaffected.
+# Verified on sn03 (title bar gone) and sn09 (window arrives fullscreen; the
+# growing fill is gone). Kiosk otherwise unaffected on both.
 OPENBOX_RC="${PI_HOME}/.config/openbox/rc.xml"
 if [[ ! -f "${OPENBOX_RC}" && -f /etc/xdg/openbox/rc.xml ]]; then
     cp /etc/xdg/openbox/rc.xml "${OPENBOX_RC}"
@@ -812,7 +820,7 @@ fi
 if [[ -f "${OPENBOX_RC}" ]] && ! grep -q 'aquila-kiosk-no-decor' "${OPENBOX_RC}"; then
     # Insert inside the existing <applications> block; a second top-level
     # <applications> element would be invalid and silently ignored.
-    sed -i 's|</applications>|  <!-- aquila-kiosk-no-decor: see #428 -->\n  <application class="*">\n    <decor>no</decor>\n  </application>\n</applications>|' "${OPENBOX_RC}"
+    sed -i 's|</applications>|  <!-- aquila-kiosk-no-decor: see #428 -->\n  <application class="*">\n    <decor>no</decor>\n    <maximized>yes</maximized>\n    <fullscreen>yes</fullscreen>\n  </application>\n</applications>|' "${OPENBOX_RC}"
     # A malformed rc.xml leaves Openbox with no window manager, so validate
     # before letting it reach a reboot. Restore the stock file if we broke it.
     if ! python3 -c "import xml.etree.ElementTree as ET; ET.parse('${OPENBOX_RC}')" 2>/dev/null; then

@@ -114,3 +114,14 @@ def test_rc_xml_validated_before_reboot():
 def test_rc_xml_edit_is_idempotent():
     # Re-running deployment3 must not stack duplicate rules into rc.xml.
     assert "grep -q 'aquila-kiosk-no-decor'" in SCRIPT
+
+
+def test_kiosk_window_mapped_fullscreen():
+    """
+    Without this, Chromium's window is mapped small and then resized up, and the
+    growth is visible on screen — the "quadrant fill" on #428, which was mistaken
+    for a slow repaint until frame-by-frame capture on sn09 showed a part-sized
+    decorated window rather than a partially painted one.
+    """
+    assert "<fullscreen>yes</fullscreen>" in SCRIPT
+    assert "<maximized>yes</maximized>" in SCRIPT
