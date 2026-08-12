@@ -34,6 +34,19 @@ def test_security_script_downloaded() -> None:
     assert "security.sh" in SCRIPT
 
 
+# --- Tailscale skip flag (Phase 12) ------------------------------------------
+# SKIP_TAILSCALE=1 bypasses Phase 12 so a device can be provisioned without
+# joining the tailnet (or when interactive Tailscale auth is failing).
+
+def test_tailscale_skip_flag_guards_phase_12() -> None:
+    assert 'SKIP_TAILSCALE:-' in SCRIPT
+    assert "Tailscale skipped (SKIP_TAILSCALE=1)" in SCRIPT
+
+
+def test_tailscale_skip_documented_in_usage() -> None:
+    assert "SKIP_TAILSCALE=1" in SCRIPT
+
+
 # --- Fleet DNS forwarder (dnsmasq), #314 -------------------------------------
 # Container DNS freezes to the resolver captured at network-creation time; a
 # dnsmasq forwarder on the docker bridge gateway lets containers follow the
