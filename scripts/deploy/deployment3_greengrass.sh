@@ -226,6 +226,106 @@ systemctl restart dnsmasq
 phase_pass "dnsmasq forwarder installed on 172.18.0.1"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3d — Kiosk web front door (host nginx)
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "3d" "Kiosk web front door (host nginx)"
+
+# The kiosk opens http://localhost:8080/ and never navigates away (#431), so that
+# address must answer from the first seconds of boot. This runs on the HOST, not
+# in Docker, for one measured reason: the compose stack takes ~30-40s to come up
+# (sn09: aquila-stack.service 18:00:14 -> 18:00:44), while Chromium launches ~8s
+# after boot. A containerised front door is not listening when the kiosk asks —
+# the device shows ERR_CONNECTION_REFUSED, or, if made to wait, a black screen
+# for the whole 40s with no splash at all. Both were observed on sn09.
+#
+# Host nginx starts in under a second, so:
+#   backend down (early boot) -> serves /opt/aquila/splash.html
+#   backend up                -> proxies through, the app is served
+#
+# Same origin either way, so the splash -> app handoff reuses Chromium's warm
+# renderer instead of swapping processes (measured A/B on sn11: same-origin is
+# seamless, file:// visibly blanks). It also means the kiosk no longer needs
+# --disable-web-security, which a file:// page required to poll /health.
+DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
+
+cat > /etc/nginx/conf.d/aquila-kiosk.conf <<'EOF'
+server {
+    listen 8080;
+    root /opt/aquila;
+
+    # The kiosk's only URL. Backend up -> the app; backend absent -> the splash.
+    location = / {
+        proxy_pass http://127.0.0.1:8090;
+        error_page 502 503 504 = @splash;
+        # Bounded so the splash's once-a-second health poll is never blocked by a
+        # backend that simply has not started yet.
+        proxy_connect_timeout 2s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # / serves two different documents depending on whether the backend is up, so
+    # the transient one must never be cached — otherwise the browser may re-serve
+    # the splash from cache after the app is ready and sit there indefinitely.
+    # The kiosk opens this, not /, so the splash is shown on EVERY boot rather
+    # than only when the backend happens to be slow. Two reasons: the Acorn
+    # branding should be consistent, and going straight from black to a
+    # fully-rendered app is a harsher change than black -> splash -> app. The
+    # page navigates to / once /health answers, which is same-origin, so
+    # Chromium keeps its warm renderer.
+    location = /splash {
+        try_files /splash.html =404;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        expires -1;
+    }
+
+    location @splash {
+        try_files /splash.html =404;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        expires -1;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+EOF
+
+# Debian's packaged default site also listens on :80 and is not wanted here.
+rm -f /etc/nginx/sites-enabled/default
+
+# The package starts nginx on install, before this config exists, and
+# `systemctl enable --now` does nothing to an already-running service — so the
+# new config would never load. Restart explicitly. (Cost an hour on sn09.)
+nginx -t
+systemctl enable nginx
+
+# On a re-run, a previous deployment's aquila-ui may still be publishing :8080
+# and nginx cannot bind — `bind() to 0.0.0.0:8080 failed (98: Address already in
+# use)`, observed on sn09. The compose file below moves that container to :8082,
+# but the running one predates it, so stop it here. Phase 10 recreates the stack
+# from the updated file.
+if ss -lnt 2>/dev/null | grep -q ':8080' && command -v docker &>/dev/null; then
+    echo "  ℹ :8080 already held — stopping aquila-ui (it moves to :8082)"
+    docker stop aquila-ui &>/dev/null || true
+fi
+
+systemctl restart nginx
+
+run_test "nginx installed"        "command -v nginx"
+run_test "nginx config valid"     "nginx -t"
+run_test "nginx enabled"          "systemctl is-enabled nginx | grep -q enabled"
+run_test "nginx listening on 8080" "ss -lnt | grep -q ':8080'"
+# The splash file itself is installed in Phase 9b; serving it is asserted there.
+
+phase_pass "host nginx serving the kiosk front door on :8080"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 4 — Autologin (X11/Openbox)
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 4 "Autologin (X11/Openbox)"
@@ -281,12 +381,39 @@ Section "ServerFlags"
 EndSection
 EOF
 
+# Tear down the legacy console-autologin path from deployment1.sh: an agetty
+# --autologin override on tty1 plus `startx` in ~/.bash_profile (server_web/
+# .bash_profile). LightDM owns autologin now, but the two are not mutually
+# exclusive — a device provisioned before Phase 4 existed carries both, and
+# nothing here previously removed the old one.
+#
+# Left in place, agetty logs in on tty1 and prints the login banner, the Debian
+# MOTD and the X.Org version block to the display before LightDM takes the
+# screen, and ~/.bash_profile races LightDM to start a second X on VT1.
+# Measured on sn03: removing both cleared the text entirely, kiosk unaffected.
+rm -rf /etc/systemd/system/getty@tty1.service.d
+systemctl daemon-reload
+
+# Rewrite rather than filter: deleting only the startx line leaves an empty
+# `if ... then / fi`, which is a bash syntax error on every login shell.
+if [[ -f "${PI_HOME}/.bash_profile" ]] && grep -q startx "${PI_HOME}/.bash_profile"; then
+    cat > "${PI_HOME}/.bash_profile" <<'EOF'
+if [ -f ~/.bashrc ]; then
+   . ~/.bashrc
+fi
+EOF
+    chown pi:pi "${PI_HOME}/.bash_profile"
+fi
+
 run_test "autologin.conf exists"           "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-user=pi"               "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-session=openbox"       "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "main lightdm.conf not rpd-labwc" "! grep -q 'autologin-session=rpd-labwc' /etc/lightdm/lightdm.conf"
 run_test "cursor disabled (-nocursor)"     "grep -q 'X -nocursor' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "lightdm enabled"                 "systemctl is-enabled lightdm | grep -q enabled"
+run_test "no console autologin override"   "! test -d /etc/systemd/system/getty@tty1.service.d"
+run_test "no startx in .bash_profile"      "! grep -q startx ${PI_HOME}/.bash_profile 2>/dev/null"
+run_test ".bash_profile is valid bash"     "test ! -f ${PI_HOME}/.bash_profile || bash -n ${PI_HOME}/.bash_profile"
 run_test "xorg.conf has AutoAddGPU off"    "grep -q 'AutoAddGPU' /etc/X11/xorg.conf"
 run_test "fbdev not installed"            "! dpkg -l xserver-xorg-video-fbdev 2>/dev/null | grep -q '^ii'"
 
@@ -761,7 +888,31 @@ phase_start "9b" "Chromium Kiosk (Openbox autostart)"
 rm -f "${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
 rm -f "${PI_HOME}/.config/labwc/autostart"
 
-# Install boot splash page
+# Neutralise the SYSTEM-WIDE Openbox autostart. Openbox runs /etc/xdg/openbox/
+# autostart BEFORE the per-user file written below, and both run — the user file
+# does not replace it. deployment1.sh wrote the legacy kiosk there, so any device
+# provisioned before this phase existed starts two browsers, not one.
+#
+# Measured on sn03: `python3 /home/pi/kiosk.py` (WebKit) and the Chromium kiosk
+# both running. kiosk.py loads http://localhost:8090 directly with no retry and
+# no error handling, so before the backend is listening it paints WebKit's default
+# error page ("Error receiving data: Connection reset by peer") over the splash.
+# The same file also ran `xrandr --rotate left` against this phase's `--rotate
+# right`, and `unclutter`, which the user autostart below deliberately avoids.
+#
+# Overwritten rather than deleted: openbox ships this path as a dpkg conffile, so
+# a removed file can come back on package upgrade while a modified one is kept.
+if [[ -f /etc/xdg/openbox/autostart ]]; then
+    cat > /etc/xdg/openbox/autostart <<'EOF'
+# Intentionally empty — the Aquila kiosk launches from the per-user autostart at
+# ~/.config/openbox/autostart. Openbox runs this system-wide file first and runs
+# BOTH, so anything added here starts in addition to the kiosk, not instead of it.
+EOF
+fi
+
+# Install the boot splash. Host nginx (Phase 3d) serves this file whenever the
+# backend is not answering, so it must live on the host filesystem — it is the
+# only thing available in the first seconds of boot.
 curl -fsSL \
     -H "Authorization: token ${GHCR_TOKEN}" \
     "${RAW_REPO_URL}/aquila_web/static/splash.html" \
@@ -801,8 +952,15 @@ sleep 3
 # If kiosk_disabled flag exists, show desktop instead of kiosk.
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
 if [ ! -f /tmp/kiosk_disabled ]; then
-  chromium \
-    --kiosk file:///opt/aquila/splash.html \
+  # GTK_THEME: Chromium's window background — the surface visible after the window
+  # is mapped but before the page paints — comes from GTK, not from Chromium. It is
+  # bright white by default, which makes every seam and flicker around it obvious
+  # against the black either side. No Chromium flag reaches it:
+  # --default-background-color and --cast-app-background-color both govern the PAGE
+  # area and were verified in the running process on sn09 with no effect. A dark GTK
+  # theme does reach it. See ~/.config/gtk-3.0/gtk.css above for the black override.
+  env GTK_THEME=Adwaita:dark chromium \
+    --kiosk http://localhost:8080/splash \
     --incognito \
     --noerrdialogs \
     --disable-infobars \
@@ -816,8 +974,6 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --enable-gpu-rasterization \
     --use-angle=gles \
     --ozone-platform=x11 \
-    --disable-web-security \
-    --allow-file-access-from-files \
     --user-data-dir=/tmp/chromium-kiosk \
     --disk-cache-size=0 \
     --start-maximized \
@@ -826,12 +982,71 @@ if [ ! -f /tmp/kiosk_disabled ]; then
 fi
 EOF
 
+# Openbox decorates every window by default, and --kiosk does not survive a
+# window being re-mapped: at startup Chromium's window appears briefly before it
+# is fullscreened, and Openbox paints a title bar reading "Untitled — Chromium"
+# across the top of the display (#428). The legacy WebKit kiosk guarded against
+# this explicitly (server_web/kiosk.py, set_decorated(False)); the Chromium path
+# relies on --kiosk alone and had no equivalent until now.
+#
+# The rule also forces the window fullscreen at map time. Without it Chromium's
+# window is mapped small and then resized up to fullscreen, and you watch it grow
+# — this is the "quadrant fill" reported on #428, which was mistaken for a slow
+# repaint for some time. Frame-by-frame capture on sn09 showed a part-sized,
+# decorated window rather than a partially painted one. Mapping it fullscreen
+# removes the intermediate sizes entirely.
+#
+# A kiosk never wants decoration on anything, so the rule is unconditional.
+# Openbox has no drop-in config directory — the only way to set a window rule is
+# to own a copy of rc.xml, which is why this copies the distro file rather than
+# patching it in place. That is the same "copied file drifts from upstream"
+# pattern that caused #424 and #426, so it is deliberate and documented here.
+#
+# Verified on sn03 (title bar gone) and sn09 (window arrives fullscreen; the
+# growing fill is gone). Kiosk otherwise unaffected on both.
+OPENBOX_RC="${PI_HOME}/.config/openbox/rc.xml"
+if [[ ! -f "${OPENBOX_RC}" && -f /etc/xdg/openbox/rc.xml ]]; then
+    cp /etc/xdg/openbox/rc.xml "${OPENBOX_RC}"
+fi
+if [[ -f "${OPENBOX_RC}" ]] && ! grep -q 'aquila-kiosk-no-decor' "${OPENBOX_RC}"; then
+    # Insert inside the existing <applications> block; a second top-level
+    # <applications> element would be invalid and silently ignored.
+    sed -i 's|</applications>|  <!-- aquila-kiosk-no-decor: see #428 -->\n  <application class="*">\n    <decor>no</decor>\n    <maximized>yes</maximized>\n    <fullscreen>yes</fullscreen>\n  </application>\n</applications>|' "${OPENBOX_RC}"
+    # A malformed rc.xml leaves Openbox with no window manager, so validate
+    # before letting it reach a reboot. Restore the stock file if we broke it.
+    if ! python3 -c "import xml.etree.ElementTree as ET; ET.parse('${OPENBOX_RC}')" 2>/dev/null; then
+        echo "  ✗ rc.xml failed XML validation — restoring stock file"
+        cp /etc/xdg/openbox/rc.xml "${OPENBOX_RC}"
+    fi
+fi
+
 chown -R pi:pi "${PI_HOME}/.config/openbox"
+
+# Paint Chromium's window background black rather than the theme's dark grey, so
+# the empty window is indistinguishable from the black on either side of it and
+# the seams between frames have nothing to show. GTK_THEME=Adwaita:dark on the
+# launch line (Phase 9b) selects a dark theme; this pins the exact colour.
+mkdir -p "${PI_HOME}/.config/gtk-3.0"
+cat > "${PI_HOME}/.config/gtk-3.0/gtk.css" <<'EOF'
+/* Kiosk: the browser window background before any page paints (#428). */
+window, .background, decoration {
+    background-color: #000000;
+}
+EOF
+chown -R pi:pi "${PI_HOME}/.config/gtk-3.0"
 
 AUTOSTART="${PI_HOME}/.config/openbox/autostart"
 run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
-run_test "splash page installed"       "test -f /opt/aquila/splash.html"
-run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
+run_test "openbox rc.xml exists"       "test -f ${OPENBOX_RC}"
+run_test "window decorations disabled" "grep -q 'aquila-kiosk-no-decor' ${OPENBOX_RC}"
+run_test "rc.xml is valid XML"         "python3 -c \"import xml.etree.ElementTree as ET; ET.parse('${OPENBOX_RC}')\""
+run_test "kiosk loads splash path"     "grep -q 'kiosk http://localhost:8080/splash' ${AUTOSTART}"
+run_test "no file:// splash"           "! grep -q 'file:///opt/aquila/splash.html' ${AUTOSTART}"
+run_test "splash installed on host"    "test -f /opt/aquila/splash.html"
+run_test "splash is same-origin"       "! grep -q 'localhost:8090' /opt/aquila/splash.html"
+run_test "front door answers"          "curl -sf -o /dev/null http://localhost:8080/"
+run_test "web security not disabled"   "! grep -q 'disable-web-security' ${AUTOSTART}"
+run_test "no file access override"     "! grep -q 'allow-file-access-from-files' ${AUTOSTART}"
 run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
 run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
 run_test "user-data-dir flag present"  "grep -q 'user-data-dir' ${AUTOSTART}"
@@ -840,6 +1055,10 @@ run_test "xrandr auto-detect present"  "grep -q 'HDMI_OUT' ${AUTOSTART}"
 run_test "xinput transform present"    "grep -q 'Coordinate Transformation Matrix' ${AUTOSTART}"
 run_test "no stale Wayland .desktop"   "test ! -f ${PI_HOME}/.config/autostart/chromium-kiosk.desktop"
 run_test "correct file ownership"      "stat -c '%U' ${AUTOSTART} | grep -q pi"
+run_test "no legacy kiosk.py launch"   "! grep -q kiosk.py /etc/xdg/openbox/autostart 2>/dev/null"
+run_test "no system-wide unclutter"    "! grep -q '^unclutter' /etc/xdg/openbox/autostart 2>/dev/null"
+run_test "no system-wide xrandr"       "! grep -q '^xrandr' /etc/xdg/openbox/autostart 2>/dev/null"
+run_test "one kiosk launcher only"     "! grep -q 'chromium' /etc/xdg/openbox/autostart 2>/dev/null"
 
 phase_pass "Openbox autostart configured — X11 kiosk with rotation and touch mapping"
 
@@ -1192,6 +1411,72 @@ run_test "acorn logo png exists"        "test -f ${ACORN_LOGO_PNG}"
 run_test "acorn theme is default"       "plymouth-set-default-theme | grep -q acorn"
 
 phase_pass "Plymouth Acorn theme installed (takes effect on next reboot)"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 14c — Bootloader Setup Screen (EEPROM)
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "14c" "Bootloader Setup Screen (EEPROM)"
+
+# Boards with a newer factory bootloader ship NET_INSTALL_AT_POWER_ON=1, which
+# paints a "Configure this Raspberry Pi 4 Model B" panel over the whole display
+# on every cold boot. The bootloader draws it before the kernel loads, so the
+# suppression in Phases 6, 14 and 14b (piwiz, cmdline, Plymouth) all runs far too
+# late to hide it. NET_INSTALL_ENABLED=0 additionally skips the USB enumeration
+# the network-install keyboard probe performs, saving ~1s of boot.
+#
+# Applied to every device, not just affected ones: `rpi-eeprom-config --apply`
+# updates the bootloader to the LATEST available image, not only its config.
+# Measured on sn01 and sn03 — both jumped from a 2025 bootloader to 2026/01/09
+# (d76c4603) when this ran. Newer bootloaders are precisely the ones that default
+# the setup screen on, so an old board that is fine today can inherit the problem
+# from this very phase. Writing the key in the same operation pins the behaviour
+# rather than leaving it to whichever bootloader the board ends up carrying.
+#
+# This config lives in the on-board SPI EEPROM, NOT on the SD card: it survives
+# reimaging and is not undone by --revert. rpi-eeprom-config --apply does not
+# write the chip directly; it stages pieeprom.upd + recovery.bin on the boot
+# partition and the ROM programs the EEPROM during the next reboot. A power cut
+# in that window needs physical recovery, so the write is skipped entirely
+# whenever the config already matches — re-running this script never reflashes.
+
+EEPROM_CONF_CURRENT="/tmp/aquila-eeprom-current.conf"
+EEPROM_CONF_DESIRED="/tmp/aquila-eeprom-desired.conf"
+
+if ! command -v rpi-eeprom-config &>/dev/null; then
+    echo "  ⚠ rpi-eeprom-config not present — skipping (no Pi bootloader EEPROM)"
+    phase_pass "bootloader EEPROM not applicable on this hardware"
+elif ! rpi-eeprom-config > "${EEPROM_CONF_CURRENT}" 2>/dev/null \
+        || [[ ! -s "${EEPROM_CONF_CURRENT}" ]]; then
+    echo "  ⚠ could not read EEPROM config — skipping rather than writing blind"
+    phase_pass "bootloader EEPROM left untouched (config unreadable)"
+else
+    # Desired state: drop both keys wherever they sit, then pin network install
+    # off at the end. Deterministic ordering keeps this diff-stable on re-runs.
+    grep -v -E '^(NET_INSTALL_AT_POWER_ON|NET_INSTALL_ENABLED)=' \
+        "${EEPROM_CONF_CURRENT}" > "${EEPROM_CONF_DESIRED}" || true
+    echo "NET_INSTALL_ENABLED=0" >> "${EEPROM_CONF_DESIRED}"
+
+    if diff -q "${EEPROM_CONF_CURRENT}" "${EEPROM_CONF_DESIRED}" &>/dev/null; then
+        echo "  ✓ EEPROM config already correct — no update staged"
+    else
+        if rpi-eeprom-config --apply "${EEPROM_CONF_DESIRED}" &>/dev/null; then
+            echo "  ✓ EEPROM update staged — the ROM flashes it on the next reboot"
+            echo "    previous config: /var/lib/raspberrypi/bootloader/backup/"
+        else
+            phase_fail "rpi-eeprom-config --apply failed"
+        fi
+    fi
+
+    # Assert against the staged config, not the live chip: rpi-eeprom-config
+    # reads the CURRENT EEPROM, which still holds the old values until the
+    # flashing reboot, so asserting there would fail on an affected device.
+    run_test "power-on setup screen off" \
+        "! grep -q '^NET_INSTALL_AT_POWER_ON' ${EEPROM_CONF_DESIRED}"
+    run_test "network install disabled" \
+        "grep -q '^NET_INSTALL_ENABLED=0' ${EEPROM_CONF_DESIRED}"
+
+    phase_pass "bootloader setup screen suppressed (takes effect after reboot)"
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 15 — Download Security Script
