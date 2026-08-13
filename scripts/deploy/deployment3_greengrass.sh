@@ -766,7 +766,14 @@ sleep 3
 # If kiosk_disabled flag exists, show desktop instead of kiosk.
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
 if [ ! -f /tmp/kiosk_disabled ]; then
-  chromium \
+  # GTK_THEME: Chromium's window background — the surface visible after the window
+  # is mapped but before the page paints — comes from GTK, not from Chromium. It is
+  # bright white by default, which makes every seam and flicker around it obvious
+  # against the black either side. No Chromium flag reaches it:
+  # --default-background-color and --cast-app-background-color both govern the PAGE
+  # area and were verified in the running process on sn09 with no effect. A dark GTK
+  # theme does reach it. See ~/.config/gtk-3.0/gtk.css above for the black override.
+  env GTK_THEME=Adwaita:dark chromium \
     --kiosk file:///opt/aquila/splash.html \
     --incognito \
     --noerrdialogs \
@@ -830,6 +837,19 @@ if [[ -f "${OPENBOX_RC}" ]] && ! grep -q 'aquila-kiosk-no-decor' "${OPENBOX_RC}"
 fi
 
 chown -R pi:pi "${PI_HOME}/.config/openbox"
+
+# Paint Chromium's window background black rather than the theme's dark grey, so
+# the empty window is indistinguishable from the black on either side of it and
+# the seams between frames have nothing to show. GTK_THEME=Adwaita:dark on the
+# launch line (Phase 9b) selects a dark theme; this pins the exact colour.
+mkdir -p "${PI_HOME}/.config/gtk-3.0"
+cat > "${PI_HOME}/.config/gtk-3.0/gtk.css" <<'EOF'
+/* Kiosk: the browser window background before any page paints (#428). */
+window, .background, decoration {
+    background-color: #000000;
+}
+EOF
+chown -R pi:pi "${PI_HOME}/.config/gtk-3.0"
 
 AUTOSTART="${PI_HOME}/.config/openbox/autostart"
 run_test "openbox autostart exists"    "test -f ${AUTOSTART}"

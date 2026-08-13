@@ -125,3 +125,19 @@ def test_kiosk_window_mapped_fullscreen():
     """
     assert "<fullscreen>yes</fullscreen>" in SCRIPT
     assert "<maximized>yes</maximized>" in SCRIPT
+
+
+def test_kiosk_window_background_is_dark():
+    """
+    Chromium's window background — visible after the window is mapped but before
+    the page paints — comes from GTK, not Chromium, and is bright white by
+    default. That makes every seam around it obvious against the black either
+    side.
+
+    No Chromium flag reaches it: --default-background-color and
+    --cast-app-background-color both govern the page area and were verified in
+    the running process on sn09 with no effect on this surface.
+    """
+    assert "GTK_THEME=Adwaita:dark" in SCRIPT
+    assert ".config/gtk-3.0/gtk.css" in SCRIPT
+    assert "background-color: #000000" in SCRIPT
