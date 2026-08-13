@@ -115,3 +115,32 @@ def test_eeprom_asserts_against_staged_config_not_live_chip():
     assert "EEPROM_CONF_DESIRED" in SCRIPT
     assert 'run_test "power-on setup screen off"' in SCRIPT
     assert 'run_test "network install disabled"' in SCRIPT
+
+# --- Legacy console autologin teardown ---------------------------------------
+# deployment1.sh set up console autologin (agetty --autologin on tty1) plus
+# `startx` in ~/.bash_profile. Phase 4 configures LightDM autologin but never
+# removed the old path, so devices provisioned before it carried both: agetty
+# printed the login banner, MOTD and X.Org block on the display before LightDM
+# took the screen, and .bash_profile raced it to start a second X on VT1.
+# Confirmed on sn03.
+
+def test_removes_legacy_console_autologin_override():
+    assert "rm -rf /etc/systemd/system/getty@tty1.service.d" in SCRIPT
+    assert "systemctl daemon-reload" in SCRIPT
+
+
+def test_removes_startx_from_bash_profile():
+    assert "grep -q startx" in SCRIPT
+
+
+def test_bash_profile_rewritten_not_filtered():
+    # Deleting only the startx line leaves `if ... then / fi` with an empty body,
+    # which is a bash syntax error on every login shell. Must rewrite the file.
+    assert "sed -i '/startx/d'" not in SCRIPT
+    assert "grep -v startx" not in SCRIPT
+
+
+def test_console_autologin_teardown_is_asserted():
+    assert 'run_test "no console autologin override"' in SCRIPT
+    assert 'run_test "no startx in .bash_profile"' in SCRIPT
+    assert 'run_test ".bash_profile is valid bash"' in SCRIPT
