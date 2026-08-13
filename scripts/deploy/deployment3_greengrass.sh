@@ -226,6 +226,106 @@ systemctl restart dnsmasq
 phase_pass "dnsmasq forwarder installed on 172.18.0.1"
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3d — Kiosk web front door (host nginx)
+# ═══════════════════════════════════════════════════════════════════════════════
+phase_start "3d" "Kiosk web front door (host nginx)"
+
+# The kiosk opens http://localhost:8080/ and never navigates away (#431), so that
+# address must answer from the first seconds of boot. This runs on the HOST, not
+# in Docker, for one measured reason: the compose stack takes ~30-40s to come up
+# (sn09: aquila-stack.service 18:00:14 -> 18:00:44), while Chromium launches ~8s
+# after boot. A containerised front door is not listening when the kiosk asks —
+# the device shows ERR_CONNECTION_REFUSED, or, if made to wait, a black screen
+# for the whole 40s with no splash at all. Both were observed on sn09.
+#
+# Host nginx starts in under a second, so:
+#   backend down (early boot) -> serves /opt/aquila/splash.html
+#   backend up                -> proxies through, the app is served
+#
+# Same origin either way, so the splash -> app handoff reuses Chromium's warm
+# renderer instead of swapping processes (measured A/B on sn11: same-origin is
+# seamless, file:// visibly blanks). It also means the kiosk no longer needs
+# --disable-web-security, which a file:// page required to poll /health.
+DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
+
+cat > /etc/nginx/conf.d/aquila-kiosk.conf <<'EOF'
+server {
+    listen 8080;
+    root /opt/aquila;
+
+    # The kiosk's only URL. Backend up -> the app; backend absent -> the splash.
+    location = / {
+        proxy_pass http://127.0.0.1:8090;
+        error_page 502 503 504 = @splash;
+        # Bounded so the splash's once-a-second health poll is never blocked by a
+        # backend that simply has not started yet.
+        proxy_connect_timeout 2s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # / serves two different documents depending on whether the backend is up, so
+    # the transient one must never be cached — otherwise the browser may re-serve
+    # the splash from cache after the app is ready and sit there indefinitely.
+    # The kiosk opens this, not /, so the splash is shown on EVERY boot rather
+    # than only when the backend happens to be slow. Two reasons: the Acorn
+    # branding should be consistent, and going straight from black to a
+    # fully-rendered app is a harsher change than black -> splash -> app. The
+    # page navigates to / once /health answers, which is same-origin, so
+    # Chromium keeps its warm renderer.
+    location = /splash {
+        try_files /splash.html =404;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        expires -1;
+    }
+
+    location @splash {
+        try_files /splash.html =404;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        expires -1;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+EOF
+
+# Debian's packaged default site also listens on :80 and is not wanted here.
+rm -f /etc/nginx/sites-enabled/default
+
+# The package starts nginx on install, before this config exists, and
+# `systemctl enable --now` does nothing to an already-running service — so the
+# new config would never load. Restart explicitly. (Cost an hour on sn09.)
+nginx -t
+systemctl enable nginx
+
+# On a re-run, a previous deployment's aquila-ui may still be publishing :8080
+# and nginx cannot bind — `bind() to 0.0.0.0:8080 failed (98: Address already in
+# use)`, observed on sn09. The compose file below moves that container to :8082,
+# but the running one predates it, so stop it here. Phase 10 recreates the stack
+# from the updated file.
+if ss -lnt 2>/dev/null | grep -q ':8080' && command -v docker &>/dev/null; then
+    echo "  ℹ :8080 already held — stopping aquila-ui (it moves to :8082)"
+    docker stop aquila-ui &>/dev/null || true
+fi
+
+systemctl restart nginx
+
+run_test "nginx installed"        "command -v nginx"
+run_test "nginx config valid"     "nginx -t"
+run_test "nginx enabled"          "systemctl is-enabled nginx | grep -q enabled"
+run_test "nginx listening on 8080" "ss -lnt | grep -q ':8080'"
+# The splash file itself is installed in Phase 9b; serving it is asserted there.
+
+phase_pass "host nginx serving the kiosk front door on :8080"
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Phase 4 — Autologin (X11/Openbox)
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 4 "Autologin (X11/Openbox)"
@@ -778,7 +878,9 @@ if [[ -f /etc/xdg/openbox/autostart ]]; then
 EOF
 fi
 
-# Install boot splash page
+# Install the boot splash. Host nginx (Phase 3d) serves this file whenever the
+# backend is not answering, so it must live on the host filesystem — it is the
+# only thing available in the first seconds of boot.
 curl -fsSL \
     -H "Authorization: token ${GHCR_TOKEN}" \
     "${RAW_REPO_URL}/aquila_web/static/splash.html" \
@@ -823,7 +925,7 @@ if [ ! -f /tmp/kiosk_disabled ]; then
   # area and were verified in the running process on sn09 with no effect. A dark GTK
   # theme does reach it. See ~/.config/gtk-3.0/gtk.css above for the black override.
   env GTK_THEME=Adwaita:dark chromium \
-    --kiosk file:///opt/aquila/splash.html \
+    --kiosk http://localhost:8080/splash \
     --incognito \
     --noerrdialogs \
     --disable-infobars \
@@ -837,8 +939,6 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --enable-gpu-rasterization \
     --use-angle=gles \
     --ozone-platform=x11 \
-    --disable-web-security \
-    --allow-file-access-from-files \
     --user-data-dir=/tmp/chromium-kiosk \
     --disk-cache-size=0 \
     --start-maximized \
@@ -905,8 +1005,13 @@ run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
 run_test "openbox rc.xml exists"       "test -f ${OPENBOX_RC}"
 run_test "window decorations disabled" "grep -q 'aquila-kiosk-no-decor' ${OPENBOX_RC}"
 run_test "rc.xml is valid XML"         "python3 -c \"import xml.etree.ElementTree as ET; ET.parse('${OPENBOX_RC}')\""
-run_test "splash page installed"       "test -f /opt/aquila/splash.html"
-run_test "kiosk loads splash"          "grep -q 'splash.html' ${AUTOSTART}"
+run_test "kiosk loads splash path"     "grep -q 'kiosk http://localhost:8080/splash' ${AUTOSTART}"
+run_test "no file:// splash"           "! grep -q 'file:///opt/aquila/splash.html' ${AUTOSTART}"
+run_test "splash installed on host"    "test -f /opt/aquila/splash.html"
+run_test "splash is same-origin"       "! grep -q 'localhost:8090' /opt/aquila/splash.html"
+run_test "front door answers"          "curl -sf -o /dev/null http://localhost:8080/"
+run_test "web security not disabled"   "! grep -q 'disable-web-security' ${AUTOSTART}"
+run_test "no file access override"     "! grep -q 'allow-file-access-from-files' ${AUTOSTART}"
 run_test "kiosk flag check present"    "grep -q 'kiosk_disabled' ${AUTOSTART}"
 run_test "X11 platform flag"           "grep -q 'ozone-platform=x11' ${AUTOSTART}"
 run_test "user-data-dir flag present"  "grep -q 'user-data-dir' ${AUTOSTART}"

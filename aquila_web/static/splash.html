@@ -124,13 +124,13 @@
     const MAX_WAIT = 120;
 
     function poll() {
-      fetch('http://localhost:8090/health', { cache: 'no-store' })
+      fetch('/health', { cache: 'no-store' })
         .then(r => {
           if (r.ok) {
             statusEl.textContent = 'Ready';
             bar.style.transition = 'width 0.4s ease';
             setBar(100);
-            setTimeout(() => { window.location.href = 'http://localhost:8090'; }, 450);
+            setTimeout(() => { window.location.href = '/'; }, 450);
           } else { retry(); }
         })
         .catch(() => retry());

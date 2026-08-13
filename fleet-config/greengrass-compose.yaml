@@ -135,7 +135,11 @@ services:
     env_file: ${DEVICE_ENV_FILE:-/opt/aquila/config/device.env}
     container_name: aquila-ui
     ports:
-      - "8080:80"
+      # 8080 belongs to host nginx, which is the kiosk's front door (#431):
+      # it must answer within a second of boot, and this container does not
+      # exist for the first ~40s. Publishing both here would leave the two
+      # fighting for the port and the stack failing to start.
+      - "8082:80"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
