@@ -21,21 +21,28 @@ def _read_conf() -> str:
 
 
 def _location_blocks(conf: str) -> list[str]:
-    """Extract each location { ... } block as a string."""
+    """
+    Extract each location { ... } block as a string.
+
+    The opening brace on the `location` line must be counted, otherwise depth
+    starts at 0 and the first body line closes the block — which silently
+    truncated every block to one line and let tests pass while inspecting almost
+    nothing.
+    """
     blocks = []
     depth = 0
     current: list[str] = []
     inside = False
     for line in conf.splitlines():
-        if re.match(r"\s*location\s+", line):
+        if not inside and re.match(r"\s*location\s+", line):
             inside = True
-            depth = 0
             current = [line]
+            depth = line.count("{") - line.count("}")
             continue
         if inside:
             current.append(line)
             depth += line.count("{") - line.count("}")
-            if depth <= 0 and "{" in "\n".join(current):
+            if depth <= 0:
                 blocks.append("\n".join(current))
                 inside = False
                 current = []
@@ -87,15 +94,57 @@ def test_no_bare_host_docker_internal_in_proxy_pass():
 
 def test_backend_upstream_uses_container_name():
     """
-    The main backend proxy_pass must use the Docker service name
-    (aquila-backend), not localhost or a host IP. Container-to-container
-    traffic must go via the Docker network.
+    The backend upstream must be the Docker service name (aquila-backend), not
+    localhost or a host IP. Container-to-container traffic goes via the Docker
+    network.
+
+    The name now appears in a `set $aq_backend http://aquila-backend:8090`
+    directive rather than inline in proxy_pass, so nginx resolves it per request
+    instead of at startup (#431). The container-name requirement is unchanged —
+    only where the name is written has moved.
     """
     conf = _read_conf()
-    assert "proxy_pass http://aquila-backend:" in conf, (
-        "Main backend proxy_pass should use the container name 'aquila-backend', "
+    assert "http://aquila-backend:8090" in conf, (
+        "Backend upstream should use the container name 'aquila-backend', "
         "not localhost or a hardcoded IP."
     )
+    assert "proxy_pass http://localhost" not in conf
+    assert "proxy_pass http://127.0.0.1" not in conf
+
+
+def test_backend_upstream_resolved_per_request():
+    """
+    Every proxy_pass to aquila-backend must go through a variable, so the name is
+    resolved at request time. A literal upstream is resolved once at startup and
+    nginx refuses to start if the backend container does not exist yet — which is
+    exactly the state during boot, and the whole point of the splash fallback.
+
+    Same failure mode that took down aquila-ui on sn01, previously only guarded
+    for host.docker.internal.
+    """
+    conf = _read_conf()
+    for line in conf.splitlines():
+        line = line.strip()
+        if line.startswith("proxy_pass") and "aquila-backend" in line:
+            assert "$" in line, (
+                "proxy_pass to aquila-backend must use a variable so the name is "
+                f"resolved per request, not at startup:\n  {line}"
+            )
+
+
+def test_root_falls_back_to_splash_when_backend_is_down():
+    """
+    The kiosk opens / and never navigates away (#431). While the backend is
+    starting nginx cannot connect, and that must serve the boot splash rather
+    than an error page — otherwise the device shows a connection failure for the
+    several seconds the app takes to come up.
+    """
+    conf = _read_conf()
+    assert "error_page" in conf and "@splash" in conf, (
+        "location = / must fall back to @splash on upstream failure"
+    )
+    assert "location @splash" in conf
+    assert "/splash.html" in conf
 
 
 def test_no_hardcoded_host_ips():
@@ -109,4 +158,62 @@ def test_no_hardcoded_host_ips():
     assert not matches, (
         f"nginx.conf contains hardcoded Docker bridge IPs: {matches}. "
         "Use container service names or host.docker.internal with a resolver."
+    )
+
+
+def test_static_prefix_maps_to_flat_document_root():
+    """
+    The app references its assets relatively (href="static/styles.css"), which
+    resolves to /static/… — but Dockerfile.ui copies aquila_web/static/ INTO the
+    document root, so the files are at the top level with no static/ subdir.
+
+    Serving that prefix with a plain root+try_files looks for
+    /usr/share/nginx/html/static/styles.css, which does not exist: measured on
+    sn10, /static/styles.css returned 404 and the app rendered unstyled.
+
+    try_files must NOT be combined with alias here — it resolves $uri against the
+    aliased path and reintroduces the same wrong directory.
+    """
+    conf = _read_conf()
+    blocks = [b for b in _location_blocks(conf) if b.lstrip().startswith("location /static/")]
+    assert blocks, "no location /static/ block found"
+    block = blocks[0]
+    assert "alias /usr/share/nginx/html/" in block, (
+        "/static/ must alias the flat document root, not use root+try_files"
+    )
+    assert "try_files" not in block, (
+        "try_files with alias resolves against the aliased path and breaks it"
+    )
+
+
+def test_backend_failure_is_fast():
+    """
+    While the backend container does not exist its name does not resolve. With
+    nginx's defaults (30s resolver, 60s proxy) every splash health poll hung for
+    a full minute — measured on sn10: 504 in 60.03s — so the splash stayed up
+    long after the app was ready.
+
+    The splash polls once a second and must not be blocked for longer than that
+    by a backend which is simply not up yet.
+    """
+    conf = _read_conf()
+    assert "resolver_timeout" in conf, (
+        "resolver_timeout must be set — the 30s default stalls every poll while "
+        "the backend container is absent"
+    )
+    assert "proxy_connect_timeout" in conf
+
+
+def test_splash_fallback_is_not_cacheable():
+    """
+    / serves two different documents depending on whether the backend is up. The
+    transient one must carry no-store, or the browser may re-serve the splash
+    from cache when the page navigates back to / after the app is ready — leaving
+    the kiosk on the splash long after it should have moved on.
+    """
+    conf = _read_conf()
+    blocks = [b for b in _location_blocks(conf) if b.lstrip().startswith("location @splash")]
+    assert blocks, "no location @splash block found"
+    assert "no-store" in blocks[0], (
+        "@splash must send Cache-Control: no-store — one URL, two documents"
     )
