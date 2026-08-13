@@ -144,3 +144,32 @@ def test_console_autologin_teardown_is_asserted():
     assert 'run_test "no console autologin override"' in SCRIPT
     assert 'run_test "no startx in .bash_profile"' in SCRIPT
     assert 'run_test ".bash_profile is valid bash"' in SCRIPT
+
+# --- Legacy system-wide Openbox autostart teardown ---------------------------
+# Openbox runs /etc/xdg/openbox/autostart BEFORE the per-user file and runs BOTH.
+# deployment1.sh put the legacy WebKit kiosk (kiosk.py) there, so devices
+# provisioned before Phase 9b existed start two browsers. kiosk.py loads
+# localhost:8090 with no retry, painting WebKit's default error page over the
+# splash before the backend is listening. Confirmed on sn03.
+
+def test_neutralises_system_wide_openbox_autostart():
+    assert "/etc/xdg/openbox/autostart" in SCRIPT
+
+
+def test_system_autostart_overwritten_not_deleted():
+    # openbox ships this path as a dpkg conffile: a deleted file can return on
+    # package upgrade, a modified one is kept.
+    assert "rm -f /etc/xdg/openbox/autostart" not in SCRIPT
+    assert "rm -rf /etc/xdg/openbox" not in SCRIPT
+
+
+def test_legacy_kiosk_launchers_asserted_gone():
+    assert 'run_test "no legacy kiosk.py launch"' in SCRIPT
+    assert 'run_test "one kiosk launcher only"' in SCRIPT
+
+
+def test_legacy_rotation_and_unclutter_asserted_gone():
+    # The legacy file also ran `xrandr --rotate left` against this phase's
+    # `--rotate right`, and unclutter, which Phase 9b deliberately avoids.
+    assert 'run_test "no system-wide unclutter"' in SCRIPT
+    assert 'run_test "no system-wide xrandr"' in SCRIPT
