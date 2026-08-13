@@ -151,3 +151,14 @@ def test_ui_container_does_not_claim_8080():
     compose = Path("fleet-config/greengrass-compose.yaml").read_text()
     assert '"8080:80"' not in compose
     assert '"8082:80"' in compose
+
+
+def test_nginx_phase_frees_port_8080_on_rerun():
+    """
+    On a re-run, a previous deployment's aquila-ui may still be publishing :8080,
+    and nginx fails with `bind() to 0.0.0.0:8080 failed (98: Address already in
+    use)` — observed on sn09. The compose file moves that container to :8082, but
+    the already-running one predates it.
+    """
+    assert "docker stop aquila-ui" in SCRIPT
+    assert "Address already in use" in SCRIPT or ":8080 already held" in SCRIPT

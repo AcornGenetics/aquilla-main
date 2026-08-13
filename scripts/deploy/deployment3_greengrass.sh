@@ -292,6 +292,17 @@ rm -f /etc/nginx/sites-enabled/default
 # new config would never load. Restart explicitly. (Cost an hour on sn09.)
 nginx -t
 systemctl enable nginx
+
+# On a re-run, a previous deployment's aquila-ui may still be publishing :8080
+# and nginx cannot bind — `bind() to 0.0.0.0:8080 failed (98: Address already in
+# use)`, observed on sn09. The compose file below moves that container to :8082,
+# but the running one predates it, so stop it here. Phase 10 recreates the stack
+# from the updated file.
+if ss -lnt 2>/dev/null | grep -q ':8080' && command -v docker &>/dev/null; then
+    echo "  ℹ :8080 already held — stopping aquila-ui (it moves to :8082)"
+    docker stop aquila-ui &>/dev/null || true
+fi
+
 systemctl restart nginx
 
 run_test "nginx installed"        "command -v nginx"
