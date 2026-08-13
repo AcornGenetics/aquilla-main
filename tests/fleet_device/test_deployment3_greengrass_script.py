@@ -87,8 +87,14 @@ def test_retains_deployment2_device_build():
 # warmed up and builds a second one for the app — the visible blank between
 # splash and app. Measured A/B on sn11: same-origin is seamless, file:// is not.
 
-def test_kiosk_opens_the_nginx_origin():
-    assert "--kiosk http://localhost:8080/" in SCRIPT
+def test_kiosk_opens_the_splash_path():
+    # /splash always serves the splash; / would serve the app directly whenever
+    # the backend happens to be up, skipping the splash entirely.
+    assert "--kiosk http://localhost:8080/splash" in SCRIPT
+
+
+def test_splash_path_always_serves_the_splash():
+    assert "location = /splash" in SCRIPT
 
 
 def test_no_file_url_splash():

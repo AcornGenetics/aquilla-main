@@ -267,6 +267,18 @@ server {
     # / serves two different documents depending on whether the backend is up, so
     # the transient one must never be cached — otherwise the browser may re-serve
     # the splash from cache after the app is ready and sit there indefinitely.
+    # The kiosk opens this, not /, so the splash is shown on EVERY boot rather
+    # than only when the backend happens to be slow. Two reasons: the Acorn
+    # branding should be consistent, and going straight from black to a
+    # fully-rendered app is a harsher change than black -> splash -> app. The
+    # page navigates to / once /health answers, which is same-origin, so
+    # Chromium keeps its warm renderer.
+    location = /splash {
+        try_files /splash.html =404;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        expires -1;
+    }
+
     location @splash {
         try_files /splash.html =404;
         add_header Cache-Control "no-store, no-cache, must-revalidate" always;
@@ -857,7 +869,7 @@ sleep 3
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
 if [ ! -f /tmp/kiosk_disabled ]; then
   chromium \
-    --kiosk http://localhost:8080/ \
+    --kiosk http://localhost:8080/splash \
     --incognito \
     --noerrdialogs \
     --disable-infobars \
@@ -883,7 +895,7 @@ chown -R pi:pi "${PI_HOME}/.config/openbox"
 
 AUTOSTART="${PI_HOME}/.config/openbox/autostart"
 run_test "openbox autostart exists"    "test -f ${AUTOSTART}"
-run_test "kiosk loads nginx origin"    "grep -q 'kiosk http://localhost:8080/' ${AUTOSTART}"
+run_test "kiosk loads splash path"     "grep -q 'kiosk http://localhost:8080/splash' ${AUTOSTART}"
 run_test "no file:// splash"           "! grep -q 'file:///opt/aquila/splash.html' ${AUTOSTART}"
 run_test "splash installed on host"    "test -f /opt/aquila/splash.html"
 run_test "splash is same-origin"       "! grep -q 'localhost:8090' /opt/aquila/splash.html"
