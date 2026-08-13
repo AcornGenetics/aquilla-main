@@ -13,7 +13,13 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      /* Anchored from the top rather than centred: centring positions this
+         block by its TOTAL height, so anything that resizes after first paint
+         (a font resolving, an element getting its real dimensions) moves the
+         logo. Measured on sn09 as a ~70px shift shortly after load. Anchoring
+         makes the logo's position depend only on the viewport. */
+      justify-content: flex-start;
+      padding-top: 25%;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overflow: hidden;
     }

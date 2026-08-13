@@ -952,6 +952,13 @@ sleep 3
 # If kiosk_disabled flag exists, show desktop instead of kiosk.
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
 if [ ! -f /tmp/kiosk_disabled ]; then
+  # --window-size: open at panel size. Without it Chromium maps its window at
+  # its own default 748x561 and holds it ~1s before the WM fullscreens it —
+  # measured on sn09, on every one of five boots. The splash centres itself in
+  # the viewport, so a page painting during that second is laid out for a 561px
+  # window and its content shifts when the window grows to 1024. With the flag
+  # the intermediate size was 767x1023 across eight further boots.
+  #
   # GTK_THEME: Chromium's window background — the surface visible after the window
   # is mapped but before the page paints — comes from GTK, not from Chromium. It is
   # bright white by default, which makes every seam and flicker around it obvious
@@ -961,6 +968,8 @@ if [ ! -f /tmp/kiosk_disabled ]; then
   # theme does reach it. See ~/.config/gtk-3.0/gtk.css above for the black override.
   env GTK_THEME=Adwaita:dark chromium \
     --kiosk http://localhost:8080/splash \
+    --window-size=768,1024 \
+    --window-position=0,0 \
     --incognito \
     --noerrdialogs \
     --disable-infobars \

@@ -352,3 +352,16 @@ def test_nginx_phase_frees_port_8080_on_rerun():
     """
     assert "docker stop aquila-ui" in SCRIPT
     assert "Address already in use" in SCRIPT or ":8080 already held" in SCRIPT
+
+
+def test_kiosk_window_opens_at_panel_size():
+    """
+    Without this Chromium maps its window at its own default 748x561 and holds
+    it ~1s before the WM fullscreens it — measured on sn09 on every one of five
+    boots. The splash centres itself in the viewport, so a page painting during
+    that second is laid out for a 561px-tall window and its content shifts when
+    the window grows to 1024. That is the logo jump (#437), intermittent only
+    because the page does not always paint before the resize.
+    """
+    assert "--window-size=768,1024" in SCRIPT
+    assert "--window-position=0,0" in SCRIPT
