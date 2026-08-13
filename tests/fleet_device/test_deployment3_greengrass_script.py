@@ -81,6 +81,36 @@ def test_retains_deployment2_device_build():
         assert marker in SCRIPT, f"deployment3 dropped a shared step: {marker}"
 
 
+# --- Display rotation at X startup -------------------------------------------
+# The panel is portrait, the display comes up landscape. Rotation used to be
+# applied by `xrandr --rotate right` from the Openbox autostart — after X,
+# LightDM and Chromium had painted — so Chromium laid the splash out against a
+# landscape viewport and re-laid it out when the geometry changed. Measured on
+# sn10: the Acorn logo appeared high and visibly dropped into place.
+
+def test_rotation_configured_at_x_startup():
+    assert "/etc/X11/xorg.conf.d/99-rotate.conf" in SCRIPT
+    assert 'Option "Rotate" "right"' in SCRIPT
+
+
+def test_rotation_covers_both_connectors():
+    # The panel is not always on the same connector — sn10 reports HDMI-2, and
+    # the autostart has always had to auto-detect it. Xorg ignores a Monitor
+    # section matching no output, so writing both is safe.
+    assert 'Identifier "HDMI-1"' in SCRIPT
+    assert 'Identifier "HDMI-2"' in SCRIPT
+
+
+def test_session_does_not_rotate_again():
+    # Rotating in the session would undo the X-level rotation, and rotating late
+    # is the original bug.
+    assert "--rotate right" not in SCRIPT.split("Section \"Monitor\"")[-1]
+    for line in SCRIPT.splitlines():
+        if line.strip().startswith("xrandr --output"):
+            assert "--rotate" not in line, (
+                f"session still rotates the display: {line.strip()}"
+            )
+
 # --- Bootloader setup screen (EEPROM), #418 ----------------------------------
 # Newer factory bootloaders ship NET_INSTALL_AT_POWER_ON=1, which paints a
 # "Configure this Raspberry Pi" panel over the display on every cold boot. The
@@ -322,3 +352,16 @@ def test_nginx_phase_frees_port_8080_on_rerun():
     """
     assert "docker stop aquila-ui" in SCRIPT
     assert "Address already in use" in SCRIPT or ":8080 already held" in SCRIPT
+
+
+def test_kiosk_window_opens_at_panel_size():
+    """
+    Without this Chromium maps its window at its own default 748x561 and holds
+    it ~1s before the WM fullscreens it — measured on sn09 on every one of five
+    boots. The splash centres itself in the viewport, so a page painting during
+    that second is laid out for a 561px-tall window and its content shifts when
+    the window grows to 1024. That is the logo jump (#437), intermittent only
+    because the page does not always paint before the resize.
+    """
+    assert "--window-size=768,1024" in SCRIPT
+    assert "--window-position=0,0" in SCRIPT

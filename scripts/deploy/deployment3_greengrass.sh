@@ -424,11 +424,43 @@ phase_pass "LightDM configured for X11/Openbox autologin (Wayland compositor dis
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 6 "Display and Touch configuration"
 
+# Rotate the panel at X startup rather than from the Openbox autostart.
+#
+# The panel is portrait but the display comes up landscape, and rotation used to
+# be applied by `xrandr --rotate right` from the session — after X, LightDM and
+# Chromium had already painted. Chromium therefore laid the splash out against a
+# landscape viewport, then re-laid it out when the geometry changed: measured on
+# sn10, the Acorn logo appeared high on the screen and visibly dropped into place.
+# The screen also filled in blocks rather than as one frame while the rotated
+# framebuffer was repainted.
+#
+# Setting it here means X is portrait from its first frame, so nothing re-layouts.
+# Verified on sn10: the logo jump is gone and the block fill is much reduced.
+#
+# Both connector names are written because the panel is not always on the same
+# one — sn10 reports HDMI-2 (kernel HDMI-A-2), and the autostart has always had to
+# auto-detect it. Xorg ignores a Monitor section whose Identifier matches no
+# output, so the unused one is harmless.
+mkdir -p /etc/X11/xorg.conf.d
+cat > /etc/X11/xorg.conf.d/99-rotate.conf <<'EOF'
+Section "Monitor"
+    Identifier "HDMI-1"
+    Option "Rotate" "right"
+EndSection
+
+Section "Monitor"
+    Identifier "HDMI-2"
+    Option "Rotate" "right"
+EndSection
+EOF
+
 # xrandr and xinput are called at runtime from Openbox autostart (Phase 9b).
 # This phase verifies the required tools are present on the host.
 run_test "xrandr binary present"  "which xrandr"
 run_test "xinput binary present"  "which xinput"
 run_test "unclutter present"      "which unclutter"
+run_test "X rotation config"      "test -f /etc/X11/xorg.conf.d/99-rotate.conf"
+run_test "rotation set to right"  "grep -q 'Option \"Rotate\" \"right\"' /etc/X11/xorg.conf.d/99-rotate.conf"
 
 # Disable the Raspberry Pi welcome wizard so it never appears on first boot
 rm -f /etc/xdg/autostart/piwiz.desktop
@@ -897,7 +929,10 @@ xset -dpms
 # Auto-detect connected HDMI output (handles HDMI-2, HDMI-A-2, etc.)
 HDMI_OUT=$(xrandr --query | grep -E "^HDMI.* connected" | head -1 | awk '{print $1}')
 if [ -n "$HDMI_OUT" ]; then
-    xrandr --output "$HDMI_OUT" --mode 1024x768 --rate 60 --rotate right
+    # No --rotate here: X is already portrait from /etc/X11/xorg.conf.d/99-rotate.conf
+    # (Phase 6). Rotating again in the session would undo it, and rotating late is
+    # what made the splash re-layout on screen in the first place.
+    xrandr --output "$HDMI_OUT" --mode 1024x768 --rate 60
 fi
 
 xinput set-prop "Focaltech Systems FT5926 MultiTouch" \
@@ -917,6 +952,13 @@ sleep 3
 # If kiosk_disabled flag exists, show desktop instead of kiosk.
 # Flag is in /tmp/ so it is cleared on reboot (kiosk relaunches normally).
 if [ ! -f /tmp/kiosk_disabled ]; then
+  # --window-size: open at panel size. Without it Chromium maps its window at
+  # its own default 748x561 and holds it ~1s before the WM fullscreens it —
+  # measured on sn09, on every one of five boots. The splash centres itself in
+  # the viewport, so a page painting during that second is laid out for a 561px
+  # window and its content shifts when the window grows to 1024. With the flag
+  # the intermediate size was 767x1023 across eight further boots.
+  #
   # GTK_THEME: Chromium's window background — the surface visible after the window
   # is mapped but before the page paints — comes from GTK, not from Chromium. It is
   # bright white by default, which makes every seam and flicker around it obvious
@@ -926,6 +968,8 @@ if [ ! -f /tmp/kiosk_disabled ]; then
   # theme does reach it. See ~/.config/gtk-3.0/gtk.css above for the black override.
   env GTK_THEME=Adwaita:dark chromium \
     --kiosk http://localhost:8080/splash \
+    --window-size=768,1024 \
+    --window-position=0,0 \
     --incognito \
     --noerrdialogs \
     --disable-infobars \
