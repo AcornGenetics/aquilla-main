@@ -173,3 +173,64 @@ def test_legacy_rotation_and_unclutter_asserted_gone():
     # `--rotate right`, and unclutter, which Phase 9b deliberately avoids.
     assert 'run_test "no system-wide unclutter"' in SCRIPT
     assert 'run_test "no system-wide xrandr"' in SCRIPT
+
+# --- Openbox window decorations, #428 ----------------------------------------
+# Openbox decorates every window by default and --kiosk does not survive a window
+# being re-mapped, so Chromium's window briefly wears a title bar reading
+# "Untitled — Chromium" at startup. Verified on sn03.
+
+def test_disables_window_decorations():
+    assert "aquila-kiosk-no-decor" in SCRIPT
+    assert "<decor>no</decor>" in SCRIPT
+
+
+def test_rc_xml_copied_from_distro_not_written_from_scratch():
+    # Openbox needs a complete rc.xml; hand-writing one would drop every other
+    # distro default (theme, keybinds, mouse behaviour).
+    assert "cp /etc/xdg/openbox/rc.xml" in SCRIPT
+
+
+def test_rc_xml_rule_inserted_inside_applications_block():
+    # A second top-level <applications> element is invalid and silently ignored,
+    # so the rule must go inside the existing one.
+    assert "s|</applications>|" in SCRIPT
+
+
+def test_rc_xml_validated_before_reboot():
+    # A malformed rc.xml leaves Openbox unable to start — blank screen on a
+    # device that may not be physically reachable. Validate and roll back.
+    assert "xml.etree.ElementTree" in SCRIPT
+    assert "restoring stock file" in SCRIPT
+    assert 'run_test "rc.xml is valid XML"' in SCRIPT
+
+
+def test_rc_xml_edit_is_idempotent():
+    # Re-running deployment3 must not stack duplicate rules into rc.xml.
+    assert "grep -q 'aquila-kiosk-no-decor'" in SCRIPT
+
+
+def test_kiosk_window_mapped_fullscreen():
+    """
+    Without this, Chromium's window is mapped small and then resized up, and the
+    growth is visible on screen — the "quadrant fill" on #428, which was mistaken
+    for a slow repaint until frame-by-frame capture on sn09 showed a part-sized
+    decorated window rather than a partially painted one.
+    """
+    assert "<fullscreen>yes</fullscreen>" in SCRIPT
+    assert "<maximized>yes</maximized>" in SCRIPT
+
+
+def test_kiosk_window_background_is_dark():
+    """
+    Chromium's window background — visible after the window is mapped but before
+    the page paints — comes from GTK, not Chromium, and is bright white by
+    default. That makes every seam around it obvious against the black either
+    side.
+
+    No Chromium flag reaches it: --default-background-color and
+    --cast-app-background-color both govern the page area and were verified in
+    the running process on sn09 with no effect on this surface.
+    """
+    assert "GTK_THEME=Adwaita:dark" in SCRIPT
+    assert ".config/gtk-3.0/gtk.css" in SCRIPT
+    assert "background-color: #000000" in SCRIPT
