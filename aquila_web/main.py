@@ -812,6 +812,7 @@ async def _simulate_run(profile_name: str) -> None:
             "profile": profile_name,
             "result": detected_summary,
             "run_timestamp": run_timestamp,
+            **_build_identity_event_fields(),
             "tube_names": _tube_names_by_well(),
             "calls": _calls_from_file(results_file),
             # The profile body travels with the Run: the device is the only place
@@ -937,6 +938,40 @@ def _read_app_version() -> str:
         return os.getenv("AQ_APP_VERSION", "unknown")
 
 
+def _read_git_sha() -> str:
+    """The build's git SHA from config_files/version.json, or "unknown".
+
+    The file is written at image build time; a dev checkout carries app_version
+    only, so a missing key is normal and must not raise. Kept beside
+    _read_app_version() rather than folded into it because that function's
+    return type is depended on by /version.
+
+    NOTE: aquilla-main #351 (currently riding to main on PR #438) introduces
+    _read_build_identity()/_BUILD_IDENTITY, which reads this same file once at
+    import. Collapse this into that helper when #438 lands; this exists so
+    build attribution need not wait on that epic.
+    """
+    try:
+        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
+        return str(data["git_sha"])
+    except Exception:
+        return "unknown"
+
+
+def _build_identity_event_fields() -> dict:
+    """app_version + git_sha to stamp onto a run_complete payload (#447).
+
+    Both run_complete emitters -- the real /events/run_complete path and the
+    simulated-run path -- call this, so they cannot drift apart. Every field
+    degrades to "unknown" rather than raising: a Device whose image did not bake
+    the file must still emit its Event.
+
+    The UI container's git_sha is deliberately out of scope: it is served over
+    HTTP by the ui container and is best-effort.
+    """
+    return {"app_version": _read_app_version(), "git_sha": _read_git_sha()}
+
+
 @app.get("/version")
 async def version_check():
     return {"version": _read_app_version()}
@@ -1014,6 +1049,7 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "profile": req.profile,
             "result": result,
             "run_timestamp": run_timestamp,
+            **_build_identity_event_fields(),
             "tube_names": _tube_names_by_well(req.tube_names),
             "calls": _calls_from_file(results_file) if results_file else [],
             # The real-device path resolves the body here rather than in
