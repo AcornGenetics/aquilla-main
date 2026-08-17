@@ -7,6 +7,7 @@ Behaviors tested:
   3. Event payload includes a non-empty result field
   4. state_requests.emit_run_complete() posts to the correct endpoint
 """
+import asyncio
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -151,6 +152,160 @@ class TestRunCompleteEndpoint:
             "3": "Tube 3",
             "4": "Tube 4",
         }
+
+
+class TestRunCompleteDuration:
+    """run_complete carries the Run's duration (#449), so
+    v_homing_sample_correlated stops treating every Run as still-in-progress
+    and Samples can be told apart as in-Run or idle."""
+
+    def test_payload_carries_supplied_duration_seconds(self, db_client):
+        client, local_db = db_client
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+            "duration_seconds": 842,
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload["duration_seconds"] == 842
+
+    def test_payload_defaults_duration_seconds_to_none_when_omitted(self, db_client):
+        client, local_db = db_client
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload.get("duration_seconds") is None
+
+    def test_existing_fields_and_run_timestamp_unchanged(self, db_client):
+        # Acceptance criterion: existing fields and run_timestamp must be
+        # unaffected -- run_id is derived cloud-side from device_id +
+        # run_timestamp and must not shift.
+        client, local_db = db_client
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+            "run_timestamp": "2026-07-02T14:03:11Z",
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload["run_timestamp"] == "2026-07-02T14:03:11Z"
+        assert payload["run_name"] == "Run 1"
+        assert payload["profile"] == "basic_pcr.json"
+
+
+class TestEmitRunCompleteForwardsDurationSeconds:
+    """state_requests.emit_run_complete() forwards duration_seconds (#449)."""
+
+    def test_forwards_duration_seconds_when_supplied(self, monkeypatch):
+        import aq_lib.state_requests as sr
+
+        calls = []
+
+        class _FakeResponse:
+            status_code = 200
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append({"url": url, "json": json})
+            return _FakeResponse()
+
+        monkeypatch.setattr("aq_lib.state_requests.requests.post", fake_post)
+        sr.emit_run_complete(
+            "Run 1", "basic_pcr.json", "/logs/results/run1.json",
+            duration_seconds=123,
+        )
+        assert calls[0]["json"]["duration_seconds"] == 123
+
+    def test_omits_duration_seconds_when_not_supplied(self, monkeypatch):
+        import aq_lib.state_requests as sr
+
+        calls = []
+
+        class _FakeResponse:
+            status_code = 200
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append({"url": url, "json": json})
+            return _FakeResponse()
+
+        monkeypatch.setattr("aq_lib.state_requests.requests.post", fake_post)
+        sr.emit_run_complete("Run 1", "basic_pcr.json", "/logs/results/run1.json")
+        assert "duration_seconds" not in calls[0]["json"]
+
+
+class TestSimulatedRunEmitsSameFields:
+    """The simulated-run path (aquila_web.main._simulate_run) must stamp
+    duration_seconds onto run_complete the same way the real
+    /events/run_complete path does (#449 acceptance criterion).
+
+    Isolated from the real repo tree: RESULTS_DIR/PLOTS_DIR/HISTORY_PATH and
+    the local DB are all monkeypatched to tmp_path, and process_run (the real
+    curve analysis) is stubbed out with a fixture results file so this test
+    doesn't depend on optics-log parsing correctness -- that's covered
+    elsewhere.
+    """
+
+    @pytest.mark.asyncio
+    async def test_simulated_run_payload_has_duration(self, tmp_path, monkeypatch):
+        from aquila_web import local_db, main as web_main
+
+        db_path = tmp_path / "sim_events.db"
+        monkeypatch.setenv("AQ_LOCAL_DB_PATH", str(db_path))
+        local_db.init_local_db()
+
+        monkeypatch.setattr(web_main, "RESULTS_DIR", tmp_path / "results")
+        monkeypatch.setattr(web_main, "PLOTS_DIR", tmp_path / "plots")
+        monkeypatch.setattr(web_main, "HISTORY_PATH", tmp_path / "history.json")
+        monkeypatch.setattr(web_main, "SIM_RUN_SECONDS", 0)
+        # _simulate_run only checks that the optics path exists before handing it
+        # to process_run (stubbed below), so a minimal file in tmp_path is enough.
+        # Deliberately not a repo fixture: this test must not depend on a large
+        # sample log being present in the tree.
+        optics_stub = tmp_path / "optics.log"
+        optics_stub.write_text("# Starting optics log\n")
+        monkeypatch.setattr(web_main, "dev_optics_path", str(optics_stub))
+
+        # Results written inline rather than copied from tests/fixtures/results/:
+        # that directory is covered by the broad `results/` .gitignore rule, so
+        # those fixtures exist only on a developer machine and this test would
+        # fail on a clean clone.
+        _RESULTS_JSON = (
+            '{"1": {"1": "Detected", "2": "Detected", "3": "Detected", "4": "Detected"},'
+            ' "2": {"1": "Detected", "2": "Detected", "3": "Detected", "4": "Detected"},'
+            ' "cq": {"1": {"1": 22.34, "2": 23.10, "3": 24.05, "4": 22.88},'
+            ' "2": {"1": 21.50, "2": 21.92, "3": 22.41, "4": 21.77}}}'
+        )
+
+        def _fake_process_run(optics_path, results_filename, plot_path, labels=None, rox_unavailable=False):
+            dest = web_main.RESULTS_DIR / results_filename
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(_RESULTS_JSON)
+
+        monkeypatch.setattr(web_main._analysis, "process_run", _fake_process_run)
+        monkeypatch.setattr(web_main, "build_optics_readings", lambda *a, **k: None)
+
+        task = asyncio.create_task(web_main._simulate_run("basic_pcr.json"))
+        try:
+            for _ in range(100):
+                events = local_db.get_pending_events()
+                if any(e["event_type"] == "run_complete" for e in events):
+                    break
+                await asyncio.sleep(0.05)
+            else:
+                pytest.fail("run_complete event was not enqueued in time")
+
+            payload = next(
+                e for e in local_db.get_pending_events() if e["event_type"] == "run_complete"
+            )["payload"]
+            assert payload["duration_seconds"] is not None
+            assert payload["duration_seconds"] >= 0
+        finally:
+            # _simulate_run blocks on run_complete_ack -- let it finish cleanly.
+            web_main.run_complete_ack = True
+            await asyncio.wait_for(task, timeout=5)
 
 
 class TestEmitRunComplete:

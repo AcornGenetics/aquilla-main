@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 import os
 import sys
+import time
 from pydantic import BaseModel
 from typing import Optional
 import json
@@ -668,6 +669,10 @@ async def _simulate_run(profile_name: str) -> None:
     start_time = datetime.now()
     # Canonical run_timestamp captured once at run start (#287).
     run_timestamp = _utc_now()
+    # Monotonic anchor for duration_seconds (#449): decoupled from run_timestamp
+    # (wall clock, used for run_id derivation) so a system clock adjustment
+    # mid-run can't skew the reported duration.
+    run_start_monotonic = time.monotonic()
     elapsed_time = 0
     timer_running = True
     current_item.screen = "running"
@@ -732,6 +737,7 @@ async def _simulate_run(profile_name: str) -> None:
     })
     _save_history(history)
     init_local_db()
+    duration_seconds = round(time.monotonic() - run_start_monotonic)
     enqueue_event(
         "run_complete",
         {
@@ -739,6 +745,7 @@ async def _simulate_run(profile_name: str) -> None:
             "profile": profile_name,
             "result": detected_summary,
             "run_timestamp": run_timestamp,
+            "duration_seconds": duration_seconds,
             "tube_names": _tube_names_by_well(),
             "calls": _calls_from_file(results_file),
         },
@@ -919,6 +926,10 @@ class _RunCompleteEventRequest(BaseModel):
     results_path: Optional[str] = None
     run_timestamp: Optional[str] = None
     tube_names: Optional[list] = None
+    # How long the Run took, in seconds -- captured device-side across the
+    # same bracket as run_timestamp (#449). Optional/None for legacy callers;
+    # the field is purely additive so there is no fallback computation here.
+    duration_seconds: Optional[float] = None
 
 
 @app.post("/events/run_complete")
@@ -938,6 +949,7 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "profile": req.profile,
             "result": result,
             "run_timestamp": run_timestamp,
+            "duration_seconds": req.duration_seconds,
             "tube_names": _tube_names_by_well(req.tube_names),
             "calls": _calls_from_file(results_file) if results_file else [],
         },

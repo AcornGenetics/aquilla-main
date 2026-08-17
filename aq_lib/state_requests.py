@@ -119,6 +119,7 @@ def emit_run_complete(
     results_path: str,
     run_timestamp: str | None = None,
     tube_names: list | None = None,
+    duration_seconds: float | None = None,
 ) -> None:
     url = f"{BACKEND_URL}/events/run_complete"
     payload = {"run_name": run_name, "profile": profile, "results_path": results_path}
@@ -126,6 +127,11 @@ def emit_run_complete(
         payload["run_timestamp"] = run_timestamp
     if tube_names is not None:
         payload["tube_names"] = tube_names
+    if duration_seconds is not None:
+        # How long the Run took (#449); read from fact_run.duration_seconds
+        # cloud-side. Omitted (not sent as null) when unknown, mirroring
+        # run_timestamp/tube_names above.
+        payload["duration_seconds"] = duration_seconds
     try:
         requests.post(url, json=payload, timeout=5)
     except requests.exceptions.RequestException as e:
