@@ -174,4 +174,5 @@ carry the same information and leave both cutoffs changeable in SQL.
   never re-scores)
 - Spec: `specs/hardware/lid-heater-fleet-telemetry.md`
 - Prior instrumentation: `specs/hardware/lid-worker-instrumentation.md` (#157)
-- Issue: TBD
+- Issues: aquilla-main #452 (emit), acorn-analytics #93 (fact + loader) and #94 (governed
+  views), acorn-internal-app #337 (Thermal category)

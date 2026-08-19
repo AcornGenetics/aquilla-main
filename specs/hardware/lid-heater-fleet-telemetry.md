@@ -5,7 +5,7 @@
 **Last updated:** 2026-08-19
 **Subsystem:** Lid
 **Source file(s):** `aq_lib/lid_heater_log.py` (new), `aq_lib/lid_heater_window.py` (new), `aq_lib/regulate.py`, `aquila_web/lid_parser.py` (new)
-**GitHub issue:** TBD
+**GitHub issue:** #452
 **Related specs:** `specs/hardware/lid-worker-instrumentation.md` (the diagnostic logging this promotes to permanent telemetry)
 
 ---
@@ -307,7 +307,7 @@ Run units: `pytest tests/unit/test_lid_heater_window.py tests/unit/test_lid_pars
 
 This spec covers the device only. Two further pieces of work consume it:
 
-1. **acorn-analytics** — `lib/lid-heater/contract.ts`, a `lid_heater_sample` case in
+1. **acorn-analytics** (issues #93 fact/loader, #94 views) — `lib/lid-heater/contract.ts`, a `lid_heater_sample` case in
    `lib/loader/load-event.ts`, migration `fact_lid_heater_sample`, and the governed read
    views where every threshold in this document actually lives. Three views are needed:
    **Lid Hold** (share of Settled Windows at cutoff, weighted by `window_seconds`),
@@ -318,7 +318,7 @@ This spec covers the device only. Two further pieces of work consume it:
    Critical when the latest Sample reports `live_worker_count` >= 3, or when
    `live_worker_count` > 1 in >= 2 of the device's last 8 Runs. The leak rule reads the
    latest Samples, never all-time, so a power cycle clears it without an acknowledgement.
-2. **acorn-internal-app** — the mirrored migrations, and a new **Thermal** metric category
+2. **acorn-internal-app** (issue #337) — the mirrored migrations, and a new **Thermal** metric category
    (the app's fourth, alongside Optics & LEDs, Inconclusive and Mechanical) carrying two
    metrics: **Lid Hold** (share of Settled Windows at cutoff — the computed replacement for
    the manual bench check, the lagging indicator) and **Lid Climb** (Checkpoint Crossing
