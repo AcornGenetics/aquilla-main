@@ -20,7 +20,7 @@ One append-only queue. One row per Event.
 ```sql
 CREATE TABLE events (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type        TEXT NOT NULL,   -- run_complete | optics_readings | call_evidence | homing_sample
+    event_type        TEXT NOT NULL,   -- run_complete | optics_readings | call_evidence | homing_sample | lid_heater_sample
     payload           TEXT NOT NULL,   -- the Event body, as a JSON string
     device_id         TEXT,            -- Sentri Device ID (Pi serial)
     created_at        TEXT NOT NULL,   -- when enqueued (UTC ISO-8601)
@@ -125,6 +125,39 @@ Sample `id`, so re-parsing the log (or a rotation) is idempotent.
 
 **→ warehouse:** `fact_homing_sample` (one row per Sample; miss-rate and drift are
 derived views — acorn-analytics, issues #327–#328).
+
+
+### `lid_heater_sample`
+
+One [Lid Heater Sample](../CONTEXT.md#glossary) per [Sample Window](../CONTEXT.md#glossary)
+(ADR-022). **Run-scoped**, unlike `homing_sample`: the lid-heater worker is started and stopped
+by `state_run_assay`, so it cannot exist outside a Run and every Sample shares the Run's
+`run_timestamp`. Windows are not uniform — one Climb Window per Run, then repeated 300 s Settled
+Windows — so each Sample carries its own `window_seconds`. The device summarises but never
+judges; every threshold lives in acorn-analytics read views.
+
+Written by the lid-heater worker as JSON lines to the dedicated lid log, then loaded into this
+table by the backend parser with `dedup_key` = the Sample `id`, so re-parsing (or a rotation) is
+idempotent. The parser runs in `_run_sync_cycle()` beside the homing import.
+
+| Field | Meaning |
+|---|---|
+| `id` | Unique per-Sample id (UUID); also the `dedup_key` |
+| `ts` | When the window opened (device UTC ISO-8601) |
+| `run_timestamp` | Run identity; shared by the Run's other Events |
+| `window_seconds` | Length of the window summarised |
+| `last_voltage` / `last_reading_age_seconds` | Latest reading and how stale it is |
+| `cutoff_voltage` / `floor_voltage` | This machine's configured bounds |
+| `heater_state` | `heating` \| `holding` \| `quiet` \| `not_heating` |
+| `mean_voltage` / `min_voltage` / `max_voltage` | Level and spread over the window |
+| `checkpoint_crossings` | Seconds to first reach each checkpoint of the ladder derived from this machine's cutoff (Climb Window only) |
+| `at_cutoff_fraction` / `quiet_fraction` | Share of the window at temperature, and held off for motion/imaging |
+| `live_worker_count` | Live lid-heater threads; > 1 means a leak |
+| `slowest_read_seconds` / `slow_read_count` / `read_retry_count` | ADC read health |
+| `reading_count` / `expected_reading_count` | Readings received vs expected (~1/s) |
+
+**→ warehouse:** `fact_lid_heater_sample` (one row per Sample; lid health bands are derived
+views — acorn-analytics).
 
 ---
 
