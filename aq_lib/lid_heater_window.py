@@ -93,7 +93,6 @@ class LidSampler:
                     self._crossings[key] = elapsed
 
         self._readings_in_window += 1
-        self._voltage_sum += voltage
         if self._min_voltage is None or voltage < self._min_voltage:
             self._min_voltage = voltage
         if self._max_voltage is None or voltage > self._max_voltage:
@@ -101,11 +100,14 @@ class LidSampler:
         if quiet:
             self._quiet += 1
         else:
-            # Held-at-temperature is only a question about the stretches the
-            # heater was meant to be working: while Quiet it is off on purpose
-            # and the lid is allowed to cool, so counting those readings would
-            # mark a busy machine unhealthy for behaving correctly.
+            # Health is only a question about the stretches the heater was meant
+            # to be working: while Quiet it is off on purpose and the lid is
+            # allowed to cool, so counting those readings would mark a busy
+            # machine unhealthy for behaving correctly. min/max above are the
+            # exception -- they see every reading, because a frozen or
+            # below-floor sensor is broken whether the heater was on or not.
             self._active += 1
+            self._voltage_sum += voltage
             if voltage >= self._cutoff:
                 self._at_cutoff += 1
         if read_seconds > self._slowest_read:
@@ -156,7 +158,7 @@ class LidSampler:
             "run_timestamp": self._run_timestamp,
             "window_kind": kind,
             "window_seconds": window_seconds,
-            "mean_voltage": self._voltage_sum / readings,
+            "mean_voltage": (self._voltage_sum / self._active) if self._active else None,
             "min_voltage": self._min_voltage,
             "max_voltage": self._max_voltage,
             # Shares of readings, not of clock time: the worker reads at roughly

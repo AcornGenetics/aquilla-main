@@ -150,7 +150,7 @@ idempotent. The parser runs in `_run_sync_cycle()` beside the homing import.
 | `last_voltage` / `last_reading_age_seconds` | Latest reading and how stale it is |
 | `cutoff_voltage` / `floor_voltage` / `target_voltage` | This machine's configured bounds, and where a healthy lid parks on it |
 | `heater_state` | `heating` \| `holding` \| `quiet` \| `not_heating` |
-| `mean_voltage` / `min_voltage` / `max_voltage` | Level and spread over the window |
+| `mean_voltage` / `min_voltage` / `max_voltage` | Mean of non-Quiet readings (null if all Quiet); min/max over every reading |
 | `checkpoint_crossings` | Seconds to first reach each checkpoint of the ladder derived from this machine's cutoff (Climb Window only) |
 | `at_cutoff_fraction` / `quiet_fraction` | Share of the window's non-Quiet readings at temperature (null if all Quiet), and share held off for motion/imaging |
 | `live_worker_count` | Live lid-heater threads; > 1 means a leak |

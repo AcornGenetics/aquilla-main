@@ -137,7 +137,8 @@ class TestWindowFigures:
         sample = s.close(elapsed=5.0)
         assert sample["min_voltage"] == pytest.approx(0.30)
         assert sample["max_voltage"] == pytest.approx(0.36)
-        assert sample["mean_voltage"] == pytest.approx(0.33)
+        # Mean of the non-Quiet readings only: (0.35 + 0.30) / 2.
+        assert sample["mean_voltage"] == pytest.approx(0.325)
         assert sample["at_cutoff_fraction"] == pytest.approx(0.5)
         assert sample["quiet_fraction"] == pytest.approx(0.5)
 
@@ -205,6 +206,29 @@ class TestWindowFigures:
         assert sample["target_voltage"] == pytest.approx(0.33)
         assert sample["cutoff_voltage"] == pytest.approx(0.36)
         assert sample["floor_voltage"] == pytest.approx(0.22)
+
+    def test_mean_voltage_also_ignores_quiet_readings(self):
+        """Same reason as at_cutoff_fraction: the lid is allowed to cool while
+        Quiet, so averaging those readings in would drag a healthy machine's
+        mean away from its target. min/max still see every reading -- a frozen
+        or below-floor sensor is broken whether the heater was on or not."""
+        s = sampler(cutoff=0.34, target=0.32)
+        s.record(0.33, elapsed=1.0)
+        s.record(0.31, elapsed=2.0)
+        s.record(0.10, elapsed=3.0, quiet=True)
+
+        sample = s.close(elapsed=4.0)
+        assert sample["mean_voltage"] == pytest.approx(0.32)
+        assert sample["min_voltage"] == pytest.approx(0.10)
+        assert sample["max_voltage"] == pytest.approx(0.33)
+
+    def test_mean_voltage_is_null_when_every_reading_was_quiet(self):
+        s = sampler(cutoff=0.34)
+        s.record(0.12, elapsed=1.0, quiet=True)
+
+        sample = s.close(elapsed=2.0)
+        assert sample["mean_voltage"] is None
+        assert sample["min_voltage"] == pytest.approx(0.12)
 
 
 class TestHeaterState:
