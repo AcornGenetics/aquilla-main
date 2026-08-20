@@ -142,8 +142,8 @@ idempotent. The parser runs in `_run_sync_cycle()` beside the homing import.
 
 | Field | Meaning |
 |---|---|
-| `id` | Unique per-Sample id (UUID); also the `dedup_key` |
-| `ts` | When the window opened (device UTC ISO-8601) |
+| `sample_id` | Unique per-Sample id (UUID); also the `dedup_key`. Named `sample_id` rather than `homing_sample`'s `id`: it is unambiguous beside `run_timestamp`, and it saves the loader a rename |
+| `device_ts` | When the window opened (device UTC ISO-8601) |
 | `run_timestamp` | Run identity; shared by the Run's other Events |
 | `window_kind` | `climb` or `settled`; Lid Hold reads Settled Windows only |
 | `window_seconds` | Length of the window summarised |
