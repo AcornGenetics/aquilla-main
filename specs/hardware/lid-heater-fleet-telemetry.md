@@ -190,7 +190,7 @@ first-write-wins on `sample_id`.
 | `min_voltage` | float (V) | Lowest reading in the window. |
 | `max_voltage` | float (V) | Highest reading in the window. Together with `min_voltage` these carry the "consistent" half of the QC criterion, which an average by itself cannot measure — and they are raw facts, so the Warehouse derives the spread (`max − min`), "frozen" (`min = max`) and "below floor" (`min <= floor_voltage`) itself, with the floor comparison as a *central* threshold rather than a firmware constant. |
 | `checkpoint_crossings` | object | Seconds from worker start to first reaching each checkpoint of the derived ladder, e.g. `{"0.28": 41.2, "0.30": 58.9, "0.32": 96.4, "0.34": 172.0}`. A missing key means that checkpoint was never reached. Captures the shape of the climb without claiming a heating rate. Keys are the actual voltages used, so a machine with a different cutoff is self-describing. |
-| `at_cutoff_fraction` | float 0–1 | Share of the window spent at or above `cutoff_voltage`. Replaces the manual "holds for 300 s" check with something computed. ~0 on the Climb Window by construction; meaningful on Settled Windows. |
+| `at_cutoff_fraction` | float 0–1 or null | Share of the window's **non-Quiet** readings at or above `cutoff_voltage`. Quiet readings are excluded because the heater is off on purpose then and the lid is allowed to cool — counting them would mark a busy machine unhealthy for behaving correctly. **Null** when every reading was Quiet: that window cannot answer the hold question. Replaces the manual "holds for 300 s" check with something computed. ~0 on the Climb Window by construction; meaningful on Settled Windows. |
 | `quiet_fraction` | float 0–1 | Share of the window the heater was held off because the machine was moving or imaging (`quiet_event`). The internal app may display this as "Muted"; `quiet` is the wire name, matching the code. Without it, nothing else here is interpretable during a live assay. |
 
 **Trustworthiness** — signals about whether the numbers above are believable.
@@ -263,6 +263,9 @@ and are echoed onto every Sample.
   checkpoint **offsets**, requires a fleet-wide
   deploy, and silently changes what historical Samples mean. Any such change must be
   treated as a new generation of the data, not an edit to the old.
+- A window spent entirely Quiet still emits a Sample, with a null
+  `at_cutoff_fraction`. Dropping it would forge the "missing Samples mean a stalled
+  controller" signal, and its leak and read-health counters still matter.
 - Summarising on the device is lossy by construction — the individual readings are
   discarded once a window closes and cannot be recovered. This was chosen over shipping
   raw readings because a raw series would land as a blob (as `fact_run_optics` does):

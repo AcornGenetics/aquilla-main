@@ -65,6 +65,7 @@ class LidSampler:
         self._min_voltage = None
         self._max_voltage = None
         self._at_cutoff = 0
+        self._active = 0
         self._quiet = 0
         self._slowest_read = 0.0
         self._slow_reads = 0
@@ -92,10 +93,16 @@ class LidSampler:
             self._min_voltage = voltage
         if self._max_voltage is None or voltage > self._max_voltage:
             self._max_voltage = voltage
-        if voltage >= self._cutoff:
-            self._at_cutoff += 1
         if quiet:
             self._quiet += 1
+        else:
+            # Held-at-temperature is only a question about the stretches the
+            # heater was meant to be working: while Quiet it is off on purpose
+            # and the lid is allowed to cool, so counting those readings would
+            # mark a busy machine unhealthy for behaving correctly.
+            self._active += 1
+            if voltage >= self._cutoff:
+                self._at_cutoff += 1
         if read_seconds > self._slowest_read:
             self._slowest_read = read_seconds
         if read_seconds > SLOW_READ_SECONDS:
@@ -150,7 +157,11 @@ class LidSampler:
             # Shares of readings, not of clock time: the worker reads at roughly
             # 1 Hz, so the two agree, and a share of readings degrades honestly
             # when reads are missed rather than silently assuming they happened.
-            "at_cutoff_fraction": self._at_cutoff / readings,
+            # None when every reading was Quiet: that window cannot answer the
+            # hold question. It is still emitted -- dropping it would forge the
+            # "missing Samples mean a stalled controller" signal, and its leak
+            # and read-health counters still matter.
+            "at_cutoff_fraction": (self._at_cutoff / self._active) if self._active else None,
             "quiet_fraction": self._quiet / readings,
             "checkpoint_crossings": dict(self._crossings),
             "live_worker_count": self._live_workers,
@@ -189,6 +200,7 @@ class LidSampler:
         self._min_voltage = None
         self._max_voltage = None
         self._at_cutoff = 0
+        self._active = 0
         self._quiet = 0
         self._slowest_read = 0.0
         self._slow_reads = 0

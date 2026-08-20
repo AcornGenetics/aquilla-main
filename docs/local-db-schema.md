@@ -152,7 +152,7 @@ idempotent. The parser runs in `_run_sync_cycle()` beside the homing import.
 | `heater_state` | `heating` \| `holding` \| `quiet` \| `not_heating` |
 | `mean_voltage` / `min_voltage` / `max_voltage` | Level and spread over the window |
 | `checkpoint_crossings` | Seconds to first reach each checkpoint of the ladder derived from this machine's cutoff (Climb Window only) |
-| `at_cutoff_fraction` / `quiet_fraction` | Share of the window at temperature, and held off for motion/imaging |
+| `at_cutoff_fraction` / `quiet_fraction` | Share of the window's non-Quiet readings at temperature (null if all Quiet), and share held off for motion/imaging |
 | `live_worker_count` | Live lid-heater threads; > 1 means a leak |
 | `slowest_read_seconds` / `slow_read_count` / `read_retry_count` | ADC read health |
 | `reading_count` / `expected_reading_count` | Readings received vs expected (~1/s) |

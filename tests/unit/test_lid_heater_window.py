@@ -165,6 +165,34 @@ class TestWindowFigures:
 
         assert s.close(elapsed=4.0)["live_worker_count"] == 3
 
+    def test_at_cutoff_ignores_readings_taken_while_quiet(self):
+        """The heater is off on purpose while the machine moves or images, so
+        counting those readings would mark a busy machine unhealthy for
+        behaving correctly. Held-at-temperature is only a question about the
+        stretches the heater was meant to be working."""
+        s = sampler(cutoff=0.34)
+        s.record(0.35, elapsed=1.0)                     # warm start, heating time
+        s.record(0.35, elapsed=2.0)
+        s.record(0.10, elapsed=3.0, quiet=True)         # cooling on purpose
+        s.record(0.10, elapsed=4.0, quiet=True)
+
+        sample = s.close(elapsed=5.0)
+        assert sample["at_cutoff_fraction"] == pytest.approx(1.0)
+        assert sample["quiet_fraction"] == pytest.approx(0.5)
+
+    def test_a_window_spent_entirely_quiet_cannot_answer_the_hold_question(self):
+        """Null says "this stretch cannot answer it"; dropping the Sample would
+        say "this stretch never happened", and missing Samples already mean a
+        stalled controller."""
+        s = sampler(cutoff=0.34)
+        s.record(0.35, elapsed=1.0, quiet=True)
+        s.record(0.12, elapsed=2.0, quiet=True)
+
+        sample = s.close(elapsed=3.0)
+        assert sample["at_cutoff_fraction"] is None
+        assert sample["quiet_fraction"] == pytest.approx(1.0)
+        assert sample["live_worker_count"] == 1          # the rest still reports
+
 
 class TestHeaterState:
     @pytest.mark.parametrize("voltage, quiet, expected", [
