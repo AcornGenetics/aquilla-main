@@ -49,7 +49,8 @@ reads on a chart as a cold lid. Instead:
   [[Checkpoint Crossing]] times, and its `at_cutoff_fraction` is ~0 by construction.
   If the lid is already at or above cutoff on the very first reading (a back-to-back Run
   on a warm machine), no Climb Window is emitted at all.
-- **Settled Windows** follow, fixed at 300 s each, until the worker stops. Their
+- **Settled Windows** follow, fixed at 300 s each, until the worker stops. Every Sample
+  states its own `window_kind`, so the two are never told apart by inference. Their
   `mean_voltage` and `at_cutoff_fraction` are clean: every one of them describes a lid
   that is supposed to be holding temperature.
 - **The final window of a Run is short**, closed by the worker stopping rather than by the
@@ -168,6 +169,7 @@ first-write-wins on `sample_id`.
 | `device_id` | string | Stamped by ingest from the client-certificate CN. **Never trusted from the payload.** |
 | `device_ts` | ISO-8601 UTC | When the window opened (device clock). |
 | `run_timestamp` | ISO-8601 UTC | The Run this window fell inside — the canonical per-Run stamp from `state_run_assay.run()`, the same one `run_complete` carries. The cloud derives `run_id = uuid5(device_id : run_timestamp)`; the device never mints a `run_id`. Unlike a Homing Sample this is always available, because the lid worker cannot exist outside a Run (ADR-022). |
+| `window_kind` | enum | `climb` \| `settled`. Which kind of window this Sample summarises. Explicit rather than inferred: a lid too cold to cross any checkpoint produces a Climb Window with empty `checkpoint_crossings`, which is otherwise indistinguishable from a Settled Window — and Lid Hold is drawn from Settled Windows only. |
 | `window_seconds` | int | Length of the window these figures are drawn from. Windows are not uniform (Climb vs Settled vs final), so without it, averages across windows are not comparable. |
 
 **Right now** — a snapshot of the lid at the instant the window closed.

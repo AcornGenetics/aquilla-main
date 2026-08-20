@@ -145,6 +145,7 @@ idempotent. The parser runs in `_run_sync_cycle()` beside the homing import.
 | `id` | Unique per-Sample id (UUID); also the `dedup_key` |
 | `ts` | When the window opened (device UTC ISO-8601) |
 | `run_timestamp` | Run identity; shared by the Run's other Events |
+| `window_kind` | `climb` or `settled`; Lid Hold reads Settled Windows only |
 | `window_seconds` | Length of the window summarised |
 | `last_voltage` / `last_reading_age_seconds` | Latest reading and how stale it is |
 | `cutoff_voltage` / `floor_voltage` | This machine's configured bounds |
