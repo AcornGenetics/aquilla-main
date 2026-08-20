@@ -328,18 +328,21 @@ This spec covers the device only. Two further pieces of work consume it:
 1. **acorn-analytics** (issues #93 fact/loader, #94 views) — `lib/lid-heater/contract.ts`, a `lid_heater_sample` case in
    `lib/loader/load-event.ts`, migration `fact_lid_heater_sample`, and the governed read
    views where every threshold in this document actually lives. Three views are needed:
-   **Lid Hold** (share of Settled Windows at cutoff, weighted by `window_seconds`),
+   **Lid Hold** (deviation of `mean_voltage` from `target_voltage`, weighted by
+   `window_seconds`),
    **Lid Climb** (Checkpoint Crossing times per Run, trended), and **Leaked Controllers** —
    with governed thin-data floors: no Lid Hold band below 20 Settled Windows (the floor is on
    windows, the score's denominator, not on Runs), no Lid Climb trend below 5 Runs carrying a
-   Climb Window —
+   Climb Window. **Lid Hold is the distance of `mean_voltage` from that machine's
+   `target_voltage`**, not a share above the cutoff — the heater is a thermostat, so a healthy
+   lid cycles around the cutoff and averages below it —
    Critical when the latest Sample reports `live_worker_count` >= 3, or when
    `live_worker_count` > 1 in >= 2 of the device's last 8 Runs. The leak rule reads the
    latest Samples, never all-time, so a power cycle clears it without an acknowledgement.
 2. **acorn-internal-app** (issue #337) — the mirrored migrations, and a new **Thermal** metric category
    (the app's fourth, alongside Optics & LEDs, Inconclusive and Mechanical) carrying two
-   metrics: **Lid Hold** (share of Settled Windows at cutoff — the computed replacement for
-   the manual bench check, the lagging indicator) and **Lid Climb** (Checkpoint Crossing
+   metrics: **Lid Hold** (how far the lid's mean sits from that machine's configured
+   target — the computed replacement for the manual bench check, the lagging indicator) and **Lid Climb** (Checkpoint Crossing
    times per Run, trended — the leading indicator, since a lid slows before it goes cold).
    The trust fields are **not** a third metric; they surface as a data-quality caveat badge
    on the Thermal detail page. Terms are defined in `acorn-internal-app/CONTEXT.md`.
