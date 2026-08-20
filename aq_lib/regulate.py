@@ -24,7 +24,12 @@ logger = logging.getLogger( "lid_heater" )
 
 DEFAULT_LID_HEATER_CONFIG = {
     "lower_bound": 0.2,
-    "upper_bound": 0.34
+    "upper_bound": 0.34,
+    # Where a healthy lid parks on this machine. The heater cycles around
+    # upper_bound rather than resting on it, so lid health is judged as the
+    # distance of a window's mean from this target (#452, ADR-022). Telemetry
+    # only -- the control loop does not use it.
+    "target_voltage": 0.32
 }
 
 def _load_lid_heater_config(config_path = None):
@@ -84,6 +89,9 @@ def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bo
         # nothing rather than emitting Samples that reference no Run.
         if run_timestamp is not None:
             sampler = LidSampler(cutoff_voltage=setpoint, floor_voltage=lower_bound,
+                                 target_voltage=config.get(
+                                     "target_voltage",
+                                     DEFAULT_LID_HEATER_CONFIG["target_voltage"]),
                                  run_timestamp=run_timestamp)
             worker_started = time.monotonic()
 

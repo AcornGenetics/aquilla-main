@@ -81,7 +81,7 @@ is how the climb, the settle, and (across months) the degradation become visible
 | Expected readings per full window | — | 300 | — | count |
 | Lid ADC floor (`floor_voltage`) | — | 0.20 | — | V |
 | Lid ADC cutoff (`cutoff_voltage`) | — | 0.34 | — | V |
-| Healthy settled voltage | — | ~0.32 | — | V |
+| Healthy settled voltage (`target_voltage`) | — | 0.32 | — | V |
 | Climb checkpoint offsets below cutoff | — | 0.06 / 0.04 / 0.02 / 0 | — | V |
 | ADC resolution floor (1 LSB @ `pga_fs_v=4.096`) | — | 0.000125 | — | V |
 | Slow-read threshold | — | 5 | — | s |
@@ -99,9 +99,16 @@ is the converter's graininess, not lid wobble. Measured converter noise is not r
 separating it from real lid movement would need repeated reads of a stable input, which
 the control loop does not do.
 
-`floor_voltage` and `cutoff_voltage` are read from `config_files/lid_heater_config.json`
-and **reported on every Sample**, because machines can be configured differently and
-nothing downstream may assume 0.20/0.34.
+`floor_voltage`, `cutoff_voltage` and `target_voltage` are read from
+`config_files/lid_heater_config.json` and **reported on every Sample**, because machines can
+be configured differently and nothing downstream may assume 0.20/0.34/0.32.
+
+`target_voltage` is telemetry only — the control loop does not use it. It exists because the
+heater is a thermostat: it drives until the reading reaches `cutoff_voltage`, switches off,
+lets the lid drift down, and drives again, so a healthy lid **cycles around** the cutoff and
+averages below it. "Share of readings at or above cutoff" would therefore read low on a
+perfectly healthy lid, with no way to know what value counts as healthy. The distance of
+`mean_voltage` from `target_voltage` is the question the bench check already answers.
 
 The **checkpoint ladder is derived from that machine's own cutoff**, not hardcoded:
 `[cutoff − 0.06, cutoff − 0.04, cutoff − 0.02, cutoff]`, rounded to 4 decimals, dropping any
@@ -179,6 +186,7 @@ first-write-wins on `sample_id`.
 | `last_voltage` | float (V) | The latest reading from the lid sensor. The raw signal everything else derives from. |
 | `last_reading_age_seconds` | float | Seconds since that reading was actually taken. A stopped controller looks perfectly healthy otherwise; freshness is what exposes it. |
 | `cutoff_voltage` | float (V) | The stop-heating voltage this machine is configured with. |
+| `target_voltage` | float (V) | Where a healthy lid parks on this machine. The heater cycles *around* the cutoff rather than resting on it, so lid health is the distance of `mean_voltage` from this target, not a share above the cutoff. Configured per machine, so nothing downstream may assume 0.32. |
 | `floor_voltage` | float (V) | The sanity floor this machine is configured with. |
 | `heater_state` | enum | `heating` \| `holding` \| `quiet` \| `not_heating`. Tells you *why* the heater is off, which the voltage alone cannot. |
 

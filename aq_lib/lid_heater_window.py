@@ -51,9 +51,14 @@ class LidSampler:
     """Accumulates readings and yields a Sample whenever a window closes."""
 
     def __init__(self, cutoff_voltage: float, floor_voltage: float,
-                 run_timestamp: str, now_utc=None):
+                 target_voltage: float, run_timestamp: str, now_utc=None):
         self._cutoff = float(cutoff_voltage)
         self._floor = float(floor_voltage)
+        # Where a healthy lid on *this* machine parks. The heater cycles around
+        # the cutoff rather than resting on it, so the honest health question is
+        # how far the window's mean sits from this target -- and the target is
+        # configured per machine, so it travels with every Sample.
+        self._target = float(target_voltage)
         self._run_timestamp = run_timestamp
         self._now_utc = now_utc or _utc_now
         self._window_ts = self._now_utc()
@@ -175,6 +180,7 @@ class LidSampler:
             "heater_state": self._heater_state(),
             "cutoff_voltage": self._cutoff,
             "floor_voltage": self._floor,
+            "target_voltage": self._target,
         }
         self._window_start = elapsed
         self._window_ts = self._now_utc()

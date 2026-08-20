@@ -148,7 +148,7 @@ idempotent. The parser runs in `_run_sync_cycle()` beside the homing import.
 | `window_kind` | `climb` or `settled`; Lid Hold reads Settled Windows only |
 | `window_seconds` | Length of the window summarised |
 | `last_voltage` / `last_reading_age_seconds` | Latest reading and how stale it is |
-| `cutoff_voltage` / `floor_voltage` | This machine's configured bounds |
+| `cutoff_voltage` / `floor_voltage` / `target_voltage` | This machine's configured bounds, and where a healthy lid parks on it |
 | `heater_state` | `heating` \| `holding` \| `quiet` \| `not_heating` |
 | `mean_voltage` / `min_voltage` / `max_voltage` | Level and spread over the window |
 | `checkpoint_crossings` | Seconds to first reach each checkpoint of the ladder derived from this machine's cutoff (Climb Window only) |

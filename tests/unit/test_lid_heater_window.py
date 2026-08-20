@@ -16,8 +16,9 @@ pytestmark = pytest.mark.unit
 RUN_TS = "2026-08-20T09:00:00Z"
 
 
-def sampler(cutoff=0.34, floor=0.20):
-    return LidSampler(cutoff_voltage=cutoff, floor_voltage=floor, run_timestamp=RUN_TS)
+def sampler(cutoff=0.34, floor=0.20, target=0.32):
+    return LidSampler(cutoff_voltage=cutoff, floor_voltage=floor,
+                      target_voltage=target, run_timestamp=RUN_TS)
 
 
 class TestClimbWindow:
@@ -193,6 +194,18 @@ class TestWindowFigures:
         assert sample["quiet_fraction"] == pytest.approx(1.0)
         assert sample["live_worker_count"] == 1          # the rest still reports
 
+    def test_carries_this_machines_configured_target(self):
+        """Lid Hold is judged as distance from the machine's own target, not
+        from a fleet-wide constant, so the target has to travel with the Sample
+        exactly as the cutoff and floor do."""
+        s = sampler(cutoff=0.36, floor=0.22, target=0.33)
+        s.record(0.37, elapsed=1.0)
+
+        sample = s.close(elapsed=5.0)
+        assert sample["target_voltage"] == pytest.approx(0.33)
+        assert sample["cutoff_voltage"] == pytest.approx(0.36)
+        assert sample["floor_voltage"] == pytest.approx(0.22)
+
 
 class TestHeaterState:
     @pytest.mark.parametrize("voltage, quiet, expected", [
@@ -222,7 +235,7 @@ class TestIdentity:
         # one opened by the final close is never emitted.
         stamps = iter(["2026-08-20T09:00:00Z", "2026-08-20T09:05:00Z",
                        "2026-08-20T09:06:40Z"])
-        s = LidSampler(cutoff_voltage=0.34, floor_voltage=0.20,
+        s = LidSampler(cutoff_voltage=0.34, floor_voltage=0.20, target_voltage=0.32,
                        run_timestamp=RUN_TS, now_utc=lambda: next(stamps))
 
         s.record(0.35, elapsed=1.0)
