@@ -65,3 +65,15 @@ class TestEmission:
             parent.removeHandler(spy)
 
         assert caught == []
+
+    def test_a_later_logging_reconfiguration_cannot_mute_samples(self, tmp_path):
+        """dictConfig disables every logger it does not name, and regulate calls
+        it at import -- a Sample logger muted that way would drop telemetry with
+        no error at all."""
+        path = lid_heater_log.configure_lid_sample_logger(log_dir=str(tmp_path))
+        logging.getLogger(lid_heater_log.LID_SAMPLE_LOGGER_NAME).disabled = True
+
+        lid_heater_log.emit_lid_sample(SAMPLE)
+
+        lines = [l for l in open(path).read().splitlines() if l.strip()]
+        assert len(lines) == 1

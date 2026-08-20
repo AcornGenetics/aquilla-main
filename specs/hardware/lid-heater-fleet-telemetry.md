@@ -282,6 +282,11 @@ wiring into the worker is Pi-only.
   first-crossing-only semantics, partial final window, `expected_reading_count` arithmetic,
   min/max tracking, empty-window safety.
   Test file: `tests/unit/test_lid_heater_window.py`, marked `-m unit`.
+- **Unit (any machine):** `aq_lib/lid_heater_log.py` — one JSON line per Sample, idempotent
+  reconfiguration, non-propagation to `logger.log`, and immunity to a later `dictConfig`
+  muting the logger (`dictConfig` disables every logger it does not name, and `regulate`
+  calls it at import — a muted Sample logger would drop telemetry silently). Test file:
+  `tests/unit/test_lid_heater_log.py`.
 - **Unit (any machine):** `aquila_web/lid_parser.py` — malformed line skipping, dedup on
   `sample_id`, oldest-file-first ordering. Test file: `tests/unit/test_lid_parser.py`.
 - **Cannot be simulated:** the accumulation calls inside `lid_heater_worker` (imports
@@ -289,7 +294,7 @@ wiring into the worker is Pi-only.
   `@pytest.mark.hardware`; run on device with `-m hardware`.
 - `DEV_SIMULATE=1` emits no Samples at all — an integration test must not assert on them.
 
-Run units: `pytest tests/unit/test_lid_heater_window.py tests/unit/test_lid_parser.py -v`
+Run units: `pytest tests/unit/test_lid_heater_window.py tests/unit/test_lid_heater_log.py tests/unit/test_lid_parser.py -v`
 
 ---
 

@@ -2307,8 +2307,26 @@ def _import_homing_samples_safely() -> None:
         logger.warning("Homing import failed (will retry next cycle): %s", exc)
 
 
+def _import_lid_samples_safely() -> None:
+    """Load Lid Heater Samples from the on-device Sample log into the outbox
+    before a flush (ADR-022, issue #452). The lid-heater worker writes Samples
+    to a dedicated log but runs in the assay container and never enqueues them;
+    the backend owns the outbox, so the import runs here on the sync cadence.
+    A parse failure must never block the flush of other Events, so it is logged
+    and swallowed -- the Samples retry next cycle."""
+    from aquila_web.lid_parser import import_lid_samples
+    from aq_lib.lid_heater_log import DEFAULT_LOG_DIR
+    log_dir = os.getenv("AQ_LID_LOG_DIR", DEFAULT_LOG_DIR)
+    try:
+        imported = import_lid_samples(log_dir)
+        if imported:
+            logger.info("Imported %d Lid Heater Sample(s) into the outbox", imported)
+    except Exception as exc:  # noqa: BLE001 - never block the flush on lid import
+        logger.warning("Lid Sample import failed (will retry next cycle): %s", exc)
+
+
 def _run_sync_cycle() -> int:
-    """One outbox reconciliation: import new Homing Samples from the on-device
+    """One outbox reconciliation: import new Homing and Lid Heater Samples from the on-device
     homing log into the outbox (ADR-021), push pending Events, then prune
     long-since-synced ones (ADR-020). Cleanup runs only after a flush -- never on
     an independent clock -- and only touches synced Events past the retention
@@ -2317,6 +2335,7 @@ def _run_sync_cycle() -> int:
     from aquila_web.sync import sync_pending_events
     from aquila_web.local_db import cleanup_synced_events
     _import_homing_samples_safely()
+    _import_lid_samples_safely()
     synced = sync_pending_events()
     cleanup_synced_events()
     return synced

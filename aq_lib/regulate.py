@@ -7,6 +7,8 @@ import logging
 import logging.config
 from aq_lib.utils import LID_HEATER_LOGGING_CONFIG
 from aq_lib import lid_worker_metrics as lwm
+from aq_lib.lid_heater_log import emit_lid_sample
+from aq_lib.lid_heater_window import LidSampler
 
 from .lid_temperature import ADS1115
 
@@ -42,12 +44,18 @@ def _load_lid_heater_config(config_path = None):
         logger.warning("Failed to load lid heater config from %s: %s. Using defaults.", resolved_path, exc)
     return config
 
-def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bound = None ):
+def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bound = None,
+                       run_timestamp = None ):
 
     # --- issue #157 instrumentation: register this worker so leaks are visible ---
     tid = threading.get_ident()
     live = lwm.enter(tid)
     logger.info("LID WORKER START tid=%s live=%d", tid, live)
+
+    # Bound before the try: the finally flushes through these, and an ADC that
+    # fails to start must surface its own error, not a NameError.
+    sampler = None
+    worker_started = time.monotonic()
 
     try:
         logger.info("Starting lid heater worker")
@@ -71,7 +79,16 @@ def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bo
         else:
             logger.info("Lid heater bounds: lower=%.3f upper=%.3f", lower_bound, setpoint)
 
+        # Lid Heater Samples are Run-scoped by definition (ADR-022), so the
+        # standalone diagnostic runner below -- which has no Run -- samples
+        # nothing rather than emitting Samples that reference no Run.
+        if run_timestamp is not None:
+            sampler = LidSampler(cutoff_voltage=setpoint, floor_voltage=lower_bound,
+                                 run_timestamp=run_timestamp)
+            worker_started = time.monotonic()
+
         while not stop_event.is_set():
+            retries = 0
             for i in range ( 10 ):
                 try:
                     # Time the I2C read: a read > 5s is what lets the teardown
@@ -82,10 +99,16 @@ def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bo
                     logger.info("lid AIN0: %.4f V (read %.3fs) tid=%s", v, dt, tid)
                     break
                 except Exception as e:
+                    retries += 1
                     logger.warning("Hickup in lid heater ADC")
                     if i==9:
                         raise e
                 time.sleep ( 0.4 )
+
+            quiet = quiet_event.is_set()
+            _record_sample(sampler, v, time.monotonic() - worker_started,
+                           quiet=quiet, read_seconds=dt, retries=retries)
+
             if not quiet_event.is_set():
                 if lower_bound < v < setpoint:
                     GPIO.output( pin_number, GPIO.HIGH )
@@ -99,8 +122,37 @@ def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bo
         logger.info("Turning off lid heater")
     finally:
         GPIO.output( pin_number, GPIO.LOW )
+        # Flush the open window even when the worker dies mid-Run: that Sample
+        # is the only record that the lid stopped being heated at all (#452).
+        if sampler is not None:
+            _emit(sampler.close(elapsed=time.monotonic() - worker_started))
         live = lwm.exit(tid)
         logger.info("LID WORKER EXIT tid=%s live=%d", tid, live)
+
+
+def _record_sample(sampler, voltage, elapsed, *, quiet, read_seconds, retries):
+    """Feed one reading to the Sample Window, emitting a Sample if it closed one.
+
+    Telemetry must never take the heater down with it, so anything that goes
+    wrong here is logged and swallowed.
+    """
+    if sampler is None:
+        return
+    try:
+        _emit(sampler.record(voltage, elapsed=elapsed, quiet=quiet,
+                             read_seconds=read_seconds, retries=retries,
+                             live_workers=lwm.live_count()))
+    except Exception:  # noqa: BLE001 - never let telemetry stall the control loop
+        logger.warning("Lid Sample accumulation failed", exc_info=True)
+
+
+def _emit(sample):
+    if sample is None:
+        return
+    try:
+        emit_lid_sample(sample)
+    except Exception:  # noqa: BLE001 - never let telemetry stall the control loop
+        logger.warning("Lid Sample emission failed", exc_info=True)
 
 def main():
 

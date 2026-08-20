@@ -27,9 +27,17 @@ def _lid_sample_logger() -> logging.Logger:
     Samples never propagate to the parent 'aquila' logger, so they stay out of
     logger.log -- and the lid heater's existing per-read debug lines stay out of
     the Sample log.
+
+    ``disabled`` is cleared on every resolve, not just at configure time:
+    ``logging.config.dictConfig`` disables every existing logger it does not
+    name (``disable_existing_loggers`` defaults True), and several modules --
+    ``regulate`` among them -- call it at import. A dictConfig landing after
+    configuration would otherwise mute this logger silently, and telemetry that
+    fails silently is worse than telemetry that fails loudly.
     """
     logger = logging.getLogger(LID_SAMPLE_LOGGER_NAME)
     logger.propagate = False
+    logger.disabled = False
     return logger
 
 
