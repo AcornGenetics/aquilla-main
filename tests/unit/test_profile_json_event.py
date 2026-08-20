@@ -241,3 +241,48 @@ class TestProfileResolutionStaysShared:
 
         assert web_main._profile_rox_unavailable("rox.json") is True
         assert web_main._profile_rox_unavailable("abba.json") is False
+
+    def test_non_object_body_does_not_crash_labels_or_rox(self, db_client):
+        """A valid-JSON-but-not-an-object profile must degrade, never raise.
+
+        Regression: the shared _find_profile handed the parsed body straight to
+        labels/rox, which do ``body.get(...)``. A list body -> ``list.get`` ->
+        AttributeError, raised from the run-processing path (main.py, right
+        before process_run) — so a malformed profile file could abort a run,
+        the opposite of "never fail a run over this". Both must fall back to
+        empty labels / rox False, exactly as profile_json falls back to None.
+        """
+        client, local_db, profile_dir = db_client
+        from aquila_web import main as web_main
+
+        _write_profile(profile_dir, "list.json", json.dumps([1, 2, 3]))
+
+        assert web_main._load_profile_labels("list.json") == {}
+        assert web_main._profile_rox_unavailable("list.json") is False
+        assert web_main._load_profile_json("list.json") is None
+
+    def test_oversize_profile_is_rejected_before_it_is_read(self, db_client, monkeypatch):
+        """The size cap must bound the READ, not just the payload.
+
+        The guard is on the on-disk size, so an over-cap file is refused before
+        json.load ever parses it into memory — otherwise the memory spike the
+        cap exists to prevent has already happened by the time we check.
+        """
+        client, local_db, profile_dir = db_client
+        from aquila_web import main as web_main
+
+        monkeypatch.setattr(web_main, "MAX_PROFILE_JSON_BYTES", 512)
+        _write_profile(
+            profile_dir, "huge.json", json.dumps(dict(_PROFILE_BODY, padding="x" * 2000))
+        )
+
+        loads: list[int] = []
+        real_load = json.load
+        monkeypatch.setattr(
+            web_main.json, "load", lambda f, *a, **k: (loads.append(1), real_load(f, *a, **k))[1]
+        )
+
+        # Call the resolver directly so no unrelated request-path json.load can
+        # muddy the assertion.
+        assert web_main._load_profile_json("huge.json") is None
+        assert loads == [], "an over-cap profile must be rejected before json.load reads it"

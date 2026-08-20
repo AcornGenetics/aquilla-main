@@ -87,12 +87,29 @@ def resolve_profile_dir() -> Path:
     return LOCAL_PROFILE_DIR
 
 def _read_profile_at(path: Path) -> dict | None:
-    """Parse a profile file, or None if it is unreadable / not JSON."""
+    """Parse a profile file into its JSON-object body, or None.
+
+    Returns None — never raises — for a file that is missing, over the size cap,
+    unreadable, not JSON, or JSON that is not an object. Two guarantees every
+    caller leans on:
+
+      - The cap is checked against the on-disk size BEFORE the read, so a
+        pathological file is refused without being parsed into memory (#417).
+        Both the path lookup and the name scan read through here, so neither can
+        spike memory on a huge file.
+      - A non-object body (a list, a bare string/number) resolves to None, so
+        callers that do ``body.get(...)`` — labels, rox — never hit an
+        AttributeError on a non-dict. ``_find_profile`` therefore only ever
+        yields a dict.
+    """
     try:
+        if path.stat().st_size > MAX_PROFILE_JSON_BYTES:
+            return None
         with path.open() as f:
-            return json.load(f)
+            data = json.load(f)
     except Exception:
         return None
+    return data if isinstance(data, dict) else None
 
 
 def _profile_by_path(profile_dir: Path, profile_ref: str) -> tuple[Path, dict] | None:
@@ -135,15 +152,13 @@ def _find_profile(profile_name: str | None) -> tuple[Path, dict] | None:
     if direct is not None:
         return direct
     for path in profile_dir.rglob("*.json"):
-        try:
-            with path.open() as f:
-                data = json.load(f)
-            title = data.get("title", path.stem)
-            profile_title = data.get("name", title)
-            if profile_title == profile_name or path.stem == profile_name or path.name == profile_name:
-                return path, data
-        except Exception:
+        data = _read_profile_at(path)
+        if data is None:
             continue
+        title = data.get("title", path.stem)
+        profile_title = data.get("name", title)
+        if profile_title == profile_name or path.stem == profile_name or path.name == profile_name:
+            return path, data
     return None
 
 def _load_profile_labels(profile_name: str | None) -> dict:
@@ -163,33 +178,18 @@ def _load_profile_json(profile_name: str | None) -> dict | None:
     """The run's profile body, for the run_complete snapshot (#417).
 
     Returns the parsed object so the loader stores it as JSONB without
-    re-parsing. NEVER raises: a missing, unreadable, oversize, or malformed
-    profile logs a warning and yields None, because a completed run must still
-    reach the cloud. Older devices simply omit the field, so the cloud already
-    tolerates its absence.
+    re-parsing. NEVER raises: ``_find_profile`` already yields only a JSON object
+    within the size cap — a missing, unreadable, oversize, or non-object profile
+    resolves to None there — so a completed run always reaches the cloud. Older
+    devices simply omit the field, so the cloud already tolerates its absence.
     """
     if not profile_name:
         return None
     found = _find_profile(profile_name)
     if found is None:
-        logger.warning("No profile file found for %r; sending profile_json: null", profile_name)
+        logger.warning("No usable profile for %r; sending profile_json: null", profile_name)
         return None
-    path, data = found
-    try:
-        size = path.stat().st_size
-    except OSError as e:
-        logger.warning("Could not stat profile %s: %s; sending profile_json: null", path, e)
-        return None
-    if size > MAX_PROFILE_JSON_BYTES:
-        logger.warning(
-            "Profile %s is %d bytes, over the %d-byte cap; sending profile_json: null",
-            path, size, MAX_PROFILE_JSON_BYTES,
-        )
-        return None
-    if not isinstance(data, dict):
-        logger.warning("Profile %s is not a JSON object; sending profile_json: null", path)
-        return None
-    return data
+    return found[1]
 
 def _resolve_profile_display_name(profile_ref: str | None) -> str:
     """Resolve a profile reference to its human-readable display name.
