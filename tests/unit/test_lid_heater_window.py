@@ -230,6 +230,31 @@ class TestWindowFigures:
         assert sample["mean_voltage"] is None
         assert sample["min_voltage"] == pytest.approx(0.12)
 
+    def test_settled_windows_carry_no_checkpoint_crossings(self):
+        """Crossings describe the climb, once per Run. Repeating them on every
+        Settled Window (seen on sn03, 2026-08-21) makes a stale copy ride along
+        on every Sample and contradicts what the Warehouse expects."""
+        s = sampler(cutoff=0.34)
+        s.record(0.22, elapsed=1.0)
+        climb = s.record(0.34, elapsed=170.0)
+        assert climb["checkpoint_crossings"] != {}
+
+        s.record(0.33, elapsed=200.0)
+        settled = s.close(elapsed=300.0)
+        assert settled["checkpoint_crossings"] == {}
+
+    def test_expected_readings_counts_whole_loop_periods(self):
+        """A window closes on a reading, so its length overshoots the last read
+        by part of a period. Rounding up made a healthy device report a
+        permanent one-reading shortfall (sn03: 300 read, 301 expected)."""
+        s = sampler(cutoff=0.34)
+        s.record(0.35, elapsed=1.0)
+
+        # The reading at 300.55 s is the one that closes the window.
+        sample = s.record(0.35, elapsed=300.55)
+        assert sample["window_seconds"] == pytest.approx(300.55)
+        assert sample["expected_reading_count"] == 300
+
 
 class TestHeaterState:
     @pytest.mark.parametrize("voltage, quiet, expected", [

@@ -24,8 +24,9 @@ SETTLED_WINDOW_SECONDS = 300.0
 #: is device code regardless.
 SLOW_READ_SECONDS = 5.0
 
-#: The worker loop reads once per pass of a ~1 s duty cycle.
-READS_PER_SECOND = 1.0
+#: The worker loop reads once per pass of a ~1 s duty cycle (0.9 s on + 0.1 s
+#: off, plus the read itself), so one reading per whole second of window.
+READ_PERIOD_SECONDS = 1.0
 
 #: Checkpoints are offsets *below* this machine's cutoff, not fixed voltages.
 #: The end of the climb is the comparable part: where a climb starts is an
@@ -176,7 +177,13 @@ class LidSampler:
             "slow_read_count": self._slow_reads,
             "read_retry_count": self._retries,
             "reading_count": readings,
-            "expected_reading_count": round(window_seconds * READS_PER_SECOND),
+            # Whole loop periods, not a rounded duration: a window closes ON a
+            # reading, so its length overshoots the last read by part of a
+            # period. Rounding up made a healthy sn03 report 300 readings
+            # against 301 expected on every single window. A shortfall of one
+            # is still normal at a window boundary -- anything reading this
+            # should allow a reading or two of slack before calling it a stall.
+            "expected_reading_count": int(window_seconds // READ_PERIOD_SECONDS),
             "last_voltage": self._last_voltage,
             "last_reading_age_seconds": elapsed - self._last_elapsed,
             "heater_state": self._heater_state(),
@@ -203,6 +210,9 @@ class LidSampler:
         return "heating"
 
     def _reset_window(self) -> None:
+        # Crossings describe the climb, once per Run: a Settled Window must not
+        # carry a stale copy of them (seen on sn03, 2026-08-21).
+        self._crossings = {}
         self._readings_in_window = 0
         self._voltage_sum = 0.0
         self._min_voltage = None

@@ -79,6 +79,8 @@ is how the climb, the settle, and (across months) the degradation become visible
 | Climb Window (`window_seconds`) | — | until cutoff reached | 300 | s |
 | Sensor read cadence | — | 1 | — | reads/s |
 | Expected readings per full window | — | 300 | — | count |
+| Observed climb to cutoff (sn03, 2026-08-21) | — | 69 | — | s |
+| Observed settled mean (sn03, cutoff 0.315) | — | 0.3161 | — | V |
 | Lid ADC floor (`floor_voltage`) | — | 0.20 | — | V |
 | Lid ADC cutoff (`cutoff_voltage`) | — | 0.34 | — | V |
 | Healthy settled voltage (`target_voltage`) | — | 0.32 | — | V |
@@ -210,7 +212,7 @@ first-write-wins on `sample_id`.
 | `slow_read_count` | int | Reads exceeding 5 s. Five seconds is the teardown join timeout, so a read past it is the known trigger for the thread leak (see §7). |
 | `read_retry_count` | int | Failed reads that had to be retried. A storm of these stretches the control loop and quietly weakens heating. |
 | `reading_count` | int | Readings actually received in the window. |
-| `expected_reading_count` | int | Readings expected (≈ `window_seconds` at 1/s). A shortfall means the controller stalled. |
+| `expected_reading_count` | int | Whole loop periods in the window (`window_seconds // 1 s`). A window closes *on* a reading, so its length overshoots the last read by part of a period — a shortfall of one is normal at a boundary, and anything judging "the controller stalled" should allow a reading or two of slack. |
 
 No field on this Sample is a verdict. Two conditions the docx named as flags — sensor below
 the floor, and a frozen reading — are deliberately **not** shipped as booleans: `min_voltage`
@@ -252,7 +254,7 @@ and are echoed onto every Sample.
 
 - Voltage is not temperature. Everything here is a voltage proxy; no field may be
   presented to an operator as °C.
-- `checkpoint_crossings` is populated only on the Climb Window. A Run that starts with an
+- `checkpoint_crossings` is populated only on the Climb Window; Settled Windows carry `{}`. A Run that starts with an
   already-warm lid records few or no crossings, and may emit no Climb Window at all —
   expected, not a fault.
 - Samples are **not** uniform in length: the Climb Window ends on an event, the final
@@ -349,6 +351,26 @@ This spec covers the device only. Two further pieces of work consume it:
 
 ---
 
-## 11. Open Questions
+## 11. Field Observations
+
+First real run on sn03 (sandbox ring), 2026-08-21, ~66 minutes, 16 Samples. What it settled:
+
+- **The climb reached cutoff in 69 s**, not the ~3 minutes assumed here, so the 300 s Climb
+  Window cap is generous rather than tight.
+- **`cutoff_voltage` on that machine is 0.315 V, not 0.34** — the reason nothing downstream
+  may assume the fleet default. Its settled `mean_voltage` held at **0.3161 V** across all 13
+  Settled Windows, a −0.004 V gap from the 0.32 default target: comfortably Normal, though
+  0.316 would be the truer target for that machine.
+- **`live_worker_count` stayed at 1** for the whole run, and the slowest ADC read was 6 ms —
+  three orders of magnitude below the 5 s leak threshold.
+- **`quiet_fraction` ran 0.32–0.42** during settled operation, confirming that counting Quiet
+  readings would have dragged this healthy lid's mean well below its target.
+- Two bugs it exposed, both fixed: crossings were repeating on every Settled Window, and
+  `expected_reading_count` rounded up, so a healthy device permanently reported a
+  one-reading shortfall.
+
+---
+
+## 12. Open Questions
 
 None outstanding. Every question raised in design was resolved into §1–§10 or into ADR-022.
