@@ -174,6 +174,10 @@ class AssayInterface():
         # Shared by run_complete and the forthcoming optics_readings event so the
         # cloud derives the same run_id = uuid5(device_id : run_timestamp).
         self.run_timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        # Monotonic anchor for duration_seconds (#449): decoupled from
+        # run_timestamp (wall clock, used for run_id derivation) so an NTP/DST
+        # adjustment mid-run can't skew the reported duration.
+        self._run_start_monotonic = time.monotonic()
         # Optical read passes for the optics_readings completeness check (#288).
         # _planned_optics_passes is the profile's intended total (set once steps
         # are loaded, below); _optics_pass_count is the runtime fallback.
@@ -318,6 +322,7 @@ class AssayInterface():
                     self.run_name, profile_name, str(results_json),
                     run_timestamp=self.run_timestamp,
                     tube_names=tube_names,
+                    duration_seconds=round(time.monotonic() - self._run_start_monotonic),
                 )
                 # Capture the exact optics file just consumed onto the same
                 # outbox, sharing run_timestamp (#288).
