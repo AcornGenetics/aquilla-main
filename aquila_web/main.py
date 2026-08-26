@@ -927,49 +927,52 @@ async def health_check():
     return {"status": "ok"}
 
 
+def _read_version_json() -> dict:
+    """Parse config_files/version.json once and return the mapping, or {} on any
+    error -- a dev checkout carrying no file, an unreadable image, or malformed
+    JSON. Callers apply their own fallbacks, so the file is read and parsed once
+    per use rather than once per field.
+
+    NOTE: aquilla-main #351 (currently riding to main on PR #438) introduces
+    _read_build_identity()/_BUILD_IDENTITY, which reads this same file once at
+    import. Collapse this into that helper when #438 lands; this exists so build
+    attribution need not wait on that epic.
+    """
+    try:
+        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
+    except Exception:
+        return {}
+    # A non-object body (a list, a bare string/number) resolves to {} so callers
+    # can .get() without an AttributeError -- same defensive stance as the profile
+    # reader (#417). The original _read_app_version caught this by indexing inside
+    # its try; this preserves that guarantee now that callers index outside it.
+    return data if isinstance(data, dict) else {}
+
+
 def _read_app_version() -> str:
     """The app version shown in Settings / Help, sourced from the single config
     file config_files/version.json so it lives in one place (not hardcoded in the
     UI). Falls back to the AQ_APP_VERSION env var, then 'unknown', on any error."""
-    try:
-        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
-        return str(data["app_version"])
-    except Exception:
-        return os.getenv("AQ_APP_VERSION", "unknown")
-
-
-def _read_git_sha() -> str:
-    """The build's git SHA from config_files/version.json, or "unknown".
-
-    The file is written at image build time; a dev checkout carries app_version
-    only, so a missing key is normal and must not raise. Kept beside
-    _read_app_version() rather than folded into it because that function's
-    return type is depended on by /version.
-
-    NOTE: aquilla-main #351 (currently riding to main on PR #438) introduces
-    _read_build_identity()/_BUILD_IDENTITY, which reads this same file once at
-    import. Collapse this into that helper when #438 lands; this exists so
-    build attribution need not wait on that epic.
-    """
-    try:
-        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
-        return str(data["git_sha"])
-    except Exception:
-        return "unknown"
+    version = _read_version_json().get("app_version")
+    return str(version) if version is not None else os.getenv("AQ_APP_VERSION", "unknown")
 
 
 def _build_identity_event_fields() -> dict:
     """app_version + git_sha to stamp onto a run_complete payload (#447).
 
-    Both run_complete emitters -- the real /events/run_complete path and the
-    simulated-run path -- call this, so they cannot drift apart. Every field
-    degrades to "unknown" rather than raising: a Device whose image did not bake
-    the file must still emit its Event.
+    Reads version.json once, so both fields come from the same parse and cannot
+    disagree because of two separate reads. Every field degrades rather than
+    raising: a Device whose image did not bake the file -- or a dev checkout with
+    app_version but no git_sha -- must still emit its Event. A missing key or a
+    JSON null both fall to "unknown" (never the literal string "None").
 
     The UI container's git_sha is deliberately out of scope: it is served over
     HTTP by the ui container and is best-effort.
     """
-    return {"app_version": _read_app_version(), "git_sha": _read_git_sha()}
+    version = _read_version_json()
+    app_version = version.get("app_version") or os.getenv("AQ_APP_VERSION", "unknown")
+    git_sha = version.get("git_sha") or "unknown"
+    return {"app_version": str(app_version), "git_sha": str(git_sha)}
 
 
 @app.get("/version")

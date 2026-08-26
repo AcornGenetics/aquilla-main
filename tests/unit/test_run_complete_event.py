@@ -228,6 +228,28 @@ class TestRunCompleteBuildIdentity:
         assert payload["profile"] == "basic_pcr.json"
 
 
+class TestVersionJsonRobustness:
+    """version.json is read once and defended: a non-object body degrades to
+    "unknown" rather than raising, so a malformed baked file can't crash the
+    emitters or /version."""
+
+    def test_non_object_version_json_degrades_instead_of_raising(self, tmp_path, monkeypatch):
+        # A version.json whose top-level value is not an object (a list/scalar)
+        # must not crash the emitter: callers .get() the parse, so a non-dict has
+        # to resolve to "unknown", not raise AttributeError (mirrors #417's guard).
+        from aquila_web import main as web_main
+
+        cfg = tmp_path / "config_files"
+        cfg.mkdir()
+        (cfg / "version.json").write_text('["not", "an", "object"]')
+        monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
+        monkeypatch.delenv("AQ_APP_VERSION", raising=False)
+
+        fields = web_main._build_identity_event_fields()
+        assert fields == {"app_version": "unknown", "git_sha": "unknown"}
+        assert web_main._read_app_version() == "unknown"
+
+
 class TestEmitRunComplete:
     """state_requests.emit_run_complete() calls the correct HTTP endpoint."""
 
