@@ -175,9 +175,10 @@ class TestRunCompleteBuildIdentity:
         assert payload["app_version"] == "2.1.0.9"
         assert payload["git_sha"] == "a3f2c19"
 
-    def test_missing_version_file_degrades_to_unknown(self, db_client, tmp_path, monkeypatch):
+    def test_missing_version_file_degrades_to_null(self, db_client, tmp_path, monkeypatch):
         # A Device whose image did not bake the file must still emit the Event --
-        # the fields degrade, they never raise (mirrors /version's fallback).
+        # absent build info is carried as JSON null (the warehouse's NULL=absent
+        # signal, acorn-analytics #90), never a sentinel string. It never raises.
         client, local_db = db_client
         from aquila_web import main as web_main
 
@@ -190,8 +191,27 @@ class TestRunCompleteBuildIdentity:
             "results_path": str(DETECTED_RESULTS),
         })
         payload = local_db.get_pending_events()[0]["payload"]
-        assert payload["app_version"] == "unknown"
-        assert payload["git_sha"] == "unknown"
+        assert payload["app_version"] is None
+        assert payload["git_sha"] is None
+
+    def test_missing_version_file_uses_env_app_version(self, db_client, tmp_path, monkeypatch):
+        # No baked version.json but AQ_APP_VERSION is set (a dev/override build):
+        # the event carries the env-supplied app_version. git_sha has no env
+        # source, so it stays null -- a known version paired with an unknown SHA.
+        client, local_db = db_client
+        from aquila_web import main as web_main
+
+        monkeypatch.setattr(web_main, "BASE_DIR", tmp_path)
+        monkeypatch.setenv("AQ_APP_VERSION", "9.9.9")
+
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload["app_version"] == "9.9.9"
+        assert payload["git_sha"] is None
 
     def test_version_json_without_git_sha_still_emits_app_version(self, db_client, tmp_path, monkeypatch):
         # The current on-disk version.json carries app_version only; git_sha is
@@ -211,7 +231,7 @@ class TestRunCompleteBuildIdentity:
         })
         payload = local_db.get_pending_events()[0]["payload"]
         assert payload["app_version"] == "2.1.0.9"
-        assert payload["git_sha"] == "unknown"
+        assert payload["git_sha"] is None
 
     def test_existing_fields_and_run_timestamp_unchanged(self, db_client):
         # run_id is derived cloud-side from device_id + run_timestamp; it must not shift.
@@ -229,14 +249,16 @@ class TestRunCompleteBuildIdentity:
 
 
 class TestVersionJsonRobustness:
-    """version.json is read once and defended: a non-object body degrades to
-    "unknown" rather than raising, so a malformed baked file can't crash the
-    emitters or /version."""
+    """version.json is read once and defended: a non-object body degrades rather
+    than raising, so a malformed baked file can't crash the emitters or /version.
+    The event fields carry null (data); /version renders "unknown" (display)."""
 
     def test_non_object_version_json_degrades_instead_of_raising(self, tmp_path, monkeypatch):
         # A version.json whose top-level value is not an object (a list/scalar)
         # must not crash the emitter: callers .get() the parse, so a non-dict has
-        # to resolve to "unknown", not raise AttributeError (mirrors #417's guard).
+        # to resolve to {} (mirrors #417's guard), not raise AttributeError. The
+        # event fields then degrade to null; /version's human-facing fallback is
+        # still the string "unknown".
         from aquila_web import main as web_main
 
         cfg = tmp_path / "config_files"
@@ -246,7 +268,7 @@ class TestVersionJsonRobustness:
         monkeypatch.delenv("AQ_APP_VERSION", raising=False)
 
         fields = web_main._build_identity_event_fields()
-        assert fields == {"app_version": "unknown", "git_sha": "unknown"}
+        assert fields == {"app_version": None, "git_sha": None}
         assert web_main._read_app_version() == "unknown"
 
 

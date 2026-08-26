@@ -952,27 +952,39 @@ def _read_version_json() -> dict:
 def _read_app_version() -> str:
     """The app version shown in Settings / Help, sourced from the single config
     file config_files/version.json so it lives in one place (not hardcoded in the
-    UI). Falls back to the AQ_APP_VERSION env var, then 'unknown', on any error."""
+    UI). Falls back to the AQ_APP_VERSION env var, then 'unknown', on any error.
+
+    A missing or empty value is treated as absent (same truthiness test as
+    _build_identity_event_fields), so the two readers of app_version agree."""
     version = _read_version_json().get("app_version")
-    return str(version) if version is not None else os.getenv("AQ_APP_VERSION", "unknown")
+    return str(version) if version else os.getenv("AQ_APP_VERSION", "unknown")
 
 
 def _build_identity_event_fields() -> dict:
     """app_version + git_sha to stamp onto a run_complete payload (#447).
 
     Reads version.json once, so both fields come from the same parse and cannot
-    disagree because of two separate reads. Every field degrades rather than
-    raising: a Device whose image did not bake the file -- or a dev checkout with
-    app_version but no git_sha -- must still emit its Event. A missing key or a
-    JSON null both fall to "unknown" (never the literal string "None").
+    disagree because of two separate reads. Absence is carried as JSON null, NOT
+    a sentinel string: the warehouse treats NULL as "no build recorded"
+    (acorn-analytics #90), so a Run on an image that baked no version.json is
+    honestly empty there rather than grouping under a fake "unknown" cohort in
+    build attribution. "unknown" stays a display-only fallback in
+    _read_app_version()/ /version -- it is not data.
+
+    A Device whose image did not bake the file -- or a dev checkout with
+    app_version but no git_sha -- still emits its Event; the missing field is just
+    null. (str() guards a non-string JSON value; empty string collapses to null.)
 
     The UI container's git_sha is deliberately out of scope: it is served over
     HTTP by the ui container and is best-effort.
     """
     version = _read_version_json()
-    app_version = version.get("app_version") or os.getenv("AQ_APP_VERSION", "unknown")
-    git_sha = version.get("git_sha") or "unknown"
-    return {"app_version": str(app_version), "git_sha": str(git_sha)}
+    app_version = version.get("app_version") or os.getenv("AQ_APP_VERSION")
+    git_sha = version.get("git_sha")
+    return {
+        "app_version": str(app_version) if app_version else None,
+        "git_sha": str(git_sha) if git_sha else None,
+    }
 
 
 @app.get("/version")
