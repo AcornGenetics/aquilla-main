@@ -27,13 +27,13 @@ from aq_lib.regulate import lid_heater_worker
 from aq_lib import lid_worker_metrics as lwm
 from config import get_src_basedir
 import aq_lib.state_requests as sr
-from aq_lib.motor_class import Axis, Drawer
 
 from aq_curve.main import results_to_json
 from aq_lib.fan_class import Fan
-from aq_lib.adc_class import OpticalRead
 from aq_lib.thermal_parser import count_optics_passes
-from aq_lib.optics_read_plan import READS_PER_CYCLE, optics_read_tasks
+# Hardware modules resolved by device variant (AQ_DEVICE_VARIANT=12well -> *_special).
+# Standard devices get the concrete motor_class / adc_class / optics_read_plan.
+from aq_lib.hardware_variant import Axis, Drawer, OpticalRead, READS_PER_CYCLE, optics_read_tasks
 from aquila_web.optics_readings import expected_lines
 
 logging.config.dictConfig( LOGGING_CONFIG )
