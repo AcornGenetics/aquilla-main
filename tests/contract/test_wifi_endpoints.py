@@ -164,6 +164,19 @@ def test_wifi_connect_kiosk_unreachable(client):
     assert "error" in data
 
 
+@pytest.mark.contract
+def test_wifi_connect_kiosk_unreachable_hides_the_exception(client):
+    """The operator gets 'Connection failed', not a raw Python error (#422)."""
+    with patch(
+        "aquila_web.main._kiosk_post",
+        side_effect=Exception("[Errno 111] Connection refused"),
+    ):
+        response = client.post("/wifi/connect", json={"ssid": "HomeNetwork", "password": "secret"})
+    error = response.json()["error"]
+    assert error == "Connection failed"
+    assert "Errno" not in error
+
+
 # ---------------------------------------------------------------------------
 # POST /wifi/forget
 # ---------------------------------------------------------------------------
@@ -196,3 +209,16 @@ def test_wifi_forget_kiosk_unreachable(client):
     data = response.json()
     assert data["ok"] is False
     assert "error" in data
+
+
+@pytest.mark.contract
+def test_wifi_forget_kiosk_unreachable_hides_the_exception(client):
+    """The forget path shows the same message — and it also feeds an alert box."""
+    with patch(
+        "aquila_web.main._kiosk_post",
+        side_effect=Exception("[Errno 111] Connection refused"),
+    ):
+        response = client.post("/wifi/forget", json={"ssid": "HomeNetwork"})
+    error = response.json()["error"]
+    assert error == "Connection failed"
+    assert "Errno" not in error

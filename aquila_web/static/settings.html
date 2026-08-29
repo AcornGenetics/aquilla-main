@@ -301,8 +301,11 @@
       } else if (data.status === "updating") {
         _showUpdateOverlay();
       } else if (data.status === "error") {
+        // The backend sends a complete operator sentence and says which flow
+        // failed, so render it as-is — the old "Could not check for updates:"
+        // prefix mislabelled apply failures as check failures (#423).
         area.innerHTML = `
-          <p style="color:#dc2626;font-size:15px;">Could not check for updates: ${_escHtml(data.error || "unknown error")}</p>
+          <p style="color:#dc2626;font-size:15px;">${_escHtml(data.error || "Could not check for updates")}</p>
           <button onclick="openUpdateTab()"
             style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;font-size:14px;cursor:pointer;color:#374151;">Try again</button>
         `;
@@ -353,7 +356,7 @@
       if (attempt > 200) {
         _hideUpdateOverlay();
         const msg = fallbackError
-          ? `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(fallbackError)}</p>`
+          ? `<p style="color:#dc2626;font-size:15px;">${_escHtml(fallbackError)}</p>`
           : '<p style="color:#6b7280;font-size:15px;">Update timed out. Please check the device and try again.</p>';
         document.getElementById("update-status-area").innerHTML = msg;
         return;
@@ -368,9 +371,9 @@
         if (!data || data.status === "updating" || data.available) { _pollForUpdateComplete(attempt + 1, fallbackError); return; }
         if (data.status === "error") {
           _hideUpdateOverlay();
-          const errMsg = fallbackError || data.error || "unknown error";
+          const errMsg = fallbackError || data.error || "Update failed. Please try again.";
           document.getElementById("update-status-area").innerHTML =
-            `<p style="color:#dc2626;font-size:15px;">Update failed: ${_escHtml(errMsg)}</p>`;
+            `<p style="color:#dc2626;font-size:15px;">${_escHtml(errMsg)}</p>`;
           return;
         }
         _hideUpdateOverlay();

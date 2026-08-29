@@ -4,8 +4,10 @@ from aquila_web.local_db import enqueue_event, init_local_db, _utc_now
 from aquila_web.optics_readings import build_optics_readings, count_data_lines
 from aq_curve.curve import ALGO_VERSION
 from aquila_web.profile_assembly import assemble_steps, validate_stages
-from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pathlib import Path
 from fastapi import WebSocket
 import asyncio
@@ -1223,6 +1225,44 @@ async def index():
 async def run_page_2():
     return FileResponse(static_dir / "complete.html")
 
+@app.get("/error")
+async def error_page():
+    # The single operator-facing failure screen (issue #421). Reached from a
+    # fault state, an unhandled exception, or a failed navigation — so it must
+    # render standalone and never fetch anything on load.
+    return FileResponse(static_dir / "error.html")
+
+
+def _error_page_response(status_code: int) -> HTMLResponse:
+    return HTMLResponse(
+        (static_dir / "error.html").read_text(encoding="utf-8"),
+        status_code=status_code,
+    )
+
+
+def _is_navigation(request) -> bool:
+    # A browser navigating names text/html explicitly; the frontend's own
+    # fetch() calls send */* and still need their JSON bodies (#421).
+    return "text/html" in request.headers.get("accept", "")
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_page(request, exc):
+    # Without this the operator gets a plain-text "Internal Server Error" on the
+    # kiosk. Log the real cause; show the operator the general error page.
+    logger.exception("unhandled exception serving %s", request.url.path)
+    return _error_page_response(500)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_page(request, exc):
+    # Navigations get the error page instead of a raw {"detail": ...} blob
+    # painted across the screen. API callers keep their JSON contract.
+    if _is_navigation(request):
+        logger.warning("navigation to %s failed: %s", request.url.path, exc.detail)
+        return _error_page_response(exc.status_code)
+    return await http_exception_handler(request, exc)
+
 @app.get("/login")
 async def login_page():
     return FileResponse(static_dir / "login.html")
@@ -1340,13 +1380,13 @@ async def button_run():
     logger.info("Run button pressed")
     if not selected_profile:
         run_requested = False
-        return {"ok": False, "message": "Select a profile before running"}
+        return {"ok": False, "message": "Select a profile before running."}
     if not run_name or not run_name.strip():
         run_requested = False
-        return {"ok": False, "message": "Enter a run name before running"}
+        return {"ok": False, "message": "Enter a run name before running."}
     if drawer_state_open and not drawer_state_closed:
         run_requested = False
-        return {"ok": False, "message": "Close the drawer before running"}
+        return {"ok": False, "message": "Close the drawer before running."}
     if DEV_SIMULATE:
         if run_in_progress:
             return {"ok": False, "message": "Run already in progress"}
@@ -2049,7 +2089,10 @@ async def wifi_connect(body: WifiConnect):
     try:
         return await _kiosk_post("/wifi/connect", {"ssid": body.ssid, "password": body.password})
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        # kiosk-control is down — a different failure from a bad password, and
+        # the operator must not be shown the raw Python error (#422).
+        logger.warning("wifi connect proxy failed for %r: %s", body.ssid, e)
+        return {"ok": False, "error": "Connection failed"}
 
 class WifiForget(BaseModel):
     ssid: str
@@ -2059,7 +2102,9 @@ async def wifi_forget(body: WifiForget):
     try:
         return await _kiosk_post("/wifi/forget", {"ssid": body.ssid})
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        # This one also feeds a raw alert() box on the saved-networks list.
+        logger.warning("wifi forget proxy failed for %r: %s", body.ssid, e)
+        return {"ok": False, "error": "Connection failed"}
 
 @app.get("/wifi/saved")
 async def wifi_saved():
@@ -2085,10 +2130,24 @@ _OTA_GHCR_REPO_UI  = _OTA_GHCR_BASE + "-ui"
 _OTA_IMAGE_TAG = os.getenv("IMAGE_TAG", "")   # dev | pilot | prod — set by device.env
 _OTA_POLL_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL", "300"))  # seconds
 
+# Operator-facing update messages (issue #423). The technical cause always goes
+# to the log; only these ever reach the screen.
+UPDATE_CHECK_FAILED = "Could not check for updates"
+UPDATE_APPLY_FAILED = "Update failed. Please try again."
+# A missing registry token or ring tag means the device was provisioned wrong.
+# Restarting cannot fix it, so this omits the general page's "try again or
+# restart the device" line and sends the operator straight to support.
+UPDATE_NOT_CONFIGURED = (
+    "Something went wrong. Please contact Acorn Genetics for support."
+)
+
 _update_available: bool = False
 _update_dismissed: bool = False
 _update_status: str = "idle"   # idle | checking | available | updating | error
 _update_error: str | None = None
+# Kept apart so an apply failure can never be reported as a check failure (#423).
+_check_error: str | None = None
+_apply_error: str | None = None
 _update_last_checked: str | None = None
 # Digests of the images actually running — injected at deploy time via env vars.
 # Fall back to the first GHCR poll result if not set.
@@ -2190,14 +2249,41 @@ async def _ghcr_manifest_digest(repo: str, tag: str, user: str, token: str) -> s
         return None
 
 
+def _fail_check(message: str) -> None:
+    """Record a failed check so the panel renders it as a failure.
+
+    Check and apply keep their errors apart (#423): they shared one slot, so a
+    failed update could surface to the operator under a "could not check for
+    updates" heading.
+    """
+    global _update_status, _update_error, _update_available, _check_error, _apply_error
+    _update_available = False
+    _check_error = message
+    # The check just ran and failed; an older apply failure is no longer what
+    # the operator is looking at.
+    _apply_error = None
+    _update_status = "error"
+    _update_error = message
+
+
+def _fail_apply(message: str) -> None:
+    global _update_status, _update_error, _apply_error, _check_error
+    _apply_error = message
+    _check_error = None
+    _update_status = "error"
+    _update_error = message
+
+
 async def _do_check_update() -> None:
     global _update_available, _update_status, _update_error, _update_last_checked
     global _startup_image_digest, _startup_image_digest_ui, _latest_ghcr_digest, _latest_ghcr_digest_ui
     _update_status = "checking"
     try:
         if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
-            _update_status = "idle"
-            _update_error = "Registry credentials or IMAGE_TAG not configured"
+            # Provisioned wrong, not a transient fault: retrying and restarting
+            # will not help, so the operator is pointed straight at support.
+            logger.error("update check: registry credentials or IMAGE_TAG not configured")
+            _fail_check(UPDATE_NOT_CONFIGURED)
             return
         latest_api, latest_ui = await asyncio.gather(
             _ghcr_manifest_digest(_OTA_GHCR_REPO_API, _OTA_IMAGE_TAG, _OTA_GHCR_USER, _OTA_GHCR_TOKEN),
@@ -2205,8 +2291,10 @@ async def _do_check_update() -> None:
         )
         _update_last_checked = datetime.utcnow().isoformat() + "Z"
         if latest_api is None and latest_ui is None:
-            _update_status = "idle"
-            _update_error = "Registry unreachable or credentials invalid"
+            # Left the status at "idle" until #423, which the panel renders as
+            # a green "Software is up to date." — a failed check reported success.
+            logger.warning("update check: registry unreachable or credentials invalid")
+            _fail_check(UPDATE_CHECK_FAILED)
             return
         if latest_api is not None:
             _latest_ghcr_digest = latest_api
@@ -2225,9 +2313,11 @@ async def _do_check_update() -> None:
             _update_available = False
             _update_status = "idle"
         _update_error = None
+        _check_error = None
+        _apply_error = None
     except Exception as e:
-        _update_status = "error"
-        _update_error = str(e)
+        logger.exception("update check failed: %s", e)
+        _fail_check(UPDATE_CHECK_FAILED)
 
 
 @app.get("/update/status")
@@ -2245,6 +2335,9 @@ async def get_update_status():
         "available": available,
         "dismissed": _update_dismissed,
         "status": status,
+        # Which flow produced the error, so the panel cannot render an apply
+        # failure under a "could not check for updates" heading (#423).
+        "error_kind": "check" if _check_error else ("apply" if _apply_error else None),
         "error": _update_error,
         "last_checked": _update_last_checked,
     }
@@ -2253,7 +2346,14 @@ async def get_update_status():
 @app.post("/update/check")
 async def trigger_update_check():
     if not _OTA_GHCR_TOKEN or not _OTA_IMAGE_TAG:
-        return {"ok": False, "error": "Registry credentials or IMAGE_TAG not configured"}
+        # Answered 200 with ok=false until #423, so the page's error branch —
+        # which tests the HTTP status — never fired and this was unreachable.
+        logger.error("update check requested but registry credentials/IMAGE_TAG are unset")
+        _fail_check(UPDATE_NOT_CONFIGURED)
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "error": UPDATE_NOT_CONFIGURED},
+        )
     asyncio.create_task(_do_check_update())
     return {"ok": True, "message": "checking"}
 
@@ -2312,13 +2412,13 @@ async def apply_update():
                     await _do_check_update()
             asyncio.create_task(_deferred_status_reset())
             return {"ok": True, "message": "Update triggered — containers will restart shortly."}
-        _update_status = "error"
-        _update_error = f"Watchtower returned HTTP {r.status_code}"
-        return {"ok": False, "error": _update_error}
+        logger.error("update apply: watchtower returned HTTP %s", r.status_code)
+        _fail_apply(UPDATE_APPLY_FAILED)
+        return {"ok": False, "error": UPDATE_APPLY_FAILED}
     except Exception as e:
-        _update_status = "error"
-        _update_error = str(e)
-        return {"ok": False, "error": str(e)}
+        logger.exception("update apply failed: %s", e)
+        _fail_apply(UPDATE_APPLY_FAILED)
+        return {"ok": False, "error": UPDATE_APPLY_FAILED}
 
 
 @app.post("/update/dismiss")

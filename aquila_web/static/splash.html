@@ -62,6 +62,28 @@
       border-radius: 2px;
       transition: width 0.6s ease;
     }
+
+    /* Boot never completed. The splash runs from disk before the app exists, so
+       it carries this wording itself rather than navigating to /error. */
+    .failure {
+      text-align: center;
+      padding: 0 48px;
+      max-width: 560px;
+    }
+
+    .failure h1 {
+      font-size: 34px;
+      font-weight: 600;
+      color: #184419;
+      margin: 0 0 20px;
+    }
+
+    .failure p {
+      font-size: 18px;
+      line-height: 1.6;
+      color: #505050;
+      margin: 0 0 12px;
+    }
   </style>
 </head>
 <body>
@@ -82,8 +104,14 @@
 
   <p class="status" id="status">Starting up…</p>
 
-  <div class="bar-track">
+  <div class="bar-track" id="bar-track">
     <div class="bar-fill" id="bar"></div>
+  </div>
+
+  <div class="failure" id="failure" hidden>
+    <h1>Something went wrong.</h1>
+    <p>Please try again or restart the device.</p>
+    <p>If the issue continues, contact Acorn Genetics for support.</p>
   </div>
 
   <script>
@@ -136,11 +164,21 @@
         .catch(() => retry());
     }
 
+    // Boot has failed. Show the general error wording, but keep polling quietly
+    // so a slow or restarting backend still recovers the screen on its own
+    // rather than stranding the operator until a power cycle.
+    function showFailure() {
+      document.getElementById('status').hidden = true;
+      document.getElementById('bar-track').hidden = true;
+      document.querySelector('.logo-wrap').hidden = true;
+      document.getElementById('failure').hidden = false;
+    }
+
     function retry() {
       attempts++;
       if (attempts >= MAX_WAIT) {
-        statusEl.textContent = 'Taking longer than expected…';
-        setTimeout(poll, 3000);
+        showFailure();
+        setTimeout(poll, 5000);
         return;
       }
       setTimeout(poll, 1000);

@@ -239,7 +239,7 @@
         } catch (e) {
           /* non-JSON error body */
         }
-        if (status) status.textContent = err.detail || "Failed to save";
+        if (status) status.textContent = formatSaveError(err.detail);
         return;
       }
       if (status) status.textContent = "Saved";
