@@ -812,6 +812,7 @@ async def _simulate_run(profile_name: str) -> None:
             "profile": profile_name,
             "result": detected_summary,
             "run_timestamp": run_timestamp,
+            **_build_identity_event_fields(),
             "tube_names": _tube_names_by_well(),
             "calls": _calls_from_file(results_file),
             # The profile body travels with the Run: the device is the only place
@@ -926,15 +927,64 @@ async def health_check():
     return {"status": "ok"}
 
 
+def _read_version_json() -> dict:
+    """Parse config_files/version.json once and return the mapping, or {} on any
+    error -- a dev checkout carrying no file, an unreadable image, or malformed
+    JSON. Callers apply their own fallbacks, so the file is read and parsed once
+    per use rather than once per field.
+
+    NOTE: aquilla-main #351 (currently riding to main on PR #438) introduces
+    _read_build_identity()/_BUILD_IDENTITY, which reads this same file once at
+    import. Collapse this into that helper when #438 lands; this exists so build
+    attribution need not wait on that epic.
+    """
+    try:
+        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
+    except Exception:
+        return {}
+    # A non-object body (a list, a bare string/number) resolves to {} so callers
+    # can .get() without an AttributeError -- same defensive stance as the profile
+    # reader (#417). The original _read_app_version caught this by indexing inside
+    # its try; this preserves that guarantee now that callers index outside it.
+    return data if isinstance(data, dict) else {}
+
+
 def _read_app_version() -> str:
     """The app version shown in Settings / Help, sourced from the single config
     file config_files/version.json so it lives in one place (not hardcoded in the
-    UI). Falls back to the AQ_APP_VERSION env var, then 'unknown', on any error."""
-    try:
-        data = json.loads((BASE_DIR / "config_files" / "version.json").read_text())
-        return str(data["app_version"])
-    except Exception:
-        return os.getenv("AQ_APP_VERSION", "unknown")
+    UI). Falls back to the AQ_APP_VERSION env var, then 'unknown', on any error.
+
+    A missing or empty value is treated as absent (same truthiness test as
+    _build_identity_event_fields), so the two readers of app_version agree."""
+    version = _read_version_json().get("app_version")
+    return str(version) if version else os.getenv("AQ_APP_VERSION", "unknown")
+
+
+def _build_identity_event_fields() -> dict:
+    """app_version + git_sha to stamp onto a run_complete payload (#447).
+
+    Reads version.json once, so both fields come from the same parse and cannot
+    disagree because of two separate reads. Absence is carried as JSON null, NOT
+    a sentinel string: the warehouse treats NULL as "no build recorded"
+    (acorn-analytics #90), so a Run on an image that baked no version.json is
+    honestly empty there rather than grouping under a fake "unknown" cohort in
+    build attribution. "unknown" stays a display-only fallback in
+    _read_app_version()/ /version -- it is not data.
+
+    A Device whose image did not bake the file -- or a dev checkout with
+    app_version but no git_sha -- still emits its Event; the missing field is just
+    null. (str() guards a non-string JSON value; empty string collapses to null.)
+
+    The UI container's git_sha is deliberately out of scope: it is served over
+    HTTP by the ui container and is best-effort.
+    """
+    version = _read_version_json()
+    app_version = version.get("app_version") or os.getenv("AQ_APP_VERSION")
+    git_sha = version.get("git_sha")
+    return {
+        "app_version": str(app_version) if app_version else None,
+        "git_sha": str(git_sha) if git_sha else None,
+    }
 
 
 @app.get("/version")
@@ -1014,6 +1064,7 @@ async def events_run_complete(req: _RunCompleteEventRequest):
             "profile": req.profile,
             "result": result,
             "run_timestamp": run_timestamp,
+            **_build_identity_event_fields(),
             "tube_names": _tube_names_by_well(req.tube_names),
             "calls": _calls_from_file(results_file) if results_file else [],
             # The real-device path resolves the body here rather than in
