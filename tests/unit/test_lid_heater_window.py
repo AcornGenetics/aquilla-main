@@ -46,11 +46,15 @@ class TestClimbWindow:
         s.record(0.32, elapsed=96.4)
         sample = s.record(0.34, elapsed=172.0)
 
+        # Keyed by offset below cutoff in whole millivolts: 0.28 is 60 mV under
+        # this machine's 0.34 cutoff, and "0" is the at-cutoff crossing. Integer
+        # offsets survive the Python/Postgres float-formatting round-trip that a
+        # voltage key does not.
         assert sample["checkpoint_crossings"] == {
-            "0.28": pytest.approx(41.2),
-            "0.30": pytest.approx(58.9),
-            "0.32": pytest.approx(96.4),
-            "0.34": pytest.approx(172.0),
+            "60": pytest.approx(41.2),
+            "40": pytest.approx(58.9),
+            "20": pytest.approx(96.4),
+            "0": pytest.approx(172.0),
         }
 
     def test_closes_at_the_window_cap_when_cutoff_is_never_reached(self):
@@ -64,17 +68,20 @@ class TestClimbWindow:
         sample = s.record(0.29, elapsed=300.4)
         assert sample is not None
         assert sample["window_seconds"] == pytest.approx(300.4)
-        assert sample["checkpoint_crossings"] == {"0.28": pytest.approx(100.0)}
+        assert sample["checkpoint_crossings"] == {"60": pytest.approx(100.0)}
 
     def test_a_lid_already_at_temperature_produces_no_climb_window(self):
         """A back-to-back Run on a warm machine never climbs, so there is
-        nothing to time; its first window is Settled, not a zero-length Climb."""
+        nothing to time; its first window is Settled, not a zero-length Climb --
+        and it carries no crossings, even though the first reading was above every
+        checkpoint before the sampler knew the lid had opened warm."""
         s = sampler(cutoff=0.34)
 
         assert s.record(0.35, elapsed=1.0) is None
 
         sample = s.record(0.35, elapsed=301.0)
         assert sample["window_kind"] == "settled"
+        assert sample["checkpoint_crossings"] == {}
 
     def test_a_climb_that_crosses_nothing_is_still_marked_a_climb(self):
         """Lid Hold is drawn from Settled Windows only, so the kinds must be
@@ -118,9 +125,25 @@ class TestDerivedLadder:
         sample = s.record(0.24, elapsed=30.0)
 
         assert sample["checkpoint_crossings"] == {
-            "0.22": pytest.approx(20.0),
-            "0.24": pytest.approx(30.0),
+            "20": pytest.approx(20.0),
+            "0": pytest.approx(30.0),
         }
+
+    def test_at_cutoff_crossing_is_keyed_zero_for_a_half_cent_cutoff(self):
+        """The at-cutoff crossing is always keyed "0", never a formatted voltage.
+        A half-cent cutoff (0.345) is exactly the case a voltage key breaks:
+        Python's %.2f and Postgres' to_char round it in opposite directions, so
+        the Warehouse's lookup would miss the crossing and read a healthy climb as
+        "never reached cutoff". Offset keys keep the cutoff crossing at "0"."""
+        s = sampler(cutoff=0.345, floor=0.20, target=0.32)
+
+        s.record(0.30, elapsed=10.0)
+        sample = s.record(0.345, elapsed=170.0)  # reaches cutoff -> closes climb
+
+        assert sample["window_kind"] == "climb"
+        assert sample["checkpoint_crossings"]["0"] == pytest.approx(170.0)
+        # Never a formatted-voltage key -- that is the mismatch we are avoiding.
+        assert not any("." in key for key in sample["checkpoint_crossings"])
 
 
 class TestWindowFigures:

@@ -41,15 +41,21 @@ def _lid_sample_logger() -> logging.Logger:
     return logger
 
 
-def configure_lid_sample_logger(log_dir: str = DEFAULT_LOG_DIR,
+def configure_lid_sample_logger(log_dir: str = None,
                                 max_bytes: int = DEFAULT_MAX_BYTES,
                                 backup_count: int = DEFAULT_BACKUP_COUNT) -> str:
     """Attach the rotating file handler for the Sample log (idempotent).
 
     One JSON Sample per line, no text prefix -- the timestamp lives inside the
     JSON. Returns the log file path.
+
+    When ``log_dir`` is not passed, it resolves from AQ_LID_LOG_DIR (then
+    DEFAULT_LOG_DIR) -- the same var the backend's importer reads -- so the assay
+    container that writes the log and the backend container that drains it stay in
+    agreement (both must set the var identically) instead of silently diverging.
     """
     logger = _lid_sample_logger()
+    log_dir = log_dir or os.getenv("AQ_LID_LOG_DIR", DEFAULT_LOG_DIR)
     os.makedirs(log_dir, exist_ok=True)
     path = os.path.join(log_dir, "lid_samples.log")
     # Idempotent: drop any handler we previously attached before re-adding.

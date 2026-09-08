@@ -37,15 +37,24 @@ CHECKPOINT_OFFSETS = (0.06, 0.04, 0.02, 0.0)
 
 
 def derive_checkpoints(cutoff_voltage: float, floor_voltage: float) -> list:
-    """The checkpoint ladder for a machine, low to high.
+    """The checkpoint ladder for a machine as (threshold_voltage, key) pairs, low
+    to high.
 
-    Rounded to 4 decimals so the keys are joinable downstream (0.28, not
-    0.27999999999999997), and any checkpoint at or below the floor is dropped
-    rather than clamped -- below the floor the reading means "broken sensor",
-    not "cold lid".
+    The key is the checkpoint's offset below cutoff in whole millivolts ("60",
+    "40", "20", "0"), NOT the formatted voltage. A voltage key would have the
+    device and the Warehouse each format a float to a 2-decimal string, and
+    Python's ``%.2f`` and Postgres' ``to_char(..., 'FM0.00')`` round half-cent
+    cutoffs (0.345, 0.305, ...) in opposite directions -- silently dropping the
+    crossing and reporting a healthy climb as "never reached cutoff". An integer
+    millivolt offset is exact on both sides, and "0" is always the at-cutoff
+    crossing regardless of the machine's cutoff.
+
+    Any checkpoint at or below the floor is dropped rather than clamped -- below
+    the floor the reading means "broken sensor", not "cold lid".
     """
-    ladder = [round(cutoff_voltage - offset, 4) for offset in CHECKPOINT_OFFSETS]
-    return [v for v in ladder if v > floor_voltage]
+    ladder = [(round(cutoff_voltage - offset, 4), _key(offset))
+              for offset in CHECKPOINT_OFFSETS]
+    return [(threshold, key) for (threshold, key) in ladder if threshold > floor_voltage]
 
 
 class LidSampler:
@@ -88,9 +97,8 @@ class LidSampler:
                live_workers: int = 1):
         """Accept one reading; return a Sample if it closed a window."""
         if self._climbing:
-            for checkpoint in self._checkpoints:
-                key = _key(checkpoint)
-                if voltage >= checkpoint and key not in self._crossings:
+            for threshold, key in self._checkpoints:
+                if voltage >= threshold and key not in self._crossings:
                     self._crossings[key] = elapsed
 
         self._readings_in_window += 1
@@ -130,6 +138,12 @@ class LidSampler:
             self._warm_start = voltage >= self._cutoff
             if self._warm_start:
                 self._climbing = False
+                # A warm start never climbed: discard the crossings the loop above
+                # recorded from this first reading before we knew the lid opened at
+                # temperature, so its (Settled) window never carries a fabricated
+                # instant climb. The climb view reads only Climb Windows today, but
+                # the invariant "crossings describe the climb" must hold at source.
+                self._crossings = {}
 
         reached_cutoff = self._climbing and voltage >= self._cutoff
         capped = elapsed - self._window_start >= SETTLED_WINDOW_SECONDS
@@ -233,7 +247,9 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _key(voltage: float) -> str:
-    """A crossing's key is the actual voltage used, so a machine with a
-    different cutoff is self-describing downstream."""
-    return f"{voltage:.2f}"
+def _key(offset: float) -> str:
+    """A crossing's key is its offset below cutoff in whole millivolts ("0" is at
+    cutoff). An integer is exact on both the device and in the Warehouse's JSONB
+    lookup, unlike a formatted voltage whose half-cent rounding can differ
+    between Python's %.2f and Postgres' to_char."""
+    return str(int(round(offset * 1000)))
