@@ -41,6 +41,8 @@ logging.config.dictConfig( LOGGING_CONFIG )
 # logger.log). Motors home from this process, so wire it up here (ADR-021, #325).
 from aq_lib.homing_log import configure_homing_logger
 configure_homing_logger()
+from aq_lib.lid_heater_log import configure_lid_sample_logger
+configure_lid_sample_logger()
 logger = logging.getLogger( "aquila" )
 config = Config()
 
@@ -228,7 +230,11 @@ class AssayInterface():
 
         self.lid_thread = Thread ( 
              target = lid_heater_worker, 
-             args = ( self.lid_heater_stop_event, self.lid_heater_quiet_event, ) 
+             args = ( self.lid_heater_stop_event, self.lid_heater_quiet_event, ),
+             # Lid Heater Samples are Run-scoped (ADR-022): the worker cannot
+             # exist outside a Run, so it carries the Run's canonical stamp and
+             # the cloud derives run_id = uuid5(device_id : run_timestamp).
+             kwargs = { "run_timestamp": self.run_timestamp },
         )
         self.lid_heater_stop_event.clear()
         self.lid_thread.start()

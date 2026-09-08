@@ -90,7 +90,7 @@ The fractional PCR cycle at which a Well's fluorescence crosses the detection th
 The fraction of Calls with outcome `Inconclusive`, grouped by Protocol. The primary analytics metric for v1. Denominator excludes `ROX Unavailable` calls.
 
 **Event**
-A structured JSON record enqueued in the local SQLite database (`data/db/app.db`) and flushed upstream by [[Sync]]. Most Events are Run-scoped: a Run emits up to three types, all sharing its `run_timestamp`: `run_complete` (protocol name, run name, run timestamp, per-Well `tube_names` keyed to Wells 1–4 defaulting to "Tube 1".."Tube 4", and all 8 Well × Channel Calls with Cq values), `optics_readings` (the raw optics log captured whole, ADR-0007), and `call_evidence` (per-Call QC telemetry, ADR-0008). Not every Event is Run-scoped, however: a [[Homing Sample]] is emitted per homing operation, recurring within and between Runs, so a Run is no longer the sole unit of event emission. Events queue offline and flush on the next successful Sync. The full payload shapes and their warehouse facts are the [Device Event Contract](docs/local-db-schema.md).
+A structured JSON record enqueued in the local SQLite database (`data/db/app.db`) and flushed upstream by [[Sync]]. Most Events are Run-scoped: a Run emits up to four types, all sharing its `run_timestamp`: `run_complete` (protocol name, run name, run timestamp, per-Well `tube_names` keyed to Wells 1–4 defaulting to "Tube 1".."Tube 4", and all 8 Well × Channel Calls with Cq values), `optics_readings` (the raw optics log captured whole, ADR-0007), `call_evidence` (per-Call QC telemetry, ADR-0008), and a series of `lid_heater_sample` Events (one per [[Sample Window]] the lid heater was alive for). Not every Event is Run-scoped, however: a [[Homing Sample]] is emitted per homing operation, recurring within and between Runs, so a Run is no longer the sole unit of event emission. Events queue offline and flush on the next successful Sync. The full payload shapes and their warehouse facts are the [Device Event Contract](docs/local-db-schema.md).
 
 **Sync**
 The background process (asyncio task in the FastAPI app, 15-minute interval) that batches pending Events from the local SQLite queue and POSTs them to the AWS Ingest Endpoint. Also triggered on WiFi reconnect. On success, marks events `synced_at` in SQLite. Events accumulate indefinitely if offline.
@@ -101,6 +101,53 @@ The authenticated cloud entry point that receives Event batches from Sentri devi
 **Homing Sample**
 A structured record emitted every time a motor executes a homing operation — the act of driving an axis back to its fixed physical home reference (the home-flag sensor) and re-zeroing the software step counter. Each Sample captures how that return went: **steps-to-flag** (steps taken to reach the home sensor), **residual** (the accumulated position error at the moment of homing, before it is zeroed), and **reached_home** (whether the home sensor confirmed arrival — a false value is a *missed* homing). Tagged by **motor**: one of the two homing axes, the **Drawer** (loads the carousel) or the **Axis** (positions Wells under the optics). A Homing Sample is both a line in the on-device homing log and an [[Event]]. Unlike a [[Run]], it is not the unit of a full assay — homing recurs many times within a Run and also when idle, so a Sample carries its own timestamp and only optionally a Run reference. The Sentri does **not** judge a Sample; "homing consistently in a different place" (drift) and miss-rate are trends derived downstream by **acorn-analytics** from the Sample series — the device is a dumb sampler.
 _Avoid_: "homing log" for the upstream signal (the upstream signal is the [[Homing Sample]] Event; the "homing log" is only the local on-device file the Samples are also written to).
+
+**Lid Heater Sample**
+A structured record summarising how the lid heater behaved over one [[Sample Window]] — its
+voltage level and spread, how long it sat at temperature, how long it was [[Quiet]], and
+whether its readings can be trusted at all (stale, frozen, below floor, or produced by more
+than one controller). Emitted by the lid-heater worker, which exists only while a [[Run]] is
+in progress, so unlike a [[Homing Sample]] every Lid Heater Sample carries the Run's
+`run_timestamp`. A Lid Heater Sample is both a line in the on-device lid log and an [[Event]].
+The Sentri does **not** judge a Sample: "too cold", "too wobbly" and "climbing too slowly" are
+thresholds owned by **acorn-analytics** read views — the device is a dumb sampler.
+_Avoid_: "lid reading" (a Sample summarises many readings), "lid temperature" (nothing in the
+path converts voltage to temperature).
+
+**Sample Window**
+The stretch of time a [[Lid Heater Sample]] summarises. A [[Run]] produces a sequence of them
+in two kinds — one **Climb Window** followed by repeated **Settled Windows** — so windows are
+deliberately not uniform in length, and every Sample carries its own.
+_Avoid_: "stretch", "period", "interval", "bucket".
+
+**Climb Window**
+The first [[Sample Window]] of a [[Run]], covering the lid's rise from cold. It ends the moment
+the lid first reaches its cutoff voltage (or at 300 seconds if it never does), and it is the
+Sample that carries the [[Checkpoint Crossing]] times. A Run that begins on an already-warm lid
+has no Climb Window.
+_Avoid_: "warm-up window", "ramp window", "first sample".
+
+**Settled Window**
+A fixed 300-second [[Sample Window]] covering a stretch in which the lid is expected to be
+holding temperature. Every "is this lid holding?" figure is drawn from Settled Windows, which
+is why the [[Climb Window]] is separated out rather than blended into the first one.
+_Avoid_: "steady window", "hold window", "normal window".
+
+**Quiet**
+The state in which the lid heater is deliberately held off because the Sentri is moving or
+imaging. Voltage falling while Quiet is expected behaviour, not a fault, which is why the
+share of a [[Sample Window]] spent Quiet is reported alongside every other lid figure.
+_Avoid_: "muted", "silenced", "paused" (the internal app may *display* "Muted"; the domain
+term and the wire name are Quiet).
+
+**Checkpoint Crossing**
+The time taken, from lid-heater start, to first reach one of a short ladder of voltages on the
+way up — derived from that machine's own cutoff (the last 0.06 V of the climb, sampled every
+0.02 V), so the ladder follows the machine's configuration rather than assuming it. Deliberately reported instead of a heating
+*rate*: a rate in volts per second would only be meaningful if the lid sensor responded
+proportionally to temperature, which is not established, whereas a crossing needs only that
+voltage rises as the lid heats.
+_Avoid_: "heating rate", "ramp rate", "slope".
 
 **Fleet API Key** _(retired)_
 A shared secret (`AQ_SYNC_API_KEY`) formerly sent as `x-api-key` on every Sync. Retired in favor of per-device Device Certificate (mTLS) auth: a shared fleet key is the wrong identity model for a field fleet — a single stolen Pi exposed the whole fleet, and the key could only be rotated fleet-wide. See ADR-013. Listed here only to mark the term obsolete.
