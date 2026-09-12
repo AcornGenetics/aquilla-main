@@ -4,6 +4,7 @@ from aquila_web.local_db import enqueue_event, init_local_db, _utc_now
 from aquila_web.optics_readings import build_optics_readings, count_data_lines
 from aq_curve.curve import ALGO_VERSION
 from aquila_web.profile_assembly import assemble_steps, validate_stages
+from aq_lib.profile_hash import canonical_profile_hash
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -117,6 +118,39 @@ def _profile_rox_unavailable(profile_name: str | None) -> bool:
         except Exception:
             continue
     return False
+
+def _profile_sha256_for(profile_ref: str | None) -> "str | None":
+    """Canonical content hash of the Profile identified by ``profile_ref``.
+
+    Run provenance (#456/#457): the recipe recorded for a Run must be the exact
+    bytes of the Profile that ran. The simulate path has only the selected
+    reference, so it resolves the Profile — a relative-path id like
+    ``managed/X.json`` or a name/stem/filename — and hashes the whole document.
+    Returns None if unresolvable so the ``run_complete`` stamp is simply omitted
+    (legacy fallback), never raising into the run path.
+    """
+    if not profile_ref:
+        return None
+    profile_dir = resolve_profile_dir()
+    if not profile_dir.exists():
+        return None
+    candidate = profile_dir / profile_ref
+    if candidate.is_file():
+        try:
+            return canonical_profile_hash(json.loads(candidate.read_text()))
+        except Exception:
+            return None
+    for path in profile_dir.rglob("*.json"):
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            continue
+        title = data.get("title", path.stem)
+        profile_title = data.get("name", title)
+        if profile_title == profile_ref or path.stem == profile_ref or path.name == profile_ref:
+            return canonical_profile_hash(data)
+    return None
+
 
 def _resolve_profile_display_name(profile_ref: str | None) -> str:
     """Resolve a profile reference to its human-readable display name.
@@ -732,17 +766,20 @@ async def _simulate_run(profile_name: str) -> None:
     })
     _save_history(history)
     init_local_db()
-    enqueue_event(
-        "run_complete",
-        {
-            "run_name": run_name,
-            "profile": profile_name,
-            "result": detected_summary,
-            "run_timestamp": run_timestamp,
-            "tube_names": _tube_names_by_well(),
-            "calls": _calls_from_file(results_file),
-        },
-    )
+    sim_payload = {
+        "run_name": run_name,
+        "profile": profile_name,
+        "result": detected_summary,
+        "run_timestamp": run_timestamp,
+        "tube_names": _tube_names_by_well(),
+        "calls": _calls_from_file(results_file),
+    }
+    # Run provenance (#456/#457): stamp the canonical hash of the exact Profile
+    # that ran (resolved from its selected reference), matching the hardware path.
+    sim_sha256 = _profile_sha256_for(profile_name)
+    if sim_sha256 is not None:
+        sim_payload["profile_sha256"] = sim_sha256
+    enqueue_event("run_complete", sim_payload)
 
     # Summary call_evidence rides alongside run_complete on the same run_id (#297).
     _emit_call_evidence(results_file, run_timestamp)
@@ -1582,12 +1619,18 @@ async def list_profiles():
     # Collect local filenames first for deduplication — local takes priority over bundled
     local_filenames: set[str] = {p.name for p in (profile_dir / "local").glob("*.json")} if (profile_dir / "local").exists() else set()
 
-    # local/ first, then bundled/, then anything flat (dev/legacy)
+    # local/ first, then managed/ + bundled/, then anything flat (dev/legacy)
     search_paths = []
     local_dir = profile_dir / "local"
+    managed_dir = profile_dir / "managed"
     bundled_dir = profile_dir / "bundled"
     if local_dir.exists():
         search_paths.extend(sorted(local_dir.glob("*.json")))
+    # Managed Profiles (ADR-0002): team-pushed, S3-backed, delivered per-device
+    # via the profiles shadow. Read-only like bundled, but not hostname-filtered
+    # (the shadow already scopes them to this device).
+    if managed_dir.exists():
+        search_paths.extend(sorted(managed_dir.glob("*.json")))
     if bundled_dir.exists():
         search_paths.extend(sorted(bundled_dir.glob("*.json")))
     # fallback: flat files not in either subdir (dev simulate or pre-migration)
@@ -1595,12 +1638,16 @@ async def list_profiles():
 
     for path in search_paths:
         is_bundled = "bundled" in path.parts
+        is_managed = "managed" in path.parts
+        # Managed and bundled are both read-only; local wins over both.
+        is_readonly = is_bundled or is_managed
 
-        # Deduplicate: skip bundled file if a local version exists with same filename
-        if is_bundled and path.name in local_filenames:
+        # Deduplicate: skip a read-only file if a local version exists
+        if is_readonly and path.name in local_filenames:
             continue
 
-        # Device allowlist: only filter bundled profiles
+        # Device allowlist filters only bundled profiles; managed profiles are
+        # already scoped to this device by its profiles shadow.
         if allowed is not None and is_bundled and path.name not in allowed:
             continue
 
@@ -1620,7 +1667,7 @@ async def list_profiles():
                 "id": str(path.relative_to(profile_dir)),
                 "name": data.get("name"),
                 "label": data.get("name"),
-                "bundled": is_bundled,
+                "bundled": is_readonly,
                 "structured": "stages" in data,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
@@ -1633,7 +1680,7 @@ async def list_profiles():
                 "id": str(path.relative_to(profile_dir)),
                 "name": data.get("title", path.stem),
                 "label": data.get("title", path.stem),
-                "bundled": is_bundled,
+                "bundled": is_readonly,
                 "structured": "stages" in data,
                 "createdAt": created_at,
                 "modifiedAt": modified_at,
@@ -1765,8 +1812,8 @@ async def save_profile(payload: ProfileSave):
         profile_path = profile_dir / payload.profile_id
         if not profile_path.name.endswith(".json"):
             profile_path = profile_path.with_suffix(".json")
-        if "bundled" in profile_path.parts:
-            raise HTTPException(status_code=403, detail="Bundled profiles are read-only.")
+        if "bundled" in profile_path.parts or "managed" in profile_path.parts:
+            raise HTTPException(status_code=403, detail="Managed profiles are read-only.")
 
     base_profile = None
     if profile_path and profile_path.exists():
