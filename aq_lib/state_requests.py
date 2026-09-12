@@ -119,6 +119,7 @@ def emit_run_complete(
     results_path: str,
     run_timestamp: str | None = None,
     tube_names: list | None = None,
+    profile_sha256: str | None = None,
 ) -> None:
     url = f"{BACKEND_URL}/events/run_complete"
     payload = {"run_name": run_name, "profile": profile, "results_path": results_path}
@@ -126,6 +127,8 @@ def emit_run_complete(
         payload["run_timestamp"] = run_timestamp
     if tube_names is not None:
         payload["tube_names"] = tube_names
+    if profile_sha256 is not None:
+        payload["profile_sha256"] = profile_sha256
     try:
         requests.post(url, json=payload, timeout=5)
     except requests.exceptions.RequestException as e:
