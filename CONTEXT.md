@@ -41,8 +41,12 @@ A named PCR assay profile — a JSON file in `profiles/` that defines thermal st
 **Profile**
 The operator-facing name for a Protocol. The Run screen labels the protocol picker "Profile," and protocols are stored on-disk as `profiles/*.json`. "Profile" is the correct term at the UI and on-disk-artifact layer; "Protocol" is the canonical analytics/domain term for the same thing. There is no case where a Profile is not a Protocol — they are the same concept named for two audiences.
 
+**Managed Profile** / **Local Profile**
+The two profile classes after `acorn-fleet` ADR-0002. **Managed** profiles are team-pushed, S3-backed, delivered per-device via the IoT Profiles Shadow, and always read-only on the device — they replace the old **bundled** profiles and are **no longer baked into the image**. **Local** profiles are authored on-device and editable. On-disk this is `profiles/managed/` (formerly `profiles/bundled/`) vs `profiles/local/`.
+_Avoid_: "bundled" (stale — profiles no longer ship in the image); assuming a rebuild is needed to change a device's profiles (it is not — edit its shadow).
+
 **Run**
-A single execution of a Protocol on a Sentri, producing results for up to 4 Wells. A Run has a start time, end time, and status (completed, aborted). A Run is the unit of event emission — one `run_complete` event per Run.
+A single execution of a Protocol on a Sentri, producing results for up to 4 Wells. A Run has a start time, end time, and status (completed, aborted). A Run is the unit of event emission — one `run_complete` event per Run. The `run_complete` event records `{profile name, canonical content sha256}` so the exact recipe is reconstructable from versioned S3 (ADR-0002).
 
 ### Profile Authoring
 

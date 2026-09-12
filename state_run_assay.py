@@ -21,6 +21,7 @@ from aq_lib.thermal_parser import thermal_parser
 from aq_lib.config_module import Config
 from aq_lib.utils import load_json
 from aq_lib.utils import LogFileName
+from aq_lib.profile_hash import canonical_profile_hash
 from aq_lib.utils import LOGGING_CONFIG
 from aq_curve.plot_utils import generate_optics_plot
 from aq_lib.regulate import lid_heater_worker
@@ -86,6 +87,7 @@ class AssayInterface():
         self.meer.setTd(4)
 
         self.thermal_profile = ""
+        self._profile_sha256 = None
 
     def executor( self ):
         logger.info( "Execution thread started." )
@@ -217,7 +219,14 @@ class AssayInterface():
         logger.info( "Optics log: %s", optics_log )
         logger.info("Optics log absolute: %s", Path(optics_log).resolve())
 
-        steps = load_json( self.thermal_profile )["steps"]
+        # Load the whole Profile document once at run start. Run provenance
+        # (#456): hash the exact bytes we run so the record binds to the recipe
+        # that produced the result, even if the Profile file is overwritten a
+        # moment later (e.g. a managed-profile sync). Captured once, like
+        # run_timestamp.
+        profile_doc = load_json( self.thermal_profile )
+        self._profile_sha256 = canonical_profile_hash( profile_doc )
+        steps = profile_doc["steps"]
         # Planned optical passes for the whole run, from the profile — so optics
         # expected_lines reflects the intended total even on an early abort (#288).
         self._planned_optics_passes = count_optics_passes(steps)
@@ -318,6 +327,7 @@ class AssayInterface():
                     self.run_name, profile_name, str(results_json),
                     run_timestamp=self.run_timestamp,
                     tube_names=tube_names,
+                    profile_sha256=self._profile_sha256,
                 )
                 # Capture the exact optics file just consumed onto the same
                 # outbox, sharing run_timestamp (#288).

@@ -87,6 +87,33 @@ class TestRunCompleteEndpoint:
         payload = local_db.get_pending_events()[0]["payload"]
         assert payload.get("run_timestamp")
 
+    def test_payload_carries_supplied_profile_sha256(self, db_client):
+        # Run provenance (#456): the device sends the canonical content hash of
+        # the Profile it ran, so the recipe is reconstructable from versioned S3
+        # even after the Profile is later changed.
+        client, local_db = db_client
+        client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+            "profile_sha256": "canon-v1:sha256:" + "a" * 64,
+        })
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert payload["profile_sha256"] == "canon-v1:sha256:" + "a" * 64
+
+    def test_payload_omits_profile_sha256_when_absent(self, db_client):
+        # Legacy callers (and sim) that don't send a hash still succeed; the
+        # field is simply absent rather than an error.
+        client, local_db = db_client
+        response = client.post("/events/run_complete", json={
+            "run_name": "Run 1",
+            "profile": "basic_pcr.json",
+            "results_path": str(DETECTED_RESULTS),
+        })
+        assert response.status_code == 200
+        payload = local_db.get_pending_events()[0]["payload"]
+        assert "profile_sha256" not in payload
+
     def test_event_payload_includes_non_empty_result(self, db_client):
         client, local_db = db_client
         client.post("/events/run_complete", json={
@@ -194,6 +221,41 @@ class TestEmitRunComplete:
             run_timestamp="2026-07-02T14:03:11Z",
         )
         assert calls[0]["json"]["run_timestamp"] == "2026-07-02T14:03:11Z"
+
+    def test_forwards_profile_sha256(self, monkeypatch):
+        import aq_lib.state_requests as sr
+
+        calls = []
+
+        class _FakeResponse:
+            status_code = 200
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append({"url": url, "json": json})
+            return _FakeResponse()
+
+        monkeypatch.setattr("aq_lib.state_requests.requests.post", fake_post)
+        sr.emit_run_complete(
+            "Run 1", "basic_pcr.json", "/logs/results/run1.json",
+            profile_sha256="canon-v1:sha256:" + "a" * 64,
+        )
+        assert calls[0]["json"]["profile_sha256"] == "canon-v1:sha256:" + "a" * 64
+
+    def test_omits_profile_sha256_when_absent(self, monkeypatch):
+        import aq_lib.state_requests as sr
+
+        calls = []
+
+        class _FakeResponse:
+            status_code = 200
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append({"url": url, "json": json})
+            return _FakeResponse()
+
+        monkeypatch.setattr("aq_lib.state_requests.requests.post", fake_post)
+        sr.emit_run_complete("Run 1", "basic_pcr.json", "/logs/results/run1.json")
+        assert "profile_sha256" not in calls[0]["json"]
 
     def test_forwards_tube_names_snapshot(self, monkeypatch):
         import aq_lib.state_requests as sr

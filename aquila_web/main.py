@@ -954,6 +954,7 @@ class _RunCompleteEventRequest(BaseModel):
     results_path: Optional[str] = None
     run_timestamp: Optional[str] = None
     tube_names: Optional[list] = None
+    profile_sha256: Optional[str] = None
 
 
 @app.post("/events/run_complete")
@@ -966,17 +967,20 @@ async def events_run_complete(req: _RunCompleteEventRequest):
     # optics_readings event derive the same run_id cloud-side. Fall back to
     # enqueue time only for legacy callers that don't send one.
     run_timestamp = req.run_timestamp or _utc_now()
-    event_id = enqueue_event(
-        "run_complete",
-        {
-            "run_name": req.run_name,
-            "profile": req.profile,
-            "result": result,
-            "run_timestamp": run_timestamp,
-            "tube_names": _tube_names_by_well(req.tube_names),
-            "calls": _calls_from_file(results_file) if results_file else [],
-        },
-    )
+    payload = {
+        "run_name": req.run_name,
+        "profile": req.profile,
+        "result": result,
+        "run_timestamp": run_timestamp,
+        "tube_names": _tube_names_by_well(req.tube_names),
+        "calls": _calls_from_file(results_file) if results_file else [],
+    }
+    # Run provenance (#456): the canonical content hash of the Profile that ran,
+    # so the recipe is reconstructable from versioned S3 even after the Profile
+    # is later changed. Absent for legacy/sim callers that don't send one.
+    if req.profile_sha256 is not None:
+        payload["profile_sha256"] = req.profile_sha256
+    event_id = enqueue_event("run_complete", payload)
     # Summary call_evidence rides alongside run_complete on the same run_id (#297).
     _emit_call_evidence(results_file, run_timestamp)
     return {"ok": True, "event_id": event_id}
