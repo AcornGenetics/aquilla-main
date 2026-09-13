@@ -15,6 +15,52 @@ from aquila_web.profile_sync import reconcile
 pytestmark = pytest.mark.unit
 
 
+def test_offline_unavailable_desired_keeps_cache_intact(tmp_path):
+    """desired=None means the assignment is UNAVAILABLE (shadow unreadable /
+    offline). The cached set must be kept: nothing fetched, nothing deleted."""
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    (managed / "A.json").write_bytes(b"a")
+    (managed / "B.json").write_bytes(b"b")
+    fetches = []
+
+    result = reconcile(None, managed, fetch=lambda key: fetches.append(key) or b"x")
+
+    assert (managed / "A.json").exists()
+    assert (managed / "B.json").exists()
+    assert fetches == []
+    assert {p["name"] for p in result.present} == {"A.json", "B.json"}
+
+
+def test_fetch_failure_is_non_fatal_and_preserves_cache(tmp_path):
+    """A failed S3 fetch for one key must not crash reconcile, delete cached
+    profiles, or block other keys — the failure is surfaced in errors and
+    retried next reconcile."""
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    (managed / "Have.json").write_bytes(b"have")  # already cached
+
+    def fetch(key):
+        if key.endswith("Bad.json"):
+            raise RuntimeError("s3 unreachable")
+        return b"good"
+
+    result = reconcile(
+        [
+            {"key": "profiles/Have.json"},
+            {"key": "profiles/Bad.json"},
+            {"key": "profiles/Good.json"},
+        ],
+        managed,
+        fetch,
+    )
+
+    assert (managed / "Have.json").read_bytes() == b"have"   # cache preserved
+    assert (managed / "Good.json").read_bytes() == b"good"   # others still sync
+    assert not (managed / "Bad.json").exists()               # failed one skipped
+    assert any(e["name"] == "Bad.json" for e in result.errors)
+
+
 def test_writes_a_newly_assigned_profile_into_managed(tmp_path):
     """A desired key with no local file is fetched from S3 and written."""
     managed = tmp_path / "managed"
