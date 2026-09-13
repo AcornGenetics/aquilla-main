@@ -24,6 +24,7 @@ class ReconcileResult:
     """
     present: list = field(default_factory=list)
     mismatches: list = field(default_factory=list)
+    errors: list = field(default_factory=list)
 
 # Sidecar recording the S3 version last synced per managed file, so an in-place
 # edit (same key, new version) is re-pulled without a hand-maintained hash. Not
@@ -50,6 +51,14 @@ def _save_state(managed_dir: Path, state: dict) -> None:
     (managed_dir / _SIDECAR).write_text(json.dumps(state))
 
 
+def _present(managed_dir: Path, state: dict) -> list:
+    """The managed profiles currently on disk, with their synced versions."""
+    return [
+        {"name": path.name, "version": state.get(path.name)}
+        for path in sorted(managed_dir.glob("*.json"))
+    ]
+
+
 def reconcile(
     desired: list[dict],
     managed_dir: Path,
@@ -68,8 +77,15 @@ def reconcile(
     managed_dir = Path(managed_dir)
     managed_dir.mkdir(parents=True, exist_ok=True)
     state = _load_state(managed_dir)
-    mismatches = []
 
+    # desired is None means the assignment is UNAVAILABLE (shadow unreadable /
+    # offline) — distinct from an explicitly empty [] (which detaches all). Keep
+    # the cached set intact and report it; never fetch or delete on unknown.
+    if desired is None:
+        return ReconcileResult(present=_present(managed_dir, state))
+
+    mismatches = []
+    errors = []
     desired_filenames = {_filename(entry["key"]) for entry in desired}
 
     # Add / update: fetch when missing, or when the remote version changed.
@@ -82,7 +98,14 @@ def reconcile(
             version is not None and state.get(name) != version
         )
         if needs_fetch:
-            body = fetch(key)
+            # A failed fetch (S3 unreachable, transient error) must not crash
+            # the reconcile or disturb the cache — surface it and move on; the
+            # key is simply retried on the next reconcile.
+            try:
+                body = fetch(key)
+            except Exception as exc:
+                errors.append({"name": name, "error": str(exc)})
+                continue
             # Advisory sha256 (optional): if declared and the fetched bytes
             # don't match, surface the mismatch and do NOT install — a wrong or
             # corrupt object should be visible, never silently applied.
@@ -107,8 +130,8 @@ def reconcile(
 
     _save_state(managed_dir, state)
 
-    present = [
-        {"name": path.name, "version": state.get(path.name)}
-        for path in sorted(managed_dir.glob("*.json"))
-    ]
-    return ReconcileResult(present=present, mismatches=mismatches)
+    return ReconcileResult(
+        present=_present(managed_dir, state),
+        mismatches=mismatches,
+        errors=errors,
+    )

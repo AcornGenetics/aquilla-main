@@ -92,6 +92,19 @@ def test_editing_a_managed_profile_is_rejected(client, managed_test_profile):
     assert resp.status_code == 403
 
 
+def test_empty_managed_state_returns_clean_empty_list(client, tmp_path, monkeypatch):
+    """A never-synced device (empty managed/, nothing else) must return a clean
+    200 + [] — the "No profiles available" state — not an error/broken state."""
+    from aquila_web import main as web_main
+    empty = tmp_path / "profiles"
+    (empty / "managed").mkdir(parents=True)
+    monkeypatch.setattr(web_main, "resolve_profile_dir", lambda: empty)
+
+    resp = client.get("/profiles")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 def test_managed_profile_is_selectable_for_a_run(client, managed_test_profile):
     """A Managed Profile can be selected to run — the delivery path feeds the
     run selection just like any other profile."""
