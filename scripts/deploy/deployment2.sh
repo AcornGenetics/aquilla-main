@@ -360,12 +360,42 @@ Section "ServerFlags"
 EndSection
 EOF
 
+# Tear down the legacy console-autologin path from deployment1.sh (#424): an
+# agetty --autologin override on tty1 plus `startx` in ~/.bash_profile (copied
+# from server_web/.bash_profile). LightDM owns autologin now, but the two are not
+# mutually exclusive — a device provisioned by deployment1 before this existed
+# carries both, and nothing in deployment2 previously removed the old one.
+# raspi-config's do_boot_behaviour B4 above does not clear the .bash_profile
+# startx, so it survives even after the graphical target is set.
+#
+# Left in place, agetty logs in on tty1 and prints the login banner, the Debian
+# MOTD and the X.Org version block to the display before LightDM takes the
+# screen, and ~/.bash_profile races LightDM to start a second X on VT1.
+# Measured on sn03 (deployment3): removing both cleared the text entirely,
+# kiosk unaffected.
+rm -rf /etc/systemd/system/getty@tty1.service.d
+systemctl daemon-reload
+
+# Rewrite rather than filter: deleting only the startx line leaves an empty
+# `if ... then / fi`, which is a bash syntax error on every login shell.
+if [[ -f "${PI_HOME}/.bash_profile" ]] && grep -q startx "${PI_HOME}/.bash_profile"; then
+    cat > "${PI_HOME}/.bash_profile" <<'EOF'
+if [ -f ~/.bashrc ]; then
+   . ~/.bashrc
+fi
+EOF
+    chown pi:pi "${PI_HOME}/.bash_profile"
+fi
+
 run_test "autologin.conf exists"           "test -f /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-user=pi"               "grep -q 'autologin-user=pi' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "autologin-session=openbox"       "grep -q 'autologin-session=openbox' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "main lightdm.conf not rpd-labwc" "! grep -q 'autologin-session=rpd-labwc' /etc/lightdm/lightdm.conf"
 run_test "cursor disabled (-nocursor)"     "grep -q 'X -nocursor' /etc/lightdm/lightdm.conf.d/autologin.conf"
 run_test "lightdm enabled"                 "systemctl is-enabled lightdm | grep -q enabled"
+run_test "no console autologin override"   "! test -d /etc/systemd/system/getty@tty1.service.d"
+run_test "no startx in .bash_profile"      "! grep -q startx ${PI_HOME}/.bash_profile 2>/dev/null"
+run_test ".bash_profile is valid bash"     "test ! -f ${PI_HOME}/.bash_profile || bash -n ${PI_HOME}/.bash_profile"
 run_test "xorg.conf has AutoAddGPU off"    "grep -q 'AutoAddGPU' /etc/X11/xorg.conf"
 run_test "fbdev not installed"            "! dpkg -l xserver-xorg-video-fbdev 2>/dev/null | grep -q '^ii'"
 

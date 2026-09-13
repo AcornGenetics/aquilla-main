@@ -82,12 +82,9 @@ def test_dnsmasq_service_enabled_and_started() -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 # Clean-startup parity with deployment3_greengrass.sh
 # ─────────────────────────────────────────────────────────────────────────────
-# These port the visible-artifact fixes (#418/#426/#428/#431/#437) onto the
+# These port the visible-artifact fixes (#418/#424/#426/#428/#431/#437) onto the
 # main-branch provisioner so devices built with deployment2.sh get the same
-# clean boot as the Greengrass fleet. #424 (legacy console-autologin teardown)
-# is deliberately NOT ported: deployment2 already uses LightDM autologin
-# (Phase 4), never the getty+startx console path #424 removed — see the
-# test_no_legacy_console_autologin_needed assertion below.
+# clean boot as the Greengrass fleet.
 # ═════════════════════════════════════════════════════════════════════════════
 
 SPLASH = Path("aquila_web/static/splash.html").read_text()
@@ -318,14 +315,32 @@ def test_splash_is_same_origin() -> None:
     assert "window.location.href = '/'" in SPLASH
 
 
-# --- #424 is intentionally not ported ----------------------------------------
+# --- Legacy console autologin teardown, #424 ---------------------------------
+# deployment1.sh copied server_web/.bash_profile (which runs `startx`) into ~/
+# and left an agetty --autologin override on tty1. deployment2 configures LightDM
+# autologin but the two are additive: a device provisioned by deployment1 and
+# then re-run through deployment2 keeps the old path — agetty prints the login
+# banner, MOTD and X.Org block on the display before LightDM takes the screen,
+# and .bash_profile races it to start a second X on VT1. do_boot_behaviour B4
+# does not clear the .bash_profile startx. Confirmed on sn03 (deployment3).
 
-def test_no_legacy_console_autologin_needed() -> None:
-    # deployment2 uses LightDM autologin (Phase 4), not the getty override +
-    # `startx` console path that deployment3's #424 fix tore down. The legacy
-    # path never existed here, so there is nothing to remove — assert deployment2
-    # drives the display through LightDM, not a console startx.
-    assert "autologin-session=openbox" in SCRIPT
-    assert "do_boot_behaviour B4" in SCRIPT
-    # No console startx handoff in this provisioner.
-    assert "exec startx" not in SCRIPT
+def test_removes_legacy_console_autologin_override() -> None:
+    assert "rm -rf /etc/systemd/system/getty@tty1.service.d" in SCRIPT
+    assert "systemctl daemon-reload" in SCRIPT
+
+
+def test_removes_startx_from_bash_profile() -> None:
+    assert "grep -q startx" in SCRIPT
+
+
+def test_bash_profile_rewritten_not_filtered() -> None:
+    # Deleting only the startx line leaves `if ... then / fi` with an empty body,
+    # which is a bash syntax error on every login shell. Must rewrite the file.
+    assert "sed -i '/startx/d'" not in SCRIPT
+    assert "grep -v startx" not in SCRIPT
+
+
+def test_console_autologin_teardown_is_asserted() -> None:
+    assert 'run_test "no console autologin override"' in SCRIPT
+    assert 'run_test "no startx in .bash_profile"' in SCRIPT
+    assert 'run_test ".bash_profile is valid bash"' in SCRIPT
