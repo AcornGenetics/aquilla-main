@@ -287,9 +287,19 @@ def test_nginx_proxies_to_backend_on_loopback() -> None:
 
 
 def test_nginx_falls_back_to_splash() -> None:
-    assert "error_page 502 503 504 = @splash" in SCRIPT
-    assert "location @splash" in SCRIPT
+    # location = / falls back to the real /splash location (one splash-serving
+    # block, not a duplicated @named copy) and the splash is never cached.
+    assert "error_page 502 503 504 = /splash" in SCRIPT
+    assert "location = /splash" in SCRIPT
     assert "no-store" in SCRIPT
+
+
+def test_health_poll_connect_is_bounded() -> None:
+    # The splash's /health poll is served by the location / prefix block, so that
+    # block needs its own proxy_connect_timeout — a backend whose TCP connect
+    # hangs during early boot must fail fast, not stall the poll for nginx's 60s
+    # default. Assert the bound appears twice: on location = / AND on location /.
+    assert SCRIPT.count("proxy_connect_timeout 2s") >= 2
 
 
 def test_nginx_phase_frees_port_8080_on_rerun() -> None:

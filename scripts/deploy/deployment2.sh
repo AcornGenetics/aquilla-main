@@ -233,11 +233,13 @@ server {
     root /opt/aquila;
 
     # The kiosk's only URL. Backend up -> the app; backend absent -> the splash.
+    # error_page points at the real /splash location (not a separate @named copy)
+    # so there is one splash-serving block to maintain, not two.
     location = / {
         proxy_pass http://127.0.0.1:8090;
-        error_page 502 503 504 = @splash;
-        # Bounded so the splash's once-a-second health poll is never blocked by a
-        # backend that simply has not started yet.
+        error_page 502 503 504 = /splash;
+        # Bounded so a backend that is reachable but slow to accept can't hang the
+        # navigation to / (the splash sends us here once /health answers).
         proxy_connect_timeout 2s;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -246,22 +248,18 @@ server {
     # / serves two different documents depending on whether the backend is up, so
     # the transient one must never be cached — otherwise the browser may re-serve
     # the splash from cache after the app is ready and sit there indefinitely.
+    # no-store handles that; no `expires` directive, which would emit a SECOND,
+    # weaker Cache-Control header alongside this one.
     # The kiosk opens this, not /, so the splash is shown on EVERY boot rather
     # than only when the backend happens to be slow. Two reasons: the Acorn
     # branding should be consistent, and going straight from black to a
     # fully-rendered app is a harsher change than black -> splash -> app. The
     # page navigates to / once /health answers, which is same-origin, so
-    # Chromium keeps its warm renderer.
+    # Chromium keeps its warm renderer. Reached directly by the kiosk and as the
+    # error_page fallback from location = /.
     location = /splash {
         try_files /splash.html =404;
         add_header Cache-Control "no-store, no-cache, must-revalidate" always;
-        expires -1;
-    }
-
-    location @splash {
-        try_files /splash.html =404;
-        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
-        expires -1;
     }
 
     location / {
@@ -271,6 +269,11 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # The splash's once-a-second /health poll is served HERE (prefix match),
+        # not by location = /, so it needs its own bound: without it a backend
+        # whose TCP connect hangs during early boot would stall each poll for the
+        # 60s nginx default instead of failing fast and letting the splash retry.
+        proxy_connect_timeout 2s;
     }
 }
 EOF
@@ -898,7 +901,10 @@ if [ ! -f /tmp/kiosk_disabled ]; then
   # measured on sn09, on every one of five boots. The splash centres itself in the
   # viewport, so a page painting during that second is laid out for a 561px window
   # and its content shifts when the window grows to 1024. With the flag the
-  # intermediate size was 767x1023 across eight further boots.
+  # intermediate size was 767x1023 across eight further boots. --start-maximized
+  # is deliberately NOT used: it requests a maximized state that would override
+  # this explicit initial size, reintroducing the very resize step above. The WM
+  # rule (rc.xml, below) fullscreens the window at map time.
   #
   # GTK_THEME: Chromium's window background — the surface visible after the window
   # is mapped but before the page paints — comes from GTK, not from Chromium. It is
@@ -931,7 +937,6 @@ if [ ! -f /tmp/kiosk_disabled ]; then
     --ozone-platform=x11 \
     --user-data-dir=/tmp/chromium-kiosk \
     --disk-cache-size=0 \
-    --start-maximized \
     --hide-scrollbars \
     >/dev/null 2>&1 &
 fi
@@ -964,8 +969,21 @@ if [[ ! -f "${OPENBOX_RC}" && -f /etc/xdg/openbox/rc.xml ]]; then
     cp /etc/xdg/openbox/rc.xml "${OPENBOX_RC}"
 fi
 if [[ -f "${OPENBOX_RC}" ]] && ! grep -q 'aquila-kiosk-no-decor' "${OPENBOX_RC}"; then
-    # Insert inside the existing <applications> block; a second top-level
-    # <applications> element would be invalid and silently ignored.
+    # The rule must land inside an <applications> block; a second top-level
+    # <applications> element would be invalid and silently ignored. The insert is
+    # keyed on the </applications> close tag, so first normalise the two shapes
+    # that don't have one: a self-closing <applications/>, and a file with no
+    # applications block at all. Without this, on such a distro rc.xml the sed
+    # would be a silent no-op and the "window decorations disabled" run_test below
+    # would then abort the entire provisioning run.
+    if grep -q '<applications */>' "${OPENBOX_RC}"; then
+        # <applications/> -> <applications></applications> so the insert has a
+        # close tag to anchor on (and we don't create a duplicate block).
+        sed -i 's|<applications */>|<applications></applications>|' "${OPENBOX_RC}"
+    elif ! grep -q '</applications>' "${OPENBOX_RC}"; then
+        # No applications block — add an empty one before the root close tag.
+        sed -i 's|</openbox_config>|<applications></applications>\n</openbox_config>|' "${OPENBOX_RC}"
+    fi
     sed -i 's|</applications>|  <!-- aquila-kiosk-no-decor: see #428 -->\n  <application class="*">\n    <decor>no</decor>\n    <maximized>yes</maximized>\n    <fullscreen>yes</fullscreen>\n  </application>\n</applications>|' "${OPENBOX_RC}"
     # A malformed rc.xml leaves Openbox with no window manager, so validate
     # before letting it reach a reboot. Restore the stock file if we broke it.
@@ -1451,12 +1469,19 @@ elif ! rpi-eeprom-config > "${EEPROM_CONF_CURRENT}" 2>/dev/null \
     phase_pass "bootloader EEPROM left untouched (config unreadable)"
 else
     # Desired state: drop both keys wherever they sit, then pin network install
-    # off at the end. Deterministic ordering keeps this diff-stable on re-runs.
+    # off at the end. Deterministic ordering keeps the WRITTEN file stable.
     grep -v -E '^(NET_INSTALL_AT_POWER_ON|NET_INSTALL_ENABLED)=' \
         "${EEPROM_CONF_CURRENT}" > "${EEPROM_CONF_DESIRED}" || true
     echo "NET_INSTALL_ENABLED=0" >> "${EEPROM_CONF_DESIRED}"
 
-    if diff -q "${EEPROM_CONF_CURRENT}" "${EEPROM_CONF_DESIRED}" &>/dev/null; then
+    # Compare SORTED, not line-for-line: the flash is the physically risky step (a
+    # power cut mid-write needs recovery), so it must be skipped whenever the chip
+    # already carries the same settings — even if the keys sit in a different
+    # order than our regenerated file puts them. A plain `diff` treats a chip that
+    # is already correct but merely ordered differently as a mismatch and reflashes
+    # it needlessly; sorting both sides compares the settings as a set, so an
+    # already-correct chip is never rewritten regardless of key order.
+    if diff -q <(sort "${EEPROM_CONF_CURRENT}") <(sort "${EEPROM_CONF_DESIRED}") &>/dev/null; then
         echo "  ✓ EEPROM config already correct — no update staged"
     else
         if rpi-eeprom-config --apply "${EEPROM_CONF_DESIRED}" &>/dev/null; then
