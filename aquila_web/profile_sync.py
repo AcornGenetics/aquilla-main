@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+from aq_lib.profile_hash import canonical_profile_hash
+
 
 @dataclass
 class ReconcileResult:
@@ -135,3 +137,29 @@ def reconcile(
         mismatches=mismatches,
         errors=errors,
     )
+
+
+def capture_local_profile(
+    profile_path: Path,
+    local_dir: Path,
+    upload: Callable[[str, bytes], None],
+) -> Optional[dict]:
+    """Capture a Run's Local Profile up to S3 so its recipe is reconstructable.
+
+    Managed Profiles already live in S3 (reconstructable by their recorded sha),
+    so only Local Profiles need capturing. Uploads the raw bytes under a
+    content-addressed key derived from the canonical sha, matching the
+    ``profile_sha256`` the Run records — so re-running the same Local Profile
+    targets the same key (idempotent, no duplicate object). Returns
+    ``{"key", "sha256"}`` on capture, or ``None`` when the profile is not local.
+    """
+    profile_path = Path(profile_path)
+    try:
+        profile_path.resolve().relative_to(Path(local_dir).resolve())
+    except ValueError:
+        return None  # not a Local Profile — already in S3, nothing to capture
+    body = profile_path.read_bytes()
+    sha = canonical_profile_hash(json.loads(body))
+    key = f"profiles/captured/{sha.split(':')[-1]}.json"
+    upload(key, body)
+    return {"key": key, "sha256": sha}
