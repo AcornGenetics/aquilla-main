@@ -107,12 +107,24 @@ class TestFleetCompose:
                 f"Service '{name}' missing watchtower label — it won't receive OTA updates"
             )
 
-    def test_ui_exposes_port_8080(self):
-        """UI must be reachable on port 8080 from the host."""
+    def test_ui_exposes_port_8082(self):
+        """
+        UI is published on 8082, not 8080 (#431).
+
+        8080 belongs to host nginx, the kiosk's front door: it must answer within
+        a second of boot, while this container does not exist for the first ~40s.
+        Both publishing 8080 would leave them fighting for the port and the stack
+        failing to start. The kiosk reaches the app through host nginx (which
+        proxies to the backend), never through this container's host port, so the
+        UI is free to move.
+        """
         ui = _load(FLEET_COMPOSE)["services"]["ui"]
         ports = [str(p) for p in ui.get("ports", [])]
-        assert any("8080" in p for p in ports), (
-            f"ui service doesn't expose port 8080. Ports: {ports}"
+        assert any("8082" in p for p in ports), (
+            f"ui service should publish 8082 (host nginx owns 8080). Ports: {ports}"
+        )
+        assert not any(p.startswith("8080:") for p in ports), (
+            f"ui must not publish 8080 — host nginx binds it. Ports: {ports}"
         )
 
     def test_backend_exposes_port_8090(self):
