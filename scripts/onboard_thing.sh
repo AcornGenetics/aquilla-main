@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# onboard_sentri.sh — operator-side: take ONE Sentri from "deployed" to "a Thing
+# onboard_thing.sh — operator-side: take ONE Sentri from "deployed" to "a Thing
 # in a ring", end to end.
 #
-#   ./scripts/onboard_sentri.sh                 # prompts for Pi host + ring
-#   ./scripts/onboard_sentri.sh sn11 pilot      # non-interactive
+#   ./scripts/onboard_thing.sh                 # prompts for Pi host + ring
+#   ./scripts/onboard_thing.sh sn11 pilot      # non-interactive
 #
 # Runs on the OPERATOR's machine — your AWS credentials are used for every IoT
 # call and never touch the Pi. The Pi is reached over SSH as pi@<sn> and must be
