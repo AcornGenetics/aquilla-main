@@ -10,6 +10,7 @@ image delivery and updates.
 Run with:
     pytest tests/fleet_device/test_deployment3_greengrass_script.py -v
 """
+import re
 from pathlib import Path
 
 SCRIPT = Path("scripts/deploy/deployment3_greengrass.sh").read_text()
@@ -40,6 +41,22 @@ def test_configures_iot_endpoints():
     # endpoints — the Pi has no AWS creds to look them up itself.
     assert "iotDataEndpoint" in SCRIPT
     assert "iotCredEndpoint" in SCRIPT
+
+
+def test_pins_greengrass_dataplane_endpoint_to_account_endpoint():
+    # Manual provisioning must pin the Greengrass data-plane endpoint to the
+    # account's IoT data endpoint. Left unset, the nucleus SDK defaults to the
+    # shared greengrass-ats.iot.<region>.amazonaws.com endpoint, which completes
+    # mTLS then refuses this device (closes with no HTTP response) -- so every
+    # deployment wedges at ListThingGroupsForCoreDevice, IN_PROGRESS forever
+    # (#442; regressed by a re-provision that regenerated nucleus config).
+    data_ep = re.search(r'iotDataEndpoint:\s*"([^"]+)"', SCRIPT)
+    dp_ep = re.search(r'greengrassDataPlaneEndpoint:\s*"([^"]*)"', SCRIPT)
+    assert dp_ep is not None, "greengrassDataPlaneEndpoint is not set in the nucleus config"
+    assert dp_ep.group(1), "greengrassDataPlaneEndpoint must not be empty (empty => greengrass-ats default)"
+    assert data_ep is not None and dp_ep.group(1) == data_ep.group(1), (
+        "greengrassDataPlaneEndpoint must be pinned to the same account endpoint as iotDataEndpoint"
+    )
 
 
 def test_watchtower_ota_path_removed():
