@@ -10,6 +10,7 @@
 # tears Greengrass back out and re-enables the Watchtower/aquila-stack.service path.
 #
 # Usage: sudo bash deployment3_greengrass.sh
+# Set SKIP_TAILSCALE=1 to skip Phase 12 (Tailscale install, auth, and verification).
 set -euo pipefail
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
@@ -1039,28 +1040,38 @@ phase_pass "kiosk-control installed and healthy"
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 12 "Tailscale"
 
-if ! command -v tailscale >/dev/null 2>&1; then
-    curl -fsSL https://tailscale.com/install.sh | sh
-fi
-
-prompt_if_unset TAILSCALE_KEY \
-    "Enter Tailscale auth key (press Enter to authenticate interactively)"
-
-if [[ -n "${TAILSCALE_KEY:-}" ]]; then
-    tailscale up --ssh --authkey "${TAILSCALE_KEY}" --hostname "${DEVICE_HOSTNAME}"
+# SKIP_TAILSCALE=1 bypasses the whole phase (install, auth, and verification) —
+# e.g. bench/first-boot provisioning where Tailscale isn't wired up yet. Greengrass
+# reaches AWS IoT over the internet, so onboarding does not depend on Tailscale; the
+# tradeoff is losing Tailscale SSH into the box (how enroll.sh + cert renewal reach
+# it), so only skip when another access path exists. Mirrors deployment2.sh (#441).
+if [[ "${SKIP_TAILSCALE:-}" == "1" ]]; then
+    echo "  → SKIP_TAILSCALE=1 set — skipping Tailscale install, auth, and verification"
+    phase_pass "Tailscale skipped (SKIP_TAILSCALE=1)"
 else
-    tailscale up --ssh --hostname "${DEVICE_HOSTNAME}"
-    echo "  → Complete Tailscale authentication in your browser, then press Enter to continue."
-    read -r
+    if ! command -v tailscale >/dev/null 2>&1; then
+        curl -fsSL https://tailscale.com/install.sh | sh
+    fi
+
+    prompt_if_unset TAILSCALE_KEY \
+        "Enter Tailscale auth key (press Enter to authenticate interactively)"
+
+    if [[ -n "${TAILSCALE_KEY:-}" ]]; then
+        tailscale up --ssh --authkey "${TAILSCALE_KEY}" --hostname "${DEVICE_HOSTNAME}"
+    else
+        tailscale up --ssh --hostname "${DEVICE_HOSTNAME}"
+        echo "  → Complete Tailscale authentication in your browser, then press Enter to continue."
+        read -r
+    fi
+
+    run_test "tailscale installed"     "which tailscale"
+    run_test "tailscaled active"       "systemctl is-active tailscaled | grep -q active"
+    run_test "device authenticated"    "tailscale status | grep -q ${DEVICE_HOSTNAME}"
+    run_test "Tailscale IPs assigned"  \
+        "tailscale status --json | python3 -c \"import sys,json; d=json.load(sys.stdin); assert d.get('TailscaleIPs')\""
+
+    phase_pass "Tailscale active, device authenticated as ${DEVICE_HOSTNAME}"
 fi
-
-run_test "tailscale installed"     "which tailscale"
-run_test "tailscaled active"       "systemctl is-active tailscaled | grep -q active"
-run_test "device authenticated"    "tailscale status | grep -q ${DEVICE_HOSTNAME}"
-run_test "Tailscale IPs assigned"  \
-    "tailscale status --json | python3 -c \"import sys,json; d=json.load(sys.stdin); assert d.get('TailscaleIPs')\""
-
-phase_pass "Tailscale active, device authenticated as ${DEVICE_HOSTNAME}"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 13 — Grafana Alloy
