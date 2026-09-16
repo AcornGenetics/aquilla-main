@@ -162,6 +162,28 @@ def test_is_number_rejects_non_finite():
     assert _is_number(60.5) is True
 
 
+def test_decimal_temps_and_times_are_valid_and_assembled():
+    """Decimal temperatures AND times are accepted end-to-end (issue #470).
+
+    The kiosk builder now lets operators type decimals (e.g. a 60.5 C anneal); the
+    backend must keep honouring them through validation and step assembly, including
+    the extension optics split on a fractional hold time (38.5 -> 28.5 + 10)."""
+    subs = [
+        {"name": "Denaturation", "temp": 95.5, "time": 11.5},
+        {"name": "Annealing & Extension", "temp": 60.5, "time": 38.5},
+    ]
+    stages = _stages(sub_stages=subs)
+    assert validate_stages(stages) == []
+
+    repeat = _repeat_of(assemble_steps(stages))
+    assert repeat == [
+        {"setpoint": 95.5, "duration": 11.5, "description": "Denaturation"},
+        {"setpoint": 60.5, "duration": 28.5, "description": "Annealing & Extension"},
+        {"optics": ""},
+        {"setpoint": 60.5, "duration": 10, "description": "Annealing & Extension"},
+    ]
+
+
 def test_valid_stages_has_no_errors():
     """A fully valid, all-stages-enabled profile produces no validation errors."""
     stages = _stages(

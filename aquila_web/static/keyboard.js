@@ -238,7 +238,12 @@ function handleKeyPress(value) {
 
   if (value !== "backspace" && value !== "clear" && outputValue.length === 1) {
     const inputType = (activeInput.getAttribute("type") || "").toLowerCase();
-    if (inputType === "number") {
+    const inputModeAttr = (activeInput.getAttribute("inputmode") || "").toLowerCase();
+    // Decimal fields are declared type=text inputmode=decimal (not type=number) so
+    // the browser can't wipe the intermediate "95." state while a decimal is typed
+    // in digit-by-digit. Guard both so a numeric field only ever holds a number.
+    const isNumericField = inputType === "number" || inputModeAttr === "decimal";
+    if (isNumericField) {
       const current = activeInput.value || "";
       const candidate = current + outputValue;
       const valid = candidate === "" || candidate === "-" || candidate === "."

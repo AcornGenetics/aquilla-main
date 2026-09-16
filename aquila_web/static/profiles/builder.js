@@ -284,11 +284,11 @@
       '<div class="field-grid">' +
       '<div class="field">' +
       '<label for="stage-amp-sub-' + index + '-temp">Temp (°C)</label>' +
-      '<input id="stage-amp-sub-' + index + '-temp" type="number" inputmode="numeric" value="" />' +
+      '<input id="stage-amp-sub-' + index + '-temp" type="text" inputmode="decimal" value="" />' +
       '</div>' +
       '<div class="field">' +
       '<label for="stage-amp-sub-' + index + '-time">Time (s)</label>' +
-      '<input id="stage-amp-sub-' + index + '-time" type="number" inputmode="numeric" value="" />' +
+      '<input id="stage-amp-sub-' + index + '-time" type="text" inputmode="decimal" value="" />' +
       '</div>' +
       '</div>' +
       '</div>' +
