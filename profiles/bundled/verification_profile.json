@@ -85,10 +85,6 @@
         "disable": 0,
         "duration": 5,
         "description": "Turn off and record temperature for a little bit"
-    },
-
-    { 
-        "pcr_fanoff" : 0
     }
 ]
 }
