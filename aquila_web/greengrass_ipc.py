@@ -32,14 +32,27 @@ class GreengrassIpc:
             deployment_id=deployment_id, recheck_after_ms=recheck_after_ms
         )
 
-    def update_thing_shadow(self, payload):
-        # Classic (unnamed) shadow, so Fleet Indexing (REGISTRY_AND_SHADOW) indexes
-        # it without a named-shadow filter change.
+    def update_thing_shadow(self, payload, shadow_name=""):
+        # Default is the classic (unnamed) shadow — Fleet Indexing
+        # (REGISTRY_AND_SHADOW) indexes it without a named-shadow filter change. The
+        # `profiles` sync agent passes shadow_name="profiles" to report its assignment.
         self._client.update_thing_shadow(
             thing_name=self._thing_name,
-            shadow_name="",
+            shadow_name=shadow_name,
             payload=json.dumps({"state": {"reported": payload}}).encode(),
         )
+
+    def get_thing_shadow(self, shadow_name):
+        # Returns the parsed shadow document, or None when the shadow does not exist
+        # / is unreadable — parse_desired maps None to UNAVAILABLE so reconcile keeps
+        # the cached set rather than treating a read failure as a detach-all.
+        try:
+            resp = self._client.get_thing_shadow(
+                thing_name=self._thing_name, shadow_name=shadow_name
+            )
+        except Exception:  # noqa: BLE001 - ResourceNotFound / IPC error → unavailable
+            return None
+        return json.loads(resp.payload)
 
     def subscribe_to_component_updates(self, on_pre_update, on_post_update=None):
         # PreComponentUpdateEvent carries the deploymentId; the handler decides
@@ -109,4 +122,63 @@ def start_update_agent(gate, running_shas, record_pre_update=None,
             time.sleep(publish_interval_s)
 
     threading.Thread(target=_publish_loop, daemon=True).start()
+    return agent
+
+
+def start_profile_sync_agent(
+    managed_dir="/opt/aquila/profiles/managed", bucket=None, sync_interval_s=60
+):
+    """Bring up the Managed Profile sync agent (ADR-0002, am#465).
+
+    Reconciles ``managed_dir`` from the ``profiles`` shadow + S3 on startup, then on
+    a bounded interval. Best-effort: if Greengrass IPC / boto3 / the bucket aren't
+    available (off-device), it logs and returns without starting, so it never breaks
+    a non-Greengrass boot. The S3 reads use the container's Token Exchange Role
+    credentials (boto3 picks up ``AWS_CONTAINER_CREDENTIALS_FULL_URI`` automatically).
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
+    bucket = (
+        bucket or os.environ.get("PROFILES_BUCKET") or os.environ.get("ARTIFACTS_BUCKET")
+    )
+    if not bucket:
+        log.warning("Managed Profile sync not started: no PROFILES_BUCKET configured")
+        return None
+
+    try:
+        import boto3
+
+        from aquila_web.profile_sync_agent import ProfileSyncAgent
+
+        ipc = GreengrassIpc()
+        s3 = boto3.client("s3")
+    except Exception as e:  # noqa: BLE001 - off-device / deps unavailable is fine
+        log.warning("Managed Profile sync not started (IPC/boto3 unavailable): %s", e)
+        return None
+
+    def fetch(key):
+        return s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+
+    def remote_version(key):
+        # S3 version marker — reconcile re-pulls a key whose object changed in place.
+        return s3.head_object(Bucket=bucket, Key=key).get("VersionId")
+
+    agent = ProfileSyncAgent(ipc, managed_dir, fetch, remote_version)
+
+    def _sync_loop():
+        warned = False
+        while True:
+            try:
+                agent.sync_once()
+                warned = False
+            except Exception as e:  # noqa: BLE001 - must not kill the loop
+                # First failure of a run at WARNING (a persistently failing sync must
+                # be visible), then quiet to avoid log spam — mirrors _publish_loop.
+                if not warned:
+                    log.warning("Managed Profile sync failed: %s", e)
+                    warned = True
+            time.sleep(sync_interval_s)
+
+    threading.Thread(target=_sync_loop, daemon=True).start()
     return agent

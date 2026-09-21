@@ -10,9 +10,117 @@ Marked ``unit``.
 """
 import pytest
 
-from aquila_web.profile_sync import reconcile
+from aquila_web.profile_sync import (
+    ReconcileResult,
+    parse_desired,
+    reconcile,
+    reported_state,
+)
 
 pytestmark = pytest.mark.unit
+
+
+def test_reported_state_reports_what_is_on_disk():
+    """reported.profiles is the set actually present after a sync (name + synced
+    version) — what the operator reads back to confirm the assignment took."""
+    result = ReconcileResult(present=[{"name": "x.json", "version": "v1"}])
+
+    assert reported_state(result) == {"profiles": [{"name": "x.json", "version": "v1"}]}
+
+
+def test_reported_state_surfaces_mismatches_and_errors_when_present():
+    result = ReconcileResult(
+        present=[{"name": "x.json", "version": "v1"}],
+        mismatches=[{"name": "bad.json", "expected": "sha256:a", "actual": "sha256:b"}],
+        errors=[{"name": "gone.json", "error": "NoSuchKey"}],
+    )
+
+    reported = reported_state(result)
+
+    assert reported["profiles"] == [{"name": "x.json", "version": "v1"}]
+    assert reported["mismatches"] == [
+        {"name": "bad.json", "expected": "sha256:a", "actual": "sha256:b"}
+    ]
+    assert reported["errors"] == [{"name": "gone.json", "error": "NoSuchKey"}]
+
+
+def test_reported_state_omits_empty_mismatches_and_errors():
+    """A clean sync reports only `profiles` — no empty mismatch/error keys cluttering
+    the shadow."""
+    assert reported_state(ReconcileResult(present=[])) == {"profiles": []}
+
+
+def test_parse_desired_objects_pass_through_key_and_sha():
+    """The canonical Profile Assignment: desired.profiles is a list of objects,
+    each with a `key` (S3 key) and an optional `sha256`. parse_desired returns
+    exactly the list reconcile() consumes."""
+    doc = {
+        "state": {
+            "desired": {
+                "profiles": [
+                    {"key": "profiles/x.json", "sha256": "sha256:abc"},
+                    {"key": "profiles/y.json"},
+                ]
+            }
+        }
+    }
+
+    assert parse_desired(doc) == [
+        {"key": "profiles/x.json", "sha256": "sha256:abc"},
+        {"key": "profiles/y.json"},
+    ]
+
+
+def test_parse_desired_unavailable_shadow_is_none():
+    """No shadow document (unreadable/absent) → None (UNAVAILABLE), so reconcile
+    keeps the cached set — never mistaken for a detach-all."""
+    assert parse_desired(None) is None
+
+
+def test_parse_desired_absent_profiles_key_is_none_not_detach():
+    """A readable shadow that simply hasn't declared `profiles` is ambiguous, so it
+    is UNAVAILABLE (None) — fail-safe. It must NOT read as an empty assignment,
+    which would wipe every managed profile."""
+    assert parse_desired({"state": {"desired": {"welcome": "aws-iot"}}}) is None
+
+
+def test_parse_desired_explicit_empty_list_is_detach_all():
+    """`profiles: []` is a deliberate detach-all and passes through as []."""
+    assert parse_desired({"state": {"desired": {"profiles": []}}}) == []
+
+
+def test_parse_desired_tolerates_bare_string_keys():
+    """Hand-authored shadows may list bare S3-key strings (ADR-0002 v1 CLI/console);
+    each normalizes to {"key": ...}."""
+    doc = {"state": {"desired": {"profiles": ["profiles/x.json", "profiles/y.json"]}}}
+
+    assert parse_desired(doc) == [
+        {"key": "profiles/x.json"},
+        {"key": "profiles/y.json"},
+    ]
+
+
+def test_parse_desired_drops_malformed_entries():
+    """A typo'd entry (no usable key) is dropped, never fetched — the visible failure
+    is simply that it doesn't appear in `reported`, not a crash."""
+    doc = {
+        "state": {
+            "desired": {
+                "profiles": [
+                    {"key": "profiles/ok.json"},
+                    {"nope": "no key here"},
+                    None,
+                    123,
+                    "profiles/also-ok.json",
+                ]
+            }
+        }
+    }
+
+    assert parse_desired(doc) == [
+        {"key": "profiles/ok.json"},
+        {"key": "profiles/also-ok.json"},
+    ]
 
 
 def test_offline_unavailable_desired_keeps_cache_intact(tmp_path):
