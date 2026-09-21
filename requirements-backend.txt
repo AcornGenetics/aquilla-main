@@ -15,6 +15,8 @@ cryptography
 # (publish the Device Shadow, defer component updates). Without it the agent's
 # import fails and it silently no-ops — no shadow, no operator Update gate.
 awsiotsdk
-# (boto3 was here for the in-container profile fetch — removed in am#488: profile
-# sync moved to the native com.acorn.profile-sync component per ADR-022, so the app
-# image no longer fetches from S3. The component carries boto3 in its own venv.)
+# boto3 — used by the profile-sync Greengrass component, which REUSES this api image
+# (run with a different command + network_mode: host, ADR-022) to fetch profile
+# bodies from S3 via the Token Exchange Role. The app process itself never calls S3;
+# it only reads profiles/managed/. boto3 lives here so there's no second image.
+boto3

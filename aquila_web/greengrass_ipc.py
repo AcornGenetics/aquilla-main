@@ -139,8 +139,9 @@ def start_update_agent(gate, running_shas, record_pre_update=None,
 
 
 # NOTE: the in-container `start_profile_sync_agent` was removed in am#488. Profile
-# sync now runs as its own native Greengrass component (com.acorn.profile-sync) on
-# the host — see aquila_web/profile_sync_main.py and ADR-022. It can't live in the
-# container: boto3 there can't reach the Token Exchange Role credential endpoint
-# (host loopback). The reusable IPC methods above (get_thing_shadow,
-# update_thing_shadow, subscribe_to_shadow_delta) are what the component uses.
+# sync now runs as its own Greengrass component (com.acorn.profile-sync) — its own
+# container reusing the api image, with network_mode: host so boto3 can reach the
+# Token Exchange Role credential endpoint on the host loopback (the bridge-networked
+# app container can't). See aquila_web/profile_sync_main.py and ADR-022. The reusable
+# IPC methods above (get_thing_shadow, update_thing_shadow, subscribe_to_shadow_delta)
+# are what the component uses.

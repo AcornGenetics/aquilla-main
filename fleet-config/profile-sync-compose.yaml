@@ -1,0 +1,49 @@
+# On-device stack for the Profile Sync Agent Greengrass component (com.acorn.profile-sync).
+#
+# ADR-022. Its own component, SEPARATE from com.acorn.sentri — but it REUSES the same
+# aquilla-main-api image (the publish workflow pins the same digest the app uses, so the
+# device already has it cached: no second image, no extra pull). It runs a different
+# command (the sync agent) with `network_mode: host` so boto3 can reach the Token
+# Exchange Role credential endpoint on the host's 127.0.0.1 — the whole point of ADR-022
+# (a bridge-networked container can't). Read-only: it only fetches profile bodies from S3
+# and writes /opt/aquila/profiles/managed/; the app (com.acorn.sentri) only reads that dir.
+services:
+  profile-sync:
+    image: aquilla-main-api # publish pins this to the SAME digest com.acorn.sentri uses
+    container_name: aquila-profile-sync
+    command: ["python3", "-m", "aquila_web.profile_sync_main"]
+    restart: unless-stopped
+    # Host network namespace: makes localhost:35289 the host's TES creds endpoint, so
+    # boto3's container-credentials provider works. Safe here — single-purpose,
+    # binds no ports, only outbound calls (IPC socket + S3).
+    network_mode: host
+    environment:
+      # What to sync + where. Same bucket fleet-wide; the per-device difference is the
+      # `profiles` shadow, not this.
+      - PROFILES_BUCKET=acorn-fleet-deviceaccess-artifactsbucket2aac5544-kpyoopozasr6
+      - PROFILES_MANAGED_DIR=/opt/aquila/profiles/managed
+      - PROFILES_SYNC_INTERVAL_S=300
+      - AWS_REGION=us-east-2
+      # Greengrass Core IPC (read the profiles shadow) + TES creds for the S3 fetch.
+      # SVCUID, the socket path, and the AWS_CONTAINER_CREDENTIALS_* vars are set by
+      # Greengrass on the component process; pass them through. With host networking the
+      # creds URI's localhost resolves to the host's TES port.
+      - SVCUID
+      - AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT
+      - AWS_IOT_THING_NAME
+      - AWS_CONTAINER_CREDENTIALS_FULL_URI
+      - AWS_CONTAINER_AUTHORIZATION_TOKEN
+    volumes:
+      # Writes managed/ here; the app container reads it (same host bind).
+      - /opt/aquila/profiles:/opt/aquila/profiles
+      # The nucleus IPC socket, at the same path the env var names.
+      - ${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}:${AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT:-/greengrass/v2/ipc.socket}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
