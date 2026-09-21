@@ -113,3 +113,29 @@ jobs:
         run: aws s3 cp scripts/greengrass/prune-images.sh "${{ steps.meta.outputs.prune_uri }}"
       - name: Publish Greengrass component version
         run: aws greengrassv2 create-component-version --inline-recipe fileb://recipe.json --region "$AWS_REGION"
+
+      # --- Also publish the Profile Sync Agent component (ADR-022, am#488). It REUSES
+      # the api image just built (same digest → the device already has it cached), run
+      # with a different command + network_mode: host so boto3 reaches the TES creds
+      # on the host loopback. No second image build, no new ECR repo.
+      - name: Version + artifact URI (profile-sync)
+        id: ps_meta
+        run: |
+          PS_NAME=com.acorn.profile-sync
+          PS_VERSION="0.1.${{ github.run_number }}"
+          PS_URI="s3://${{ vars.ARTIFACTS_BUCKET }}/${PS_NAME}/${PS_VERSION}/profile-sync-compose.yaml"
+          echo "version=$PS_VERSION" >> "$GITHUB_OUTPUT"
+          echo "artifact_uri=$PS_URI" >> "$GITHUB_OUTPUT"
+      - name: Generate profile-sync compose + recipe
+        run: |
+          python -m scripts.greengrass.publish_profile_sync \
+            --compose fleet-config/profile-sync-compose.yaml \
+            --api-ref "${ECR_REGISTRY}/aquilla-main-api@${{ steps.api.outputs.digest }}" \
+            --version "${{ steps.ps_meta.outputs.version }}" \
+            --artifact-uri "${{ steps.ps_meta.outputs.artifact_uri }}" \
+            --out-compose ps-compose.yaml \
+            --out-recipe ps-recipe.json
+      - name: Upload profile-sync compose artifact
+        run: aws s3 cp ps-compose.yaml "${{ steps.ps_meta.outputs.artifact_uri }}"
+      - name: Publish profile-sync component version
+        run: aws greengrassv2 create-component-version --inline-recipe fileb://ps-recipe.json --region "$AWS_REGION"
