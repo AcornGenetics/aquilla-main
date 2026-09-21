@@ -51,6 +51,14 @@ services:
       - SVCUID
       - AWS_GG_NUCLEUS_DOMAIN_SOCKET_FILEPATH_FOR_COMPONENT
       - AWS_IOT_THING_NAME
+      # Managed Profile sync (ADR-0002, am#465): the S3 bucket holding profile
+      # bodies, plus the Token Exchange Role credentials Greengrass sets on the
+      # component process (passed through, like SVCUID) so boto3 in the container
+      # can read the bucket. Without these, start_profile_sync_agent() no-ops.
+      - PROFILES_BUCKET=acorn-fleet-deviceaccess-artifactsbucket2aac5544-kpyoopozasr6
+      - AWS_REGION=us-east-2
+      - AWS_CONTAINER_CREDENTIALS_FULL_URI
+      - AWS_CONTAINER_AUTHORIZATION_TOKEN
     volumes:
       # Host binds (version-independent) so data persists across every Greengrass
       # update and an existing device's data carries over on migration.
