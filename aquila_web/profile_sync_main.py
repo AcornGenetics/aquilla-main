@@ -1,14 +1,17 @@
-"""Entry point for the native Profile Sync Agent Greengrass component (ADR-022, am#488).
+"""Entry point for the Profile Sync Agent Greengrass component (ADR-022, am#488).
 
 Wires the unit-tested core — `load_config`, `ProfileSyncAgent`, `SyncCoordinator` —
-to Greengrass IPC and S3 on the host, and drives a reconcile on **startup**, on a
+to Greengrass IPC and S3, and drives a reconcile on **startup**, on a
 **`profiles`-shadow delta**, and on a **periodic interval** backstop.
+
+Runs in the com.acorn.profile-sync component — its own container, REUSING the
+aquilla-main-api image, with `network_mode: host` so boto3 reaches the Token Exchange
+Role creds endpoint on the host loopback (a bridge-networked container can't). Started
+by the recipe's Run: `python -m aquila_web.profile_sync_main`.
 
 This module is glue (IPC client, boto3, the run loop) — verified on a real Sentri
 (#468), not in unit tests, exactly like `start_update_agent`. The decisions it wires
 together are what carry the tests.
-
-Runs as: `python -m aquila_web.profile_sync_main` (the recipe's Run lifecycle).
 """
 import logging
 import time
