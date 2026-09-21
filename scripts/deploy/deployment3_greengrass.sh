@@ -737,19 +737,28 @@ systemd-tmpfiles --create /etc/tmpfiles.d/aquila-device-env.conf 2>/dev/null || 
 # work (JRE, JITP registration, ~497 MB image pull). The installer registers
 # greengrass.service as WantedBy=multi-user.target, which is ordered BEFORE
 # graphical.target — so the nucleus races ahead of LightDM/X/Chromium and the
-# operator sees console text instead of the splash. This drop-in only *orders*
-# greengrass after the graphical target (the kiosk is already drawing by then);
-# greengrass still starts, just once the screen is covered. On a headless boot
-# (graphical.target not in the transaction) the ordering is simply ignored.
+# operator sees console text instead of the splash.
+#
+# Order after the DISPLAY MANAGER leaf (display-manager.service), NOT graphical.target:
+# a unit WantedBy=multi-user.target that is also After=graphical.target forms an
+# ORDERING CYCLE (multi-user is ordered before graphical, but the unit multi-user
+# pulls in is ordered after it) — systemd breaks the cycle by silently DROPPING
+# greengrass's start job, so the nucleus never starts at boot (am#485). Ordering
+# after display-manager.service gets the same "screen is up first" behavior with no
+# cycle. On a headless boot (no display manager in the transaction) the ordering is
+# simply ignored and greengrass starts at multi-user.target as usual.
 install -d -m 755 /etc/systemd/system/greengrass.service.d
 cat > /etc/systemd/system/greengrass.service.d/10-after-kiosk.conf <<'EOF'
 [Unit]
-After=graphical.target
+After=display-manager.service
 EOF
 systemctl daemon-reload
 
 run_test "greengrass root created"        "test -d ${GG_ROOT}"
-run_test "greengrass ordered after kiosk" "systemctl show -p After greengrass.service | grep -q graphical.target"
+run_test "greengrass ordered after kiosk" "systemctl show -p After greengrass.service | grep -q display-manager.service"
+# Regression guard for am#485: an ordering cycle makes systemd drop the start job
+# at boot. Assert there is none for greengrass (empty output = no cycle involving it).
+run_test "no greengrass ordering cycle"   "! systemd-analyze verify greengrass.service 2>&1 | grep -qi 'ordering cycle'"
 run_test "greengrass service installed"   "test -f /etc/systemd/system/greengrass.service"
 run_test "provisioned with device cert"   "grep -q 'device.crt' /opt/aquila/config/greengrass-config.yaml"
 run_test "role alias configured"          "grep -q '${GG_ROLE_ALIAS}' /opt/aquila/config/greengrass-config.yaml"
