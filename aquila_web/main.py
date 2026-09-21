@@ -2609,3 +2609,10 @@ async def start_greengrass_update_agent() -> None:
         record_pre_update=_write_pre_update_sha,
         on_post_update=lambda deployment_id: _mark_update_succeeded(),
     )
+
+    # Bring up the Managed Profile sync agent (ADR-0002, am#465): reconcile the
+    # per-device managed/ profiles from the `profiles` shadow + S3 (Token Exchange
+    # Role creds). Best-effort — no-ops off-device or without PROFILES_BUCKET set.
+    from aquila_web.greengrass_ipc import start_profile_sync_agent
+
+    start_profile_sync_agent()

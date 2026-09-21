@@ -61,6 +61,56 @@ def _present(managed_dir: Path, state: dict) -> list:
     ]
 
 
+def _normalize_entry(entry) -> Optional[dict]:
+    """One desired-list entry → the ``{"key", "sha256"?}`` dict reconcile wants.
+
+    Tolerant of hand-authored shadows (ADR-0002 v1 = raw CLI/console): an entry may
+    be a bare S3-key **string** (normalized to ``{"key": ...}``) or an **object**
+    with a ``key`` and optional ``sha256``. Anything without a usable key is dropped.
+    """
+    if isinstance(entry, str):
+        return {"key": entry}
+    if isinstance(entry, dict) and isinstance(entry.get("key"), str):
+        out = {"key": entry["key"]}
+        if entry.get("sha256") is not None:
+            out["sha256"] = entry["sha256"]
+        return out
+    return None
+
+
+def parse_desired(shadow_doc: Optional[dict]) -> Optional[list[dict]]:
+    """The per-device Profile Assignment from the ``profiles`` shadow document.
+
+    Returns the normalized ``[{"key", "sha256"?}]`` list reconcile() consumes.
+    Fail-safe on ambiguity (ADR-0002 "keep last-synced set" / fail-closed):
+    ``None`` means the assignment is **UNAVAILABLE** — shadow unreadable/absent, or
+    no ``profiles`` declared — so reconcile keeps the cache. An **explicit empty
+    list** (``profiles: []``) is a deliberate detach-all and passes through as ``[]``.
+    """
+    desired = (shadow_doc or {}).get("state", {}).get("desired", {})
+    profiles = desired.get("profiles")
+    # Absent `profiles` (or no shadow at all) is ambiguous → UNAVAILABLE, keep the
+    # cache. Only an explicitly-present list (including []) is an assignment.
+    if not isinstance(profiles, list):
+        return None
+    return [entry for entry in (_normalize_entry(p) for p in profiles) if entry]
+
+
+def reported_state(result: "ReconcileResult") -> dict:
+    """The ``reported`` state to write into the ``profiles`` shadow after a reconcile.
+
+    Always reports ``profiles`` (the set on disk, so the operator can confirm the
+    assignment took). ``mismatches`` / ``errors`` are included only when non-empty,
+    so a clean sync leaves the shadow uncluttered but a drift/failure stays visible.
+    """
+    reported: dict = {"profiles": result.present}
+    if result.mismatches:
+        reported["mismatches"] = result.mismatches
+    if result.errors:
+        reported["errors"] = result.errors
+    return reported
+
+
 def reconcile(
     desired: list[dict],
     managed_dir: Path,
