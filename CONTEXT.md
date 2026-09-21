@@ -45,6 +45,10 @@ The operator-facing name for a Protocol. The Run screen labels the protocol pick
 The two profile classes after `acorn-fleet` ADR-0002. **Managed** profiles are team-pushed, S3-backed, delivered per-device via the IoT Profiles Shadow, and always read-only on the device — they replace the old **bundled** profiles and are **no longer baked into the image**. **Local** profiles are authored on-device and editable. On-disk this is `profiles/managed/` (formerly `profiles/bundled/`) vs `profiles/local/`.
 _Avoid_: "bundled" (stale — profiles no longer ship in the image); assuming a rebuild is needed to change a device's profiles (it is not — edit its shadow).
 
+**Profile Sync Agent**
+The on-device reconciler that keeps a Sentri's [[Managed Profile]]s in step with its Profile Assignment: it reads the Profiles Shadow, fetches any assigned bodies it does not already have, and reports back what is present. It is its **own on-device unit, separate from the app** — the app only *reads* the profiles the agent lands in `profiles/managed/`; it never fetches them itself.
+_Avoid_: treating the agent as part of the app/backend — it is deliberately decoupled so profile delivery does not ride on the app's lifecycle or its credentials.
+
 **Run**
 A single execution of a Protocol on a Sentri, producing results for up to 4 Wells. A Run has a start time, end time, and status (completed, aborted). A Run is the unit of event emission — one `run_complete` event per Run. The `run_complete` event records `{profile name, canonical content sha256}` so the exact recipe is reconstructable from versioned S3 (ADR-0002).
 
