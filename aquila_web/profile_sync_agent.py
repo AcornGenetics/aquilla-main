@@ -6,9 +6,11 @@ IPC and S3:
     read the ``profiles`` shadow desired  →  reconcile managed/  →  write reported
 
 The IPC client and the S3 ``fetch``/``remote_version`` are injected — the real
-greengrasscoreipc/boto3 adapters are thin glue used only on-device (see
-``greengrass_ipc.start_profile_sync_agent``), so this module holds no IPC/boto3
-specifics and is unit-testable with fakes. Mirrors ``update_agent.UpdateAgent``.
+greengrasscoreipc/boto3 adapters are thin glue used only on-device (wired in
+``profile_sync_main`` for the native com.acorn.profile-sync component, ADR-022), so
+this module holds no IPC/boto3 specifics and is unit-testable with fakes. This file
+also holds ``SyncCoordinator``, which funnels the component's startup/delta/interval
+triggers into a single serialized ``sync_once``. Mirrors ``update_agent.UpdateAgent``.
 """
 import logging
 import threading

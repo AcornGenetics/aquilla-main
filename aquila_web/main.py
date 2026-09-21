@@ -2609,10 +2609,7 @@ async def start_greengrass_update_agent() -> None:
         record_pre_update=_write_pre_update_sha,
         on_post_update=lambda deployment_id: _mark_update_succeeded(),
     )
-
-    # Bring up the Managed Profile sync agent (ADR-0002, am#465): reconcile the
-    # per-device managed/ profiles from the `profiles` shadow + S3 (Token Exchange
-    # Role creds). Best-effort — no-ops off-device or without PROFILES_BUCKET set.
-    from aquila_web.greengrass_ipc import start_profile_sync_agent
-
-    start_profile_sync_agent()
+    # NOTE: profile sync is NOT started here. Per ADR-022 it runs as its own native
+    # Greengrass component (com.acorn.profile-sync) on the host — the app only *reads*
+    # /opt/aquila/profiles/managed/. Fetching from the container can't reach the TES
+    # credential endpoint (host loopback), which is why it moved out.

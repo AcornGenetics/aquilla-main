@@ -1,0 +1,89 @@
+# Greengrass recipe for the native Profile Sync Agent component (ADR-022, am#488).
+#
+# TEMPLATE. The publish-component workflow fills ComponentVersion and the Artifacts
+# URIs (never hand-publish — same rule as com.acorn.sentri). This component runs
+# NATIVELY on the host (not in Docker) so boto3 can reach the Token Exchange Role
+# credential endpoint (host loopback) — the whole point of ADR-022.
+#
+# Runtime: a component-private venv built from bundled wheels (no PyPI at deploy,
+# no system-Python pollution). The Run entrypoint is aquila_web.profile_sync_main,
+# which wires the unit-tested core (load_config / ProfileSyncAgent / SyncCoordinator).
+---
+RecipeFormatVersion: "2020-01-25"
+ComponentName: com.acorn.profile-sync
+ComponentVersion: "0.0.0" # set by the publish workflow
+ComponentDescription: >-
+  On-device Profile Sync Agent. Reconciles /opt/aquila/profiles/managed from the
+  `profiles` Device Shadow + S3 (read-only), on startup + shadow delta + interval.
+ComponentPublisher: Acorn
+
+ComponentDependencies:
+  aws.greengrass.Nucleus:
+    VersionRequirement: ">=2.0.0 <3.0.0"
+    DependencyType: SOFT
+  # Mints the Token Exchange Role creds boto3 uses for the S3 fetch.
+  aws.greengrass.TokenExchangeService:
+    VersionRequirement: ">=2.0.0"
+  # Serves the local `profiles` shadow (get + delta) over IPC.
+  aws.greengrass.ShadowManager:
+    VersionRequirement: ">=2.0.0"
+
+ComponentConfiguration:
+  DefaultConfiguration:
+    # The ArtifactsBucket holding profile bodies. Set per-deployment (same value
+    # fleet-wide); the shadow — not this — is the per-device difference.
+    profilesBucket: ""
+    managedDir: "/opt/aquila/profiles/managed"
+    syncIntervalS: "300"
+    # IPC authorization. NOTE: recipe vars (e.g. {iot:thingName}) are NOT
+    # interpolated inside accessControl resources, so use "*" — the component only
+    # ever touches its own core device's shadow.
+    accessControl:
+      aws.greengrass.ShadowManager:
+        com.acorn.profile-sync:shadow:1:
+          policyDescription: Read the profiles shadow desired; write its reported.
+          operations:
+            - aws.greengrass#GetThingShadow
+            - aws.greengrass#UpdateThingShadow
+          resources: ["*"]
+      # Subscribing to the shadow delta rides local pub/sub on the reserved delta
+      # topic. VERIFY on-device (#468): if the subscribe is denied, the interval
+      # backstop still keeps the device in sync — deltas just won't be instant.
+      aws.greengrass.ipc.pubsub:
+        com.acorn.profile-sync:pubsub:1:
+          policyDescription: Receive profiles shadow delta events.
+          operations:
+            - aws.greengrass#SubscribeToTopic
+          resources:
+            - "$aws/things/+/shadow/name/profiles/update/delta"
+
+Manifests:
+  - Platform:
+      os: linux
+    Lifecycle:
+      Install:
+        RequiresPrivilege: true
+        # Build a component-private venv from the bundled wheels — offline-safe.
+        Script: >-
+          python3 -m venv {artifacts:decompressedPath}/agent/venv &&
+          {artifacts:decompressedPath}/agent/venv/bin/pip install --no-index
+          --find-links {artifacts:decompressedPath}/agent/wheels boto3 awsiotsdk
+      Run:
+        RequiresPrivilege: true
+        Setenv:
+          AWS_IOT_THING_NAME: "{iot:thingName}"
+          PROFILES_BUCKET: "{configuration:/profilesBucket}"
+          PROFILES_MANAGED_DIR: "{configuration:/managedDir}"
+          PROFILES_SYNC_INTERVAL_S: "{configuration:/syncIntervalS}"
+          # aquila_web modules (profile_sync*, greengrass_ipc) are bundled here.
+          PYTHONPATH: "{artifacts:decompressedPath}/agent/src"
+        Script: >-
+          {artifacts:decompressedPath}/agent/venv/bin/python
+          -m aquila_web.profile_sync_main
+    Artifacts:
+      # The publish workflow builds + pins these:
+      #  - agent.zip: aquila_web/{profile_sync.py,profile_sync_agent.py,
+      #    profile_sync_config.py,greengrass_ipc.py} under src/, plus wheels/ for
+      #    boto3 + awsiotsdk (+ their deps) for the target platform (linux/arm64).
+      - URI: "s3://REPLACED-BY-PUBLISH/com.acorn.profile-sync/0.0.0/agent.zip"
+        Unarchive: ZIP
