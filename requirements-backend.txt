@@ -15,3 +15,8 @@ cryptography
 # (publish the Device Shadow, defer component updates). Without it the agent's
 # import fails and it silently no-ops — no shadow, no operator Update gate.
 awsiotsdk
+# S3 client for the Managed Profile sync agent (am#465): fetches profile bodies
+# from the ArtifactsBucket using the container's Token Exchange Role credentials.
+# Without it start_profile_sync_agent() fails to import boto3 and no-ops, so no
+# managed profiles ever land (observed on sn01: "No module named 'boto3'").
+boto3
