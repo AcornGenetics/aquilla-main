@@ -21,5 +21,20 @@
     },
     "sn07": {
         "profile_group": "classic"
+    },
+    "sn08": {
+        "profile_group": "classic"
+    },
+    "sn09": {
+        "profile_group": "sn09 sn11 sn12 brewery"
+    },
+    "sn10": {
+        "profile_group": "sn10 brewery"
+    },
+    "sn11": {
+        "profile_group": "sn09 sn11 sn12 brewery"
+    },
+    "sn12": {
+        "profile_group": "sn09 sn11 sn12 brewery"
     }
 }

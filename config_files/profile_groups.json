@@ -4,7 +4,8 @@
         "Beer_Spoilers_Bacteria.json",
         "Hygiena_ramp1.75_EA30.json",
         "ryan_thermal_tests.json",
-        "verification_profile.json"
+        "verification_profile.json",
+        "O157__ESBL_full.json"
     ],
     "duke": [
         "Beer_Spoilers_Bacteria.json",
@@ -18,7 +19,7 @@
     ],
     "sn04 brewery": [
         "ABBA_sn004.json"
-        ],
+    ],
     "sn05 brewery": [
         "ABBA_sn005.json",
         "O157__ESBL_full.json",
@@ -28,6 +29,14 @@
     ],
     "sn06 brewery": [
         "ABBA_ramp1.75_EA30_sn006.json"
+    ],
+    "sn09 sn11 sn12 brewery": [
+        "Beer_Spoilers_Bacteria.json",
+        "ryan_thermal_tests.json",
+        "verification_profile.json"
+    ],
+    "sn10 brewery": [
+        "verification_profile_sn10.json",
+        "Beer_Spoilers_Bacteria_sn10.json"
     ]
-    
 }

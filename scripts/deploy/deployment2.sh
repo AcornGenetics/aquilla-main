@@ -4,6 +4,7 @@
 # All values can be pre-set as env vars to skip prompts. Put them AFTER sudo so they
 # survive into the root shell (sudo strips the caller's environment by default):
 #   sudo DEVICE_HOSTNAME=sn04 IMAGE_TAG=prod GHCR_USER=... GHCR_TOKEN=... bash deployment2.sh
+# Set SKIP_TAILSCALE=1 to skip Phase 12 (Tailscale install, auth, and verification).
 set -euo pipefail
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
@@ -984,28 +985,33 @@ phase_pass "kiosk-control installed and healthy"
 # ═══════════════════════════════════════════════════════════════════════════════
 phase_start 12 "Tailscale"
 
-if ! command -v tailscale >/dev/null 2>&1; then
-    curl -fsSL https://tailscale.com/install.sh | sh
-fi
-
-prompt_if_unset TAILSCALE_KEY \
-    "Enter Tailscale auth key (press Enter to authenticate interactively)"
-
-if [[ -n "${TAILSCALE_KEY:-}" ]]; then
-    tailscale up --ssh --authkey "${TAILSCALE_KEY}" --hostname "${DEVICE_HOSTNAME}"
+if [[ "${SKIP_TAILSCALE:-}" == "1" ]]; then
+    echo "  → SKIP_TAILSCALE=1 set — skipping Tailscale install, auth, and verification"
+    phase_pass "Tailscale skipped (SKIP_TAILSCALE=1)"
 else
-    tailscale up --ssh --hostname "${DEVICE_HOSTNAME}"
-    echo "  → Complete Tailscale authentication in your browser, then press Enter to continue."
-    read -r
+    if ! command -v tailscale >/dev/null 2>&1; then
+        curl -fsSL https://tailscale.com/install.sh | sh
+    fi
+
+    prompt_if_unset TAILSCALE_KEY \
+        "Enter Tailscale auth key (press Enter to authenticate interactively)"
+
+    if [[ -n "${TAILSCALE_KEY:-}" ]]; then
+        tailscale up --ssh --authkey "${TAILSCALE_KEY}" --hostname "${DEVICE_HOSTNAME}"
+    else
+        tailscale up --ssh --hostname "${DEVICE_HOSTNAME}"
+        echo "  → Complete Tailscale authentication in your browser, then press Enter to continue."
+        read -r
+    fi
+
+    run_test "tailscale installed"     "which tailscale"
+    run_test "tailscaled active"       "systemctl is-active tailscaled | grep -q active"
+    run_test "device authenticated"    "tailscale status | grep -q ${DEVICE_HOSTNAME}"
+    run_test "Tailscale IPs assigned"  \
+        "tailscale status --json | python3 -c \"import sys,json; d=json.load(sys.stdin); assert d.get('TailscaleIPs')\""
+
+    phase_pass "Tailscale active, device authenticated as ${DEVICE_HOSTNAME}"
 fi
-
-run_test "tailscale installed"     "which tailscale"
-run_test "tailscaled active"       "systemctl is-active tailscaled | grep -q active"
-run_test "device authenticated"    "tailscale status | grep -q ${DEVICE_HOSTNAME}"
-run_test "Tailscale IPs assigned"  \
-    "tailscale status --json | python3 -c \"import sys,json; d=json.load(sys.stdin); assert d.get('TailscaleIPs')\""
-
-phase_pass "Tailscale active, device authenticated as ${DEVICE_HOSTNAME}"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 13 — Grafana Alloy

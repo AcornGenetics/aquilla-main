@@ -1,4 +1,5 @@
 {
     "lower_bound": 0.2,
-    "upper_bound": 0.34
+    "upper_bound": 0.34,
+    "target_voltage": 0.32
 }

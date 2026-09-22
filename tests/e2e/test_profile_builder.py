@@ -461,6 +461,85 @@ def test_out_of_range_temp_and_cycles_block_then_pass(page, base_url):
 
 
 # ---------------------------------------------------------------------------
+# Decimal temp/time entry (issue #470)
+# ---------------------------------------------------------------------------
+
+DECIMAL_THERMAL_FIELDS = [
+    "#stage-incubation-temp", "#stage-incubation-time",
+    "#stage-denaturation-temp", "#stage-denaturation-time",
+    "#stage-amp-sub-0-temp", "#stage-amp-sub-0-time",
+    "#stage-amp-sub-1-temp", "#stage-amp-sub-1-time",
+    "#stage-finalhold-temp", "#stage-finalhold-time",
+]
+
+
+def test_thermal_fields_are_decimal_capable(page, base_url):
+    """Every Stage temp/time field is decimal-capable (issue #470): declared
+    type=text inputmode=decimal, not the integer-only type=number that blanked
+    the field the instant a decimal point was typed on the kiosk keyboard. The
+    integer-only Cycles field stays type=number."""
+    _goto_builder(page, base_url)
+    for sel in DECIMAL_THERMAL_FIELDS:
+        el = page.locator(sel)
+        assert el.get_attribute("type") == "text", f"{sel} must be type=text"
+        assert el.get_attribute("inputmode") == "decimal", f"{sel} must be inputmode=decimal"
+    # Cycles is a count, not a measurement — it stays integer-only.
+    assert page.locator("#stage-amp-cycles").get_attribute("type") == "number"
+
+
+def test_decimal_temp_and_time_save_through_builder(page, base_url):
+    """Decimal temps and times entered in the builder ride through Save into the
+    POSTed `stages` payload and persist (issue #470). Covers a decimal on an
+    optional Stage (incubation temp) and on both amplification Sub-stages,
+    including a fractional extension hold time."""
+    _goto_builder(page, base_url)
+
+    page.locator("#profile-name").fill("B470 Decimals")
+    page.locator("#stage-incubation-temp").fill("37.5")
+    page.locator("#stage-incubation-time").fill("600")
+    # Focus on incubation + amplification; disable the other optional Stages so
+    # their blank fields don't trip save-time validation.
+    page.locator("#stage-denaturation-enabled").uncheck()
+    page.locator("#stage-finalhold-enabled").uncheck()
+    page.locator("#stage-amp-cycles").fill("40")
+    page.locator("#stage-amp-sub-0-temp").fill("95.5")
+    page.locator("#stage-amp-sub-0-time").fill("11")
+    page.locator("#stage-amp-sub-1-temp").fill("60.5")
+    page.locator("#stage-amp-sub-1-time").fill("38.5")
+
+    def is_save_post(req):
+        return req.url.rstrip("/").endswith("/profiles") and req.method == "POST"
+
+    with page.expect_request(is_save_post) as req_info, \
+            page.expect_response(lambda r: is_save_post(r.request)) as resp_info:
+        page.locator("#save-profile-button").click()
+
+    stages = req_info.value.post_data_json["stages"]
+    assert stages["incubation"] == {"enabled": True, "temp": 37.5, "time": 600}
+    amp = stages["amplification"]
+    assert amp["subStages"][0] == {"name": "Denaturation", "temp": 95.5, "time": 11}
+    assert amp["subStages"][1] == {"name": "Annealing & Extension", "temp": 60.5, "time": 38.5}
+
+    # Save succeeded and the decimals persisted round-trippably in `stages`.
+    assert resp_info.value.status == 200
+    page.wait_for_url("**/profiles-page", timeout=5_000)
+
+    listing = page.request.get(f"{base_url}/profiles").json()
+    created = next((p for p in listing if "B470_Decimals" in p.get("id", "")), None)
+    try:
+        assert created is not None, "created decimal profile should appear in the listing"
+        from urllib.parse import quote
+        details = page.request.get(
+            f"{base_url}/profiles/details?id={quote(created['id'])}"
+        ).json()
+        assert details["stages"]["incubation"]["temp"] == 37.5
+        assert details["stages"]["amplification"]["subStages"][1]["time"] == 38.5
+    finally:
+        if created:
+            page.request.post(f"{base_url}/profiles/delete", data={"profiles": [created["id"]]})
+
+
+# ---------------------------------------------------------------------------
 # Edit round-trip (issue #203, B3)
 # ---------------------------------------------------------------------------
 
