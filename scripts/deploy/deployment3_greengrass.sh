@@ -747,15 +747,32 @@ systemd-tmpfiles --create /etc/tmpfiles.d/aquila-device-env.conf 2>/dev/null || 
 # after display-manager.service gets the same "screen is up first" behavior with no
 # cycle. On a headless boot (no display manager in the transaction) the ordering is
 # simply ignored and greengrass starts at multi-user.target as usual.
+#
+# Order after BOTH the generic alias and the concrete unit (lightdm.service). The
+# `display-manager.service` name only resolves when the DM's alias symlink exists;
+# on a device where that symlink is missing (lightdm installed + enabled, but no
+# /etc/systemd/system/display-manager.service) the alias is a dead edge and the
+# ordering silently never takes effect. Naming lightdm.service too makes the
+# ordering bind to the real unit regardless of the alias. Both names resolve to the
+# same unit on a normal device, so this is harmless there.
 install -d -m 755 /etc/systemd/system/greengrass.service.d
 cat > /etc/systemd/system/greengrass.service.d/10-after-kiosk.conf <<'EOF'
 [Unit]
-After=display-manager.service
+After=display-manager.service lightdm.service
 EOF
 systemctl daemon-reload
 
 run_test "greengrass root created"        "test -d ${GG_ROOT}"
-run_test "greengrass ordered after kiosk" "systemctl show -p After greengrass.service | grep -q display-manager.service"
+# Only assert the ordering where a display manager actually exists. On a headless
+# box there is nothing to order after, so systemd drops the After= edge (it never
+# appears in `show -p After`) and the drop-in is a documented no-op -- hard-failing
+# there is wrong. Match either the alias or the concrete lightdm.service, since
+# which name systemd reports in After= depends on whether the alias symlink exists.
+if [ -e /etc/systemd/system/display-manager.service ] || systemctl cat display-manager.service >/dev/null 2>&1 || systemctl cat lightdm.service >/dev/null 2>&1; then
+    run_test "greengrass ordered after kiosk" "systemctl show -p After greengrass.service | grep -Eq 'display-manager\.service|lightdm\.service'"
+else
+    echo "  ⚠ no display manager on this host — skipping ordering check (headless boot)"
+fi
 # Regression guard for am#485: an ordering cycle makes systemd drop the start job
 # at boot. Assert there is none for greengrass (empty output = no cycle involving it).
 run_test "no greengrass ordering cycle"   "! systemd-analyze verify greengrass.service 2>&1 | grep -qi 'ordering cycle'"
