@@ -20,10 +20,12 @@ class EnrollmentDenied(EnrollmentError):
 
 
 def enroll(csr_pem, endpoint, *, region, credentials, http_post=None):
-    """Enrol a CSR and return the issued Device Certificate (PEM).
+    """Enrol a CSR and return the Device Certificate PEM to install as device.crt.
 
-    SigV4-signs a POST of ``csr_pem`` to ``endpoint`` and returns the
-    ``certificate`` from the response.
+    SigV4-signs a POST of ``csr_pem`` to ``endpoint``. When acorn-ca returns the
+    signing CA alongside the leaf (``caCertificate``, acorn-ca#48), returns the
+    ``leaf + CA`` chain so device.crt lets AWS IoT JITP match the registered CA on
+    first connect; otherwise returns the leaf alone (older CA — unchanged).
     """
     if http_post is None:  # pragma: no cover - real network default
         import requests
@@ -41,7 +43,16 @@ def enroll(csr_pem, endpoint, *, region, credentials, http_post=None):
         raise EnrollmentError(
             f"enroll failed: HTTP {response.status_code} {_error_message(response)}".strip()
         )
-    return response.json()["certificate"]
+    body = response.json()
+    leaf = body["certificate"]
+    # acorn-ca#48 returns the signing CA alongside the leaf. device.crt must be
+    # leaf + CA so AWS IoT JITP can match the registered CA from the chain the
+    # device presents on first connect. Absent (older CA) -> leaf only, as before.
+    ca = body.get("caCertificate")
+    if not ca:
+        return leaf
+    chain = leaf.rstrip() + "\n" + ca.strip() + "\n"
+    return chain
 
 
 def _error_message(response):

@@ -41,6 +41,25 @@ class TestEnroll:
         )
         assert cert == CERT_PEM
 
+    def test_returns_leaf_plus_ca_chain_when_ca_certificate_present(self):
+        # acorn-ca#48 returns the signing CA alongside the leaf. AWS IoT JITP
+        # matches the registered CA from the chain the device presents, so
+        # device.crt must be leaf + CA — enroll() assembles that chain.
+        ca_pem = "-----BEGIN CERTIFICATE-----\nMIICca...\n-----END CERTIFICATE-----\n"
+
+        def fake_post(url, data=None, headers=None):
+            return FakeResponse(200, {"certificate": CERT_PEM, "caCertificate": ca_pem})
+
+        chain = enroll(
+            CSR_PEM, ENDPOINT, region="us-east-2",
+            credentials=DUMMY_CREDS, http_post=fake_post,
+        )
+
+        # Two certs, leaf first then CA, so the device presents the JITP chain.
+        assert chain.count("-----BEGIN CERTIFICATE-----") == 2
+        assert chain.index(CERT_PEM.strip()) < chain.index(ca_pem.strip())
+        assert chain.endswith("\n")
+
     def test_posts_the_csr_body_sigv4_signed_to_enroll(self):
         captured = {}
 
