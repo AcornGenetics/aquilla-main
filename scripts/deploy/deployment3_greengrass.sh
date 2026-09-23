@@ -755,7 +755,18 @@ EOF
 systemctl daemon-reload
 
 run_test "greengrass root created"        "test -d ${GG_ROOT}"
-run_test "greengrass ordered after kiosk" "systemctl show -p After greengrass.service | grep -q display-manager.service"
+# Only assert the ordering where a display manager actually exists. On a headless
+# box there is no display-manager.service to order after, so systemd silently
+# drops the After= edge (it never appears in `show -p After`) and the drop-in is a
+# documented no-op -- see the comment above. Hard-failing there is wrong (it's why
+# this phase failed on a DM-less device). Match the alias too: display-manager.service
+# is a symlink to the real DM unit (e.g. lightdm.service) and systemd may report the
+# canonical name in After=.
+if [ -e /etc/systemd/system/display-manager.service ] || systemctl cat display-manager.service >/dev/null 2>&1; then
+    run_test "greengrass ordered after kiosk" "systemctl show -p After greengrass.service | grep -Eq 'display-manager\.service|lightdm\.service'"
+else
+    echo "  ⚠ no display-manager.service on this host — skipping ordering check (headless boot)"
+fi
 # Regression guard for am#485: an ordering cycle makes systemd drop the start job
 # at boot. Assert there is none for greengrass (empty output = no cycle involving it).
 run_test "no greengrass ordering cycle"   "! systemd-analyze verify greengrass.service 2>&1 | grep -qi 'ordering cycle'"
