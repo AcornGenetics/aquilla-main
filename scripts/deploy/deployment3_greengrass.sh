@@ -747,10 +747,18 @@ systemd-tmpfiles --create /etc/tmpfiles.d/aquila-device-env.conf 2>/dev/null || 
 # after display-manager.service gets the same "screen is up first" behavior with no
 # cycle. On a headless boot (no display manager in the transaction) the ordering is
 # simply ignored and greengrass starts at multi-user.target as usual.
+#
+# Order after BOTH the generic alias and the concrete unit (lightdm.service). The
+# `display-manager.service` name only resolves when the DM's alias symlink exists;
+# on a device where that symlink is missing (lightdm installed + enabled, but no
+# /etc/systemd/system/display-manager.service) the alias is a dead edge and the
+# ordering silently never takes effect. Naming lightdm.service too makes the
+# ordering bind to the real unit regardless of the alias. Both names resolve to the
+# same unit on a normal device, so this is harmless there.
 install -d -m 755 /etc/systemd/system/greengrass.service.d
 cat > /etc/systemd/system/greengrass.service.d/10-after-kiosk.conf <<'EOF'
 [Unit]
-After=display-manager.service
+After=display-manager.service lightdm.service
 EOF
 systemctl daemon-reload
 
