@@ -715,7 +715,25 @@ java -Droot="${GG_ROOT}" -Dlog.store=FILE \
 # the compose stack and (b) read the root-owned device.env the compose injects as
 # its env_file. Without these the component goes BROKEN ("permission denied").
 usermod -aG docker ggc_user
-chgrp ggc_group /opt/aquila/config/device.env && chmod 640 /opt/aquila/config/device.env
+
+# Ensure device.env is 0640 root:ggc_group so ggc_user (the component user, a
+# member of ggc_group) can read the compose env_file. Inspect the current mode
+# and group and correct only what is wrong, logging what we found -- re-enrolment
+# and cert renewal can leave it root:root 0600, and a blind chmod would hide that
+# this keeps recurring.
+DEVICE_ENV=/opt/aquila/config/device.env
+cur_mode=$(stat -c '%a' "$DEVICE_ENV" 2>/dev/null || echo "missing")
+cur_group=$(stat -c '%G' "$DEVICE_ENV" 2>/dev/null || echo "missing")
+echo "  ℹ device.env is currently ${cur_mode} root:${cur_group}"
+if [[ "$cur_group" != "ggc_group" ]]; then
+    echo "  → group ${cur_group} != ggc_group; running chgrp ggc_group"
+    chgrp ggc_group "$DEVICE_ENV"
+fi
+if [[ "$cur_mode" != "640" ]]; then
+    echo "  → mode ${cur_mode} != 640; running chmod 640"
+    chmod 640 "$DEVICE_ENV"
+fi
+echo "  ✓ device.env now $(stat -c '%a %U:%G' "$DEVICE_ENV")"
 chmod o+rx /opt/aquila /opt/aquila/config
 
 # ...but a one-time chmod is fragile: re-enrolment (enroll_device.py) and cert
