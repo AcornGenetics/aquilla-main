@@ -11,15 +11,23 @@ from serial.tools import list_ports
 from .mecrc16 import crc16_list
 
 global t0
+global t0_mono
 
 def set_time():
-    global t0
+    global t0, t0_mono
+    # Wall-clock start: recorded so run logs stay correlatable to real time.
     t0 = time.time()
+    # Monotonic start: drives run-step timing. A monotonic clock never jumps,
+    # so a mid-run system-clock correction (e.g. NTP stepping the Pi's clock
+    # forward after it boots on a stale/restored time) cannot distort step
+    # durations. See issue #499.
+    t0_mono = time.monotonic()
 
     return t0
 
 def get_time():
-    return time.time() - t0
+    # Elapsed seconds since run start, measured monotonically (issue #499).
+    return time.monotonic() - t0_mono
 
 
 def deprecate( func ):

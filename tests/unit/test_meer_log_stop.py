@@ -43,6 +43,9 @@ def _make_meer_instance():
 
 def _set_t0_now():
     meer_module.t0 = time.time()
+    # get_time() is monotonic (issue #499); reset its reference too so tests
+    # that build endtimes from get_time() measure elapsed the same way.
+    meer_module.t0_mono = time.monotonic()
 
 
 # ---------------------------------------------------------------------------
@@ -196,3 +199,46 @@ def test_thermal_engine_raises_before_log_when_stop_pre_set():
             meer, lambda *_: None, None, stop_event,
         )
     assert len(meer.log_calls) == 0
+
+
+# ---------------------------------------------------------------------------
+# Regression: run-step timing must survive a mid-run wall-clock jump (issue #499)
+# ---------------------------------------------------------------------------
+
+def test_get_time_is_immune_to_wall_clock_jump(monkeypatch):
+    """
+    Regression for issue #499.
+
+    SN008 booted on a stale (restored) clock; ~18 min into a run NTP stepped
+    the system clock forward 15.8 h. Because run-step timing used
+    time.time(), elapsed jumped by 15.8 h and every remaining step read as
+    overdue, firing back-to-back and aborting the run.
+
+    get_time() now measures elapsed with time.monotonic(), so stepping the
+    wall clock forward must NOT change the elapsed run time.
+    """
+    meer_module.set_time()
+    before = meer_module.get_time()
+
+    # Simulate NTP stepping the system wall clock forward 15.8 hours mid-run.
+    real_time = time.time
+    monkeypatch.setattr(
+        meer_module.time, "time", lambda: real_time() + 15.8 * 3600
+    )
+
+    after = meer_module.get_time()
+
+    # Wall clock jumped 15.8h; monotonic elapsed is unaffected (sub-second).
+    assert after - before < 1.0
+
+
+def test_set_time_returns_wall_clock_for_log_header():
+    """
+    set_time() must still return wall-clock time so the PCR log header
+    ('# Starting log t0 = ...') stays correlatable to real-world time,
+    even though get_time() is now monotonic (issue #499).
+    """
+    before = time.time()
+    t0 = meer_module.set_time()
+    after = time.time()
+    assert before <= t0 <= after
