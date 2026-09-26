@@ -244,5 +244,38 @@ Not software tasks, but they set the config flags and constraints above:
 
 ---
 
+## 19. Review of the engineers' Mk II draft
+
+Reviewed 5 files from the engineers' Mk II branch (not merged here), diffed against current 4-well repo: `optics_read_plan.py`, `motor_class.py`, `state_run_assay.py`, `adc_class.py`, `host_config.json`. Verdict: **the hardware mechanisms are correct and worth keeping; the software structure is the flag-branching we're trying to avoid, and one file carries a real merge hazard.**
+
+### 19a. Mechanisms to KEEP (proven, match the PDF)
+- **pigpio hardware-waveform motion** (`motor_class.move_wo_home_flag` → `wave_create`/`wave_chain`). Real anti-step-skip speedup vs the Python per-step bit-bang. Keep. (Caveat: talks to the daemon over a network socket `pigpio.pi("172.18.0.1", 8888)` — see cons.)
+- **Serpentine 3×5 sweep** (`OPTICS_READ_PLAN_15`): 3 drawer rows × 7 axis stops, alternating direction per row to minimize travel. Good idea — but should be *generated from geometry*, not a hand-built literal.
+- **Out-of-phase `"both"` capture** (`adc_class.capture_blink` "both" branch): dual-ADC, ROX-on/FAM-off ↔ FAM-on/ROX-off, reads both ADCs per sample, RDY-polled, `−123` sentinel.
+- **Fast-settling filter** (`blink_num=7` vs 10) — the ~30% scan-time saving.
+- **RDY-register polling** on every read (both legacy and dual paths) — more correct than the old blind read.
+- **Deferred legacy-format reconstruction** (`mask_data` + `out_data`): pads 7→10, synth 3rd blink, swaps FAM phase, re-emits rox-then-fam per well so existing `aq_curve` still parses. Mechanism fine; lifecycle risky (see cons).
+- **`read_ambient_temp()`** (w14): ADC1 → channel 4, restores to ROX.
+
+### 19b. Structure to REWRITE (the flag-branching we rejected — see §1a/§1b)
+- Behavior branches on `well_15` / `updated4` / `two_adcs` string flags across `optics_read_plan.py`, `state_run_assay.py`, `adc_class.py`. → replace with `PlateGeometry` + capability enum.
+- `optics_read_tasks()` `if well_15 … elif updated4 …` plan selection → one `read_plan(geo)`.
+- **Motor int-vs-tuple type-sniffing** (`Drawer.goto_position` no-ops on an int; `Axis.goto_position` unpacks `N[0]`) is `if well_15` in disguise → positions should always be structured coordinates from geometry.
+- **Magic numbers:** hardcoded `21` (`expected_lines`, `out_data`, `state_run_assay`), `320` (row pitch), `self.positions.append(0)` "pad to imitate a 5th well." → derive from geometry.
+- **Redundant flags:** `two_adcs` and `updated4` both really mean "this is a Mk II board" — illegal states possible (§1a). Collapse into one detected model/capability.
+- **Single-device test config:** `host_config.json` trimmed to just `sn03` with string-typed flags (`"false"`/`"true"`).
+
+### 19c. HAZARDS / correctness risks
+- 🔴 **`state_run_assay.py` merge hazard:** the draft was branched from an OLDER base and DROPS features now on greengrass/main — `profile_sha256` run-provenance (#456), lid-heater sample logging (`configure_lid_sample_logger` + `run_timestamp` kwarg to lid worker, ADR-022). Merging as-is would silently REVERT them. Mk II changes must be ported ONTO current `state_run_assay.py`, never replace it.
+- 🔴 **Deferred write = data loss on interrupt** (RISK C, §7): `out_data` only fires on `quit`; `"both"` buffers in `self.data_both` and writes nothing live. Cancel/crash mid-run → no optics file. Legacy path wrote incrementally.
+- 🟠 **Network pigpio dependency:** motion now requires the pigpiod daemon reachable at a hardcoded docker-gateway IP:port. New runtime failure mode + a hardcoded address.
+- 🟠 **`append(0)` mutates shared config state** (`config.axis["positions"]`) and relies on Python negative-indexing (`positions[-1]`) — fragile; the author's own comment flags it as temporary.
+- 🟠 **Crosstalk unaddressed** (§12): `"both"` (one LED always on) has no true dark read; PDF measured position-dependent FAM Ct shift. Not handled in this draft.
+
+**Migration approach:** cherry-pick the 19a mechanisms into the §1a/§1b architecture; do NOT merge these files wholesale (esp. `state_run_assay.py`).
+
+---
+
 ### Changelog
 - 2026-09-25 — Doc created from Mk II Design Rationale + cross-repo scoping sweep. Confirmed this checkout is still 4-well; no Mk II code merged here.
+- 2026-09-25 — Added §1b (birth-certificate model identity) and §19 (review of the engineers' 5-file Mk II draft).
