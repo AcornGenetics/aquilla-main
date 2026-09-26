@@ -43,6 +43,23 @@ Rationale (see scoping analysis):
 
 **Keep the dual-ADC `'both'` channel as a SEPARATE axis** — it's an optics *capability*, not geometry. `read_plan` decides *where* to read; the optics strategy decides *how* to sample channels at a stop (sequential 1-ADC vs simultaneous 2-ADC). Model capability as its own small enum on the instrument (same registry pattern). Folding it into geometry reintroduces branching.
 
+### 1b. Model identity — RECOMMENDATION: the device carries its own "birth certificate"
+
+The cleanest answer that scales to any N and kills the flag smell:
+
+**Each unit stores its own `PlateGeometry` + calibration record in on-board NVM/EEPROM, written once at QC.** Boot validates it against cheap probes (ADC ID, homing travel) and **fails loud** on mismatch.
+
+- Scales to any well count — it's just data written at manufacture.
+- Can't drift — written once, travels with the physical hardware.
+- Isn't hand-edited text, isn't cloud-authored, isn't a fragile live probe.
+- This is how real lab instruments identify themselves.
+
+And here's the elegant bit: **if the ID encodes the shape** (EEPROM record, or enough strap bits for rows/cols), a brand-new 3×7 device works with **zero software change and zero registry edit** — the hardware describes itself, the code computes geometry from it. The registry becomes unnecessary; only calibration stays per-unit.
+
+**If you have no NVM today:** keep a config file, but reframe it as *"the QC-generated birth certificate for this unit"* (calibration + shape, written by a QC tool, validated by detection) — **not** engineer-toggled behavior flags. That's a normal, defensible use of a file, and it's a drop-in path to the EEPROM version later.
+
+This resolves the §1a "Device declares its model once" open question and supersedes the §17 declared-vs-detected-vs-shadow debate: **detected/QC-written record is the source of truth; any file is a stand-in for the EEPROM, not a behavior switch.**
+
 ---
 
 ## 2. BIG RISK AREAS (the three flagged by the team)
