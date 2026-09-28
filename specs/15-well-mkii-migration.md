@@ -272,6 +272,32 @@ Reviewed 5 files from the engineers' Mk II branch (not merged here), diffed agai
 - 🟠 **`append(0)` mutates shared config state** (`config.axis["positions"]`) and relies on Python negative-indexing (`positions[-1]`) — fragile; the author's own comment flags it as temporary.
 - 🟠 **Crosstalk unaddressed** (§12): `"both"` (one LED always on) has no true dark read; PDF measured position-dependent FAM Ct shift. Not handled in this draft.
 
+### 19d. Remediation — fix per con
+
+Numbering matches the decisions in the review. **Leverage:** three moves cover most of the list — #14 (geometry object) fixes 3/4/13/14; #12 (native dual-ADC reader) fixes 8/12 and de-risks 10; #11 (flush-on-exit) closes the one data-loss bug.
+
+**Motion**
+- [ ] **1 — pigpio waveform guards:** wrap waveform construction in one helper that enforces its own preconditions (`assert step_count % 8 == 0`; auto-chunk moves where `inner_count > 65000` into successive `wave_chain`s instead of erroring). Bit-bang fallback for tiny moves.
+- [ ] **2 — hardcoded pigpiod `172.18.0.1:8888`:** inject `host:port` from env/config resolved once at startup; prefer a unix socket / localhost when pigpiod is in-container. Connect-with-retry + loud specific error. Best: co-locate pigpiod (no network hop for realtime motion).
+- [ ] **3 — int/tuple type-sniffing:** emit two explicit task types from `read_plan(geo)` — `{"drawer_to": row}` and `{"goto_position": axis}`. Delete every `isinstance`/silent `return`. A 4-well plate (`rows=1`) emits NO `drawer_to` tasks, so the drawer stays put by construction.
+- [ ] **4 — `append(0)` hack:** put the real measured first-column stop in `geo.axis_stops` (len = `cols + sensor_gap`); validate length at load and raise if short (the author's own TODO). Immutable geometry object; never mutate `config.axis["positions"]`.
+- [ ] **5 — `motor_test()` in the driver:** move to `qaqc-cli`/`scripts/hardware/` as a standalone diagnostic importing `Motor`; drop the `motor_test` flag branch from `__init__`.
+
+**Optics / ADC**
+- [ ] **6 — verbose CS toggling:** a context manager (`with self._adc(i): ...`) asserts CS low on enter / high on exit even on exception. Every manual `GPIO.output(cs, …)` collapses into one place; leaked CS state becomes impossible.
+- [ ] **7 — `"both"` crosstalk uncorrected:** either (a) subtract a per-position FAM dark calibration (offsets already measured, wells 1–2 vs 3–4) in analysis, or (b) take one true-dark read (both LEDs off) per pass. Add QC flagging runs where FAM Ct stdev exceeds the legacy baseline. (Decision → §12/§17.)
+- [ ] **8 — `blink_num` couples filter/capture/padding:** derive `blink_num` from the filter choice in one spot; every consumer reads it (no bare 7/10); assert the filter register value ↔ `blink_num` so they can't desync. Fully dissolved by #12.
+- [ ] **9 — RDY 7-vs-20 inconsistent, late healthy sample dropped:** one shared `read_when_ready(adc, timeout_ms)` that polls until RDY OR a deadline covering a full conversion period (~20 ms > 16.7 ms); use in both capture and temp. Resolves §17.
+- [ ] **10 — `−123` sentinel fabricates data:** propagate `null`/NaN and teach `aq_curve` to skip nulls (PDF V2). SEQUENCE: analysis-accepts-null lands first, then the ADC stops substituting. Interim: add a "repaired" flag column so QC can see fabrication.
+
+**Optics file**
+- [ ] **11 — deferred write loses data on interrupt (RISK C):** flush incrementally (write each completed well/pass) OR register `out_data()` in a `finally`/signal handler so cancel AND crash both flush `data_both`. Make `out_data` idempotent + partial-safe. Add the cancel-mid-run regression test (§18).
+- [ ] **12 — reconstruct-legacy-format fakes samples + format lock-in:** give `aq_curve` a native reader for the raw dual-ADC capture; keep legacy reconstruction only as a temporary shim behind a flag, then delete. Short-term: document the fingerprint (samples 8/9/10 byte-identical), never count padded rows as measurements in QC.
+- [ ] **13 — hardcoded `21`/`6` in three files:** derive once (`reads_per_cycle = len(read_plan(geo))`), import everywhere `expected_lines`/`out_data`/`scan_num` need it, delete the literals. Extends the existing `READS_PER_CYCLE`-is-derived pattern.
+
+**Root cause**
+- [ ] **14 — config string flags / illegal states:** replace with `PlateGeometry` + optics-capability resolved from a detected/QC-written model (§1a/§1b). One `model` yields geometry AND capability; parse real booleans; absent → `sentri`. Deletes `well_15`/`two_adcs`/`updated4`, the redundancy, and the branching in every consumer — fixes #3/#13/#14 together.
+
 **Migration approach:** cherry-pick the 19a mechanisms into the §1a/§1b architecture; do NOT merge these files wholesale (esp. `state_run_assay.py`).
 
 ---
@@ -279,3 +305,4 @@ Reviewed 5 files from the engineers' Mk II branch (not merged here), diffed agai
 ### Changelog
 - 2026-09-25 — Doc created from Mk II Design Rationale + cross-repo scoping sweep. Confirmed this checkout is still 4-well; no Mk II code merged here.
 - 2026-09-25 — Added §1b (birth-certificate model identity) and §19 (review of the engineers' 5-file Mk II draft).
+- 2026-09-28 — Added §19d (remediation: a concrete fix per con, with the 3-move leverage map).
