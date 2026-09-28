@@ -215,6 +215,7 @@ Not software tasks, but they set the config flags and constraints above:
 - AQU-4002: **dual-ADC** board, same shape/connectors, backward compatible (2nd ADC on previously-unused connection; shared 3 signal lines + per-ADC selection line).
 - 150 W PSU (peak 169.5 W during ramp); **lid heater must be OFF during heat/cool ramps** — confirm the control code enforces this.
 - Larger 53×35 mm TEC + heatsink; PID (Kp/Ti/Td/PW) carried over from SENTRI as first approximation → **may need retuning for the 3.21× bigger heatblock**.
+- [ ] **Evaluate a TMC5160-class motion controller** (option C, §19e): offloads step generation to hardware ramps + on-chip StallGuard → kills the Linux-timing jitter class, helps the ≤18 s scan budget, and can replace the homing-error → optics-QC coupling (§5). Board + firmware scope; the respin is the cheap moment.
 
 ---
 
@@ -278,7 +279,7 @@ Numbering matches the decisions in the review. **Leverage:** three moves cover m
 
 **Motion**
 - [ ] **1 — pigpio waveform guards:** wrap waveform construction in one helper that enforces its own preconditions (`assert step_count % 8 == 0`; auto-chunk moves where `inner_count > 65000` into successive `wave_chain`s instead of erroring). Bit-bang fallback for tiny moves.
-- [ ] **2 — hardcoded pigpiod `172.18.0.1:8888`:** inject `host:port` from env/config resolved once at startup; prefer a unix socket / localhost when pigpiod is in-container. Connect-with-retry + loud specific error. Best: co-locate pigpiod (no network hop for realtime motion).
+- [ ] **2 — hardcoded pigpiod `172.18.0.1:8888` / motion GPIO backend:** this is a bigger decision than a config injection — see **§19e** for the full A/B/C analysis. Short version: the network hop is an artifact of running the app in a container while `pigpiod` runs on the host; **preferred fix is B (lgpio, in-process) gated on a timing benchmark**, A (pigpiod in-container) as fallback, C (motion IC) on the respin.
 - [ ] **3 — int/tuple type-sniffing:** emit two explicit task types from `read_plan(geo)` — `{"drawer_to": row}` and `{"goto_position": axis}`. Delete every `isinstance`/silent `return`. A 4-well plate (`rows=1`) emits NO `drawer_to` tasks, so the drawer stays put by construction.
 - [ ] **4 — `append(0)` hack:** put the real measured first-column stop in `geo.axis_stops` (len = `cols + sensor_gap`); validate length at load and raise if short (the author's own TODO). Immutable geometry object; never mutate `config.axis["positions"]`.
 - [ ] **5 — `motor_test()` in the driver:** move to `qaqc-cli`/`scripts/hardware/` as a standalone diagnostic importing `Motor`; drop the `motor_test` flag branch from `__init__`.
@@ -300,9 +301,35 @@ Numbering matches the decisions in the review. **Leverage:** three moves cover m
 
 **Migration approach:** cherry-pick the 19a mechanisms into the §1a/§1b architecture; do NOT merge these files wholesale (esp. `state_run_assay.py`).
 
+### 19e. Motion GPIO backend — pigpio vs lgpio vs motion IC (decision)
+
+**What the real problem is (and isn't).** The original inaccuracy was **software-timed pulsing on a non-realtime OS** (`RPi.GPIO` + `time.sleep()` at the mercy of the Linux scheduler) — NOT the container. That jitter is identical in a container or bare-metal. The container boundary is an **artifact of the pigpio fix**: DMA needs privileged `/dev/mem`, which is awkward in-container, so `pigpiod` runs on the host and the container reaches it over a socket.
+
+**Where the container boundary genuinely DOES hurt accuracy (the subtle part):**
+- Fast move `move_wo_home_flag` uses `wave_chain`: the whole waveform is uploaded once and the host's **DMA clocks every pulse precisely** — the network hop carries one "play this" command, so per-pulse timing is DMA-accurate regardless of where the client runs. Location is irrelevant to accuracy here.
+- **Homing move `move_w_home_flag` can't pre-build a wave** (it polls the home flag every step), so it does a `pi.write()` **per step** — each a **network round-trip to the host daemon**. That per-step socket latency is a real timing/speed penalty on the homing path. Running in-process removes it.
+
+So accuracy depends on the **timing method**, not on where the code runs. An in-container backend can be fully accurate if its timing mechanism is good.
+
+**The three options:**
+
+| | Runs | Privilege | Timing mechanism | Verdict |
+|---|---|---|---|---|
+| **A — pigpio, in-container** | in the container (co-located daemon) | needs `/dev/mem` + root → **privileged container** | DMA (gold standard) | Fallback. Keeps proven wave code; drops the network hop; cost is a privileged container (fleet/Greengrass policy question). |
+| **B — lgpio, in-process** | in the container, in the app process; **no daemon, no socket** | needs only `/dev/gpiochip0` exposed + `gpio`-group access (like `/dev/spidev*` already) — **no `/dev/mem`/privileged** | kernel gpiochip chardev (NOT pigpio DMA) | **Preferred — gated on a timing benchmark.** Removes daemon, socket, AND per-step homing network latency, AND the privileged container. Risk: lgpio pulse precision at 30 mm/s must be proven. |
+| **C — motion IC / MCU** | Pi sends high-level SPI moves; a TMC5160 (or RP2040) generates steps | plain SPI; no root, no DMA | dedicated hardware ramp/step generator | Respin destination. Kills the jitter class at the source; StallGuard can replace the homing-error QC hack; hardware ramps help the ≤18 s budget. Cost: board + firmware scope. |
+
+**Recommendation:** ship **B if a quick benchmark passes**, else **A**; evaluate **C** for the Mk II respin.
+
+- [ ] **Benchmark to decide B vs A:** prototype the step loop on `lgpio`, run at target speed (30 mm/s, 8–32 microsteps), and compare **step-skip rate / homing residual consistency** against the pigpio version. Instrumentation already exists (`steps_to_flag`/`residual` in `homing_log.py`). Pass → B; fail → A.
+- [ ] **If A:** run `pigpiod` in-container (device mounts + caps), connect `localhost`/unix socket; confirm privileged-container is acceptable to fleet/Greengrass policy.
+- [ ] **If B:** map `/dev/gpiochip0` into the container + `gpio`-group access; port the `wave_chain` fast path and the flag-polling homing path to lgpio's API.
+- [ ] **C (respin):** add "evaluate TMC5160-class motion controller" to the §16 electrical/respin list; weigh StallGuard vs the homing-error QC coupling (§5).
+
 ---
 
 ### Changelog
 - 2026-09-25 — Doc created from Mk II Design Rationale + cross-repo scoping sweep. Confirmed this checkout is still 4-well; no Mk II code merged here.
 - 2026-09-25 — Added §1b (birth-certificate model identity) and §19 (review of the engineers' 5-file Mk II draft).
 - 2026-09-28 — Added §19d (remediation: a concrete fix per con, with the 3-move leverage map).
+- 2026-09-28 — Added §19e (motion GPIO backend decision: pigpio-A / lgpio-B / motion-IC-C, B preferred pending a timing benchmark) and the §16 TMC5160 evaluation item.
