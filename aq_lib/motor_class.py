@@ -1,12 +1,11 @@
-# pin_definitions.py
-# Mon 13 Oct 08:54:18 PDT 2025
-
 import time
 import logging
-import RPi.GPIO as GPIO
-from RPi.GPIO import HIGH, LOW, IN, OUT, BCM
+import pigpio
 from aq_lib.config_module import Config
 from aq_lib.homing_log import emit_homing_sample
+
+HIGH = 1
+LOW = 0
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger( "aquila.motor" )
@@ -19,14 +18,41 @@ class Motor():
     position = 0
 
     def __init__( self ):
-        self.gpio = GPIO
-        self.gpio.setmode(BCM)
-        self.gpio.setup( self.EN_PIN  , OUT, initial=HIGH )
-        self.gpio.setup( self.STEP_PIN, OUT )
-        self.gpio.setup( self.DIR_PIN , OUT )
+        self.pi = pigpio.pi("172.18.0.1", 8888) # this ip can be found via running "docker network inspect fleet_default"
+        self.pi.set_mode(self.EN_PIN,   pigpio.OUTPUT)
+        self.pi.set_mode(self.STEP_PIN, pigpio.OUTPUT)
+        self.pi.set_mode(self.DIR_PIN,  pigpio.OUTPUT)
+        self.pi.set_mode(self.HME_PIN,  pigpio.INPUT)
+        self.pi.write(self.EN_PIN, HIGH) # apperently this Enable Pin is inverted, so setting it HIGH turns the driver off
+
         logger.info( "Setting pin %d", self.HME_PIN )
-        self.gpio.setup( self.HME_PIN , IN )
         logger.info( "Setup motor pins" )
+        value = config.info.get("motor_test") # used ONLY for seeing what is the smallest delay where motor does not stall
+        if (
+            value is not None
+            and value != 0
+            and not (
+                isinstance(value, str)
+                and value.strip().lower() in ("0", "false")
+            )
+        ):
+            self.motor_test()
+
+    def motor_test(self):
+        logger.info("Start of motor testing for %s\n", self.motor_name)
+        self.home()
+        test_delays = [0.00005, 0.00007, 0.00008, 0.00009, 0.0001, 0.00011, 0.00012, 0.00015, 0.0002]
+        test_positions = [320, 640, 960, 1280]
+        for delay in test_delays:
+            for pos in test_positions:
+                logger.info("Moving to %d position using pulse delay of %f\n", pos, delay)
+                self.move_abs_wo_home_flag( pos, 0.000, delay ) # the second argument is step delay - obsolete and kept only for backwards compatibility
+                ret = self.move_w_home_flag( -self.home_steps, 0.0020 )
+                if self.isHome():
+                    self.reset_position()
+                logger.info("Moving home took %d steps\n", ret)
+
+        logger.info("End of motor testing for %s\n", self.motor_name)
 
     def move_out_of_home(self):
         return self.move_wo_home_flag( 100, 0.0020 )
@@ -60,37 +86,41 @@ class Motor():
         self.position = 0
 
     def enable( self ):
-        self.gpio.output ( self.EN_PIN, LOW )
+        self.pi.write ( self.EN_PIN, LOW )
 
     def disable( self ):
-        self.gpio.output ( self.EN_PIN, HIGH )
+        self.pi.write ( self.EN_PIN, HIGH )
 
     def isHome(self):
-        return self.gpio.input ( self.HME_PIN )
+        return self.pi.read ( self.HME_PIN )
 
-    def move_w_home_flag( self, steps, step_delay = 0.0 ):
-
+    # step_delay is not used but remains for backwards compatibility
+    def move_w_home_flag( self, steps, step_delay = 0.0 ): # does not pigpio as it needs to check for the flag every step
+        pulse_delay = 0.0002
+        time0 = time.time()
         logger.info( "Moving with home flag: %d", steps )
         self.set_dir ( steps )
         self.enable()
 
         steps_traveled = steps
         for i in range( abs( steps ) ):
-            if self.gpio.input ( self.HME_PIN ):
+            if self.pi.read ( self.HME_PIN ):
                 logger.info( "Caught home flag after %d steps", i )
                 steps_traveled = i
                 break
             for k in range ( self.step_multiplier ):
-                self.gpio.output( self.STEP_PIN, HIGH)
-                self.gpio.output( self.STEP_PIN, LOW)
-                time.sleep ( 0.0001 )
-
-            time.sleep( step_delay )
+                self.pi.write( self.STEP_PIN, HIGH)
+                time.sleep ( pulse_delay / 2 )
+                self.pi.write( self.STEP_PIN, LOW)
+                time.sleep ( pulse_delay / 2 )
 
         if steps > 0:
             self.position += steps_traveled
         else:
             self.position -= steps_traveled
+
+        time1 = time.time()
+        logger.info( "STEP_DELAY DISABLED W HOME FLAG: steps: %d\tmultiplier: %d\tpulse_delay: %f\tstep_delay: %f\nAnticipated time: with step_delay: %f;\twithout: %f\nActual time: %f\nPosition updated to: %f" , steps_traveled, self.step_multiplier, pulse_delay, step_delay, steps_traveled*step_delay+pulse_delay*steps_traveled*self.step_multiplier, pulse_delay*steps_traveled*self.step_multiplier, time1-time0, self.position)
 
         logger.info("Position after homing: %d", self.position)
         return steps_traveled
@@ -109,26 +139,56 @@ class Motor():
         if steps < 0:
             logger.info( "Setting DIR=LOW" )
             self.direction = 1
-            self.gpio.output( self.DIR_PIN, self.DIR_BACK_STATE)
+            self.pi.write( self.DIR_PIN, self.DIR_BACK_STATE)
         else:
             logger.info( "Setting DIR=HIGH" )
             self.direction = 0
-            self.gpio.output( self.DIR_PIN, self.DIR_FORWARD_STATE)
+            self.pi.write( self.DIR_PIN, self.DIR_FORWARD_STATE)
 
     def move_wo_home_flag( self, steps, step_delay = 0.0, pulse_delay = 0.0001 ):
 
+        time0 = time.time()
         self.set_dir( steps )
         self.enable()
 
-        for i in range( abs( steps ) ):
-            for k in range ( self.step_multiplier ):
-                self.gpio.output( self.STEP_PIN, HIGH)
-                self.gpio.output( self.STEP_PIN, LOW)
-                time.sleep ( pulse_delay )
+        Y = self.STEP_PIN
+        pulse_number = abs(steps)*self.step_multiplier # true number of pulses
+        pulse2 = int((pulse_delay * 1000000) // 2) # for backward compatibility reasons pulse_delay reflects the duration of entire ON-OFF cycle; pigpio functions take time in microseconds hence the conversion
+        # To create a pulse_delay cycle (pulse_delay//2 sec high,pulse_delay//2 sec low) on GPIO Y:
+        logger.info("pulse2: %f, pulse_number: %d\n", pulse2, pulse_number)
+        pulse_high = pigpio.pulse(1<<Y, 0, pulse2) # Turn GPIO Y ON for pulse_delay//2
+        pulse_low = pigpio.pulse(0, 1<<Y, pulse2) # Turn GPIO Y OFF for pulse_delay//2
+        self.pi.wave_add_generic([pulse_high, pulse_low])
+        logger.info("Created the wave")
 
-            time.sleep( step_delay )
+        wave_a = self.pi.wave_create()
+
+        inner_count = pulse_number // 8 # pulse_number MUST BE divisble by 8! Such assumption stems from self.step_multiplier which can be either 8 or 32
+
+        if inner_count > 65000:
+            logger.info ("CRITICAL ERROR: INNER STEP COUNT IS TOO LARGE: %d > 65000", inner_count)
+            self.pi.wave_delete(wave_a)
+            return
+
+        chain = [
+            255, 0,          # Start Outer
+                255, 0,      # Start Inner
+                    wave_a,
+                255, 1, inner_count % 256, inner_count // 256,# End Inner
+            255, 1, 8, 0     # End Outer
+        ]
+        self.pi.wave_chain(chain)
+        logger.info("Created the chain")
+        while self.pi.wave_tx_busy():
+            time.sleep(0.005) # Sleep for 5ms to avoid maxing out CPU
+        self.pi.wave_delete(wave_a)
+        logger.info ("Deleted the chain, success\n")
 
         self.position += steps
+
+        time1 = time.time()
+        logger.info( "STEP_DELAY DISABLED WO HOME FLAG: steps: %d\tmultiplier: %d\tpulse_delay: %f\tstep_delay: %f\nAnticipated time: with step_delay: %f;\twithout: %f\nActual time: %f\nPosition updated to: %d" , steps, self.step_multiplier, pulse_delay, step_delay, steps*step_delay+pulse_delay*steps*self.step_multiplier, pulse_delay*steps*self.step_multiplier, time1-time0, self.position)
+        # negative step number indicates backwards direction
         logger.info( "Position updated to: %d", self.position )
         return steps
 
@@ -157,15 +217,22 @@ class Drawer ( Motor ):
         self.home()
         # pulse_delay 0.00007 (was 0.0001). The inner per-pulse sleep runs
         # step_multiplier x open_steps times and dominates travel time, so dropping
-        # it ~30% is what actually speeds the drawer up — targets ~10%+ faster open.
+        # it ~30% is what actually speeds the drawer up ?~@~T targets ~10%+ faster open.
         # step_delay kept at 0.0005 (Ryan 04/22/26, was 0.002).
         # Hardware-tested: verify full travel on sn01-03 (lower pulse_delay risks step-skip).
-        ret = self.move_abs_wo_home_flag ( self.open_steps, 0.0005, 0.00007 )
+        ret = self.move_abs_wo_home_flag ( self.open_steps, 0.0005, 0.00015 )
 
     def read( self ):
         self.home()
         # pulse_delay 0.00007 (was 0.0001) to match open(); step_delay kept at 0.001.
-        ret = self.move_wo_home_flag ( self.read_steps, 0.001, 0.00007 )
+        ret = self.move_wo_home_flag ( self.read_steps, 0.001, 0.0001 )
+
+    def goto_position( self, N ):
+        if not isinstance(N, (int, float)): # if N is not a number; meant for "opening up" tuples while preserving backwards compatibility
+            N = N[1]
+        else: return
+        logger.info( "Drawer Go to position: %d", N )
+        self.move_abs_wo_home_flag( self.read_steps+N*320, 0.000, 0.0001)
 
 class Axis ( Motor ):
 
@@ -187,6 +254,11 @@ class Axis ( Motor ):
         if "positions" in config.axis:
             self.positions = config.axis["positions"]
             logger.info("Loaded axis positions from config: %s", self.positions)
+
+            self.positions.append(0) # temprary fix to ensure that postions[-1] refers to 0 to imitate the first well while testing the 15-well setup
+            # In the future, the code will check whether six or seven positions were provided
+            # If seven - all is good, less - throw an error that 15-well mode cannot be used unless all positions are provided
+
         else:
             # Legacy fallback: calculate from well_one and well_spacing
             w0 = config.axis.get("well_one", 300)
@@ -195,8 +267,10 @@ class Axis ( Motor ):
             logger.info("Calculated axis positions (legacy): %s", self.positions)
 
     def goto_position( self, N ):
+        if not isinstance(N, (int, float)): # if N is not a number
+            N = N[0]
         logger.info( "Go to position: %d", N )
-        self.move_abs_wo_home_flag( self.positions[N], 0.001 )
+        self.move_abs_wo_home_flag( self.positions[N], 0.000, 0.0001 )
 
 def main():
 

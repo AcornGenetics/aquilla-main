@@ -51,6 +51,29 @@ class AssayInterface():
 
     def __init__( self ):
 
+        self.updated4 = False # this flag indicates whether legacy or new optics should be used
+        value = config.info.get("updated4")
+        if (
+            value is not None
+            and value != 0
+            and not (
+                isinstance(value, str)
+                and value.strip().lower() in ("0", "false")
+            )
+        ):
+            self.updated4 = True
+
+        self.well_15 = False # this flag whether 4well or 15well arrangement should be used
+        value = config.info.get("well_15")
+        if (
+            value is not None
+            and value != 0
+            and not (
+                isinstance(value, str)
+                and value.strip().lower() in ("0", "false")
+            )
+        ):
+            self.well_15 = True
 
         self.axis = Axis()
         self.drawer = Drawer()
@@ -119,8 +142,12 @@ class AssayInterface():
                 elif type(item) is dict and "goto_position" in item:
                     position = item["goto_position"]
                     ret = self.axis.goto_position( position )
+                    self.drawer.goto_position( position )
 
                 elif type(item) is str and item == "quit":
+                    lfn = LogFileName()
+                    run_prefix = self._safe_name(self.run_name)
+                    self.optics.out_data() # does nothing if two_adc mode is disabled; otherwise - actually writes data out to the optics output files
                     break
 
                 self.message_queue.task_done()  # Mark the task as complete
@@ -141,7 +168,7 @@ class AssayInterface():
         # math can't drift from the blinks actually fired (#288).
         self._optics_pass_count += 1
 
-        for task in optics_read_tasks(cycle):
+        for task in optics_read_tasks(cycle, self.well_15, self.updated4):
             self.queue_task( task )
 
     def callback( self, args ):
@@ -352,7 +379,8 @@ class AssayInterface():
         # expected_lines is the intended total (complete=false, honest coverage);
         # fall back to the runtime count if the profile couldn't be parsed (#288).
         passes = self._planned_optics_passes or self._optics_pass_count
-        return expected_lines(passes, READS_PER_CYCLE)
+        if self.well_15: return expected_lines(passes, 21)
+        else: return expected_lines(passes, READS_PER_CYCLE)
 
     def hw_deinitialize(self):
         self.meer.setTargetObjectTemperature ( 25.0 )

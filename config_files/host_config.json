@@ -75,9 +75,12 @@
 },
 
 "sn03":{
-    "simulation" : 1,
     "info":{
-        "dock_name":"aquila3"
+        "dock_name":"sn03",
+        "well_15": "false",
+        "two_adcs": "true",
+        "motor_test": "false",
+        "updated4": "true"
     },
     "pcr":{
         "comport":"/dev/ttyUSB0",
@@ -97,7 +100,7 @@
     "drawer":{
         "open_steps": 4500,
         "close_steps": 0,
-	"read_steps": 250,
+	"read_steps": 115,
 	"home_steps": 5000,
 	"step_multiplier": 32
     },
