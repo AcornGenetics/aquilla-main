@@ -19,23 +19,31 @@
 ---
 
 ## Phase A — Configuration & hardware identity (Days 1–2)
-*Priority #1: determine 4-well vs 15-well from a variable ON THE HARDWARE, not just a config file.*
+*Priority #1: the model (4-well vs 15-well) is a **declared value written at device birth**, living in the hardware code layer — NOT a physical pin, and NOT a surface/mutable config file.*
 
-**Goal:** `detect_model() → PlateGeometry`, resolved from a hardware signal, fail-loud on ambiguity.
+**Goal:** `aq_lib.detect_model() → PlateGeometry`, resolved from a durable birth-written record and validated against live hardware, fail-loud on mismatch.
+
+**Model-identity design — the software "birth certificate":**
+- **What:** a minimal hardware-identity record — `{ "model": "mk2" }` — read by `aq_lib` to pick the `PlateGeometry` from the code registry. Geometry *data* lives in code; the record only names which profile.
+- **When (birth):** written **once at enrollment/provisioning** (e.g. `provision --model mk2`) — the moment the physical unit is first set up. Not set per-run, not by operators.
+- **Where (durable, not surface):** a **root-owned file on the persistent data volume**, *outside* the deploy-regenerated `host_config.json` path, so `deployment2.sh` never rewrites it and it survives reimage/OTA. Changing it = deliberate **re-provisioning**, not a JSON edit.
+- **Validated in hardware code:** `detect_model()` reads the record → model → geometry, then **cross-checks against live hardware** — 2nd-ADC ID probe (`REG_ID=0x05`, is the dual-ADC board present?) and homing travel (does the plate match?). Mismatch → **halt and log**, never default.
+- **Tamper-resistance dial:** **Tier 1 (this effort)** = root-owned persistent birth file. **Tier 2 (follow-up)** = sign the record / bind the model into the device certificate at enrollment (via `acorn-ca`) so it's cryptographically un-changeable. Design Tier 1 so Tier 2 layers on without rework.
 
 **Tasks:**
 - Define `PlateGeometry` value object (§1a): `rows, cols, axis_stops, drawer_rows, sensor_gap, channels`; `well_count` / `tube_ids` derived. Immutable.
-- Model registry: `sentri` = 1×4, `mk2` = 3×5.
-- **Hardware identity mechanism (the hardware variable):** allocate **2–3 GPIO strap pins** (or a small I²C EEPROM byte) on the Mk II board encoding the model; `detect_model()` reads them → model. **Coordinate the pin/EEPROM allocation with hardware (Nick) on day 1 — it's the one hardware dependency that gates everything.**
-- **Interim (until the strap exists, so software isn't blocked):** probe the 2nd-ADC ID register (`REG_ID = 0x05`, §1b) for the dual-ADC *board*, plus a declared `model` in `device.env` cross-checked against homing travel. Strap is the primary path; declared value is fallback only.
-- Wire detection → geometry as the single source of truth injected everywhere.
+- Model registry in `aq_lib`: `sentri` = 1×4, `mk2` = 3×5.
+- Add the birth-record write to the **enrollment/provisioning** path (`provision --model …`) → root-owned persistent file.
+- Implement `aq_lib.detect_model()`: read birth record → model → geometry; validate via ADC-ID probe + homing travel; fail loud on mismatch.
+- Wire geometry as the single source of truth injected everywhere.
 
 **Problems:**
-- **Board ≠ plate** (§1b): a Mk II board can sit in a 4-well chassis, so the strap must encode the **plate/geometry**, not just "dual-ADC present."
-- Detection MUST halt-and-log on mismatch, never default (misdetected geometry = axis crash).
-- Requires a confirmed hardware pin/EEPROM budget early.
+- Provisioning/enroll flow must write the birth record — coordinate with the enrollment path early.
+- The persistent location must survive reimage/OTA **and** sit off the deploy-regenerated config path.
+- Homing-travel cross-check needs a calibrated threshold (soft signal).
+- **Board ≠ plate** (§1b): a Mk II board can sit in a 4-well chassis — this is exactly why the model is *declared at birth* (authoritative) and hardware is only a *cross-check*, not the source.
 
-**Exit:** on a 15-well unit `detect_model()` returns 3×5 geometry from a hardware read; on 4-well, 1×4; mismatch fails loud.
+**Exit:** the model comes from the birth record (not host_config); `aq_lib` resolves geometry from it; the live-hardware cross-check fails loud on mismatch; changing the model requires re-provisioning.
 
 ---
 
