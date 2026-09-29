@@ -50,13 +50,17 @@ def _ssh_read(pi, path):
     ).stdout
 
 
-def _ssh_write(pi, path, content, mode="600"):
+def _ssh_write(pi, path, content, mode="600", group=None):
     # Write into the root-owned config dir as root via `sudo tee`. `umask 077`
     # (inherited by tee) keeps the file non-world-readable even momentarily;
     # `sudo chmod` pins the final mode. The file ends up root-owned, matching the
-    # rest of /opt/aquila/config.
+    # rest of /opt/aquila/config. When `group` is given, the file is also chgrp'd
+    # so that group can read it (device.env must be group-readable by ggc_group so
+    # the ggc_user Greengrass components can source it — 0600 root:root breaks the
+    # app stack).
+    chgrp = f" && sudo chgrp {group} {path}" if group else ""
     subprocess.run(
-        ["ssh", pi, f"umask 077 && sudo tee {path} >/dev/null && sudo chmod {mode} {path}"],
+        ["ssh", pi, f"umask 077 && sudo tee {path} >/dev/null && sudo chmod {mode} {path}{chgrp}"],
         input=content, check=True, capture_output=True, text=True,
     )
 
@@ -88,7 +92,7 @@ def main(argv=None):
     new_env = device_env_after_enroll(
         _ssh_read(args.pi, ENV_PATH), cert_path=CERT_PATH, key_path=KEY_PATH
     )
-    _ssh_write(args.pi, ENV_PATH, new_env)
+    _ssh_write(args.pi, ENV_PATH, new_env, mode="640", group="ggc_group")
 
     print(f"enrolled {args.pi}: certificate installed at {CERT_PATH}")
 
