@@ -17,8 +17,12 @@ WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN}
 GHCR_USERNAME=${GHCR_USERNAME}
 GHCR_TOKEN=${GHCR_TOKEN}
 EOF
-sudo chown root:root /opt/aquila/config/device.env
-sudo chmod 600 /opt/aquila/config/device.env
+# device.env must be group-readable by ggc_group so the ggc_user Greengrass
+# components (and the root-run app compose stack) can source it. 0600 root:root
+# leaves the app stack unable to read it. Fall back gracefully if ggc_group
+# doesn't exist yet (pre-Greengrass setup); the enroll/deploy path fixes it later.
+sudo chgrp ggc_group /opt/aquila/config/device.env 2>/dev/null || sudo chown root:root /opt/aquila/config/device.env
+sudo chmod 640 /opt/aquila/config/device.env
 
 sudo docker compose --env-file /opt/aquila/config/device.env -f /opt/fleet/docker-compose.yml up -d
 

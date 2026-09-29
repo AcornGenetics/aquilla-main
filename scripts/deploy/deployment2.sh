@@ -375,8 +375,12 @@ AQ_SRC_BASEDIR=/opt/aquila
 AQ_SYNC_ENDPOINT=${AQ_SYNC_ENDPOINT}
 AQ_RENEW_ENDPOINT=${AQ_RENEW_ENDPOINT}
 EOF
-chown root:root /opt/aquila/config/device.env
-chmod 600 /opt/aquila/config/device.env
+# device.env must be group-readable by ggc_group so the ggc_user Greengrass
+# components (and the root-run app compose stack) can source it. 0600 root:root
+# leaves the app stack unable to read it. Fall back gracefully if ggc_group
+# doesn't exist yet (pre-Greengrass setup); the enroll/deploy path fixes it later.
+chgrp ggc_group /opt/aquila/config/device.env 2>/dev/null || chown root:root /opt/aquila/config/device.env
+chmod 640 /opt/aquila/config/device.env
 
 # fleet .env (Compose variable substitution)
 cat > /opt/fleet/.env <<EOF
