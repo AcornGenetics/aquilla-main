@@ -408,6 +408,57 @@ Cross-ref: §12 (crosstalk becomes a non-issue for the current path), §21 (outp
 
 ---
 
+## 23. Plotting & analysis per tube — what stays the same / changes
+
+**Headline: the per-tube qPCR math does NOT change.** `results_to_json` runs the same pipeline once per well; everything inside `resolve_status`/`resolve_cq` operates on **one tube's curve in isolation**. Verified: **no cross-tube logic** (nothing reads neighboring wells), and `baseline_slice = (5, 15)` is cycle-based → **well-count-independent**. So for 15 wells you run the identical math 15×.
+
+```python
+_WELLS = [1, 2, 3, 4]                                          # curve.py:341 — the only "4"
+fam_status = {w: resolve_status(0, "fam", w) for w in _WELLS}
+```
+
+### 23a. UNCHANGED — the qPCR math
+`baseline` fit, `get_threshold`, `compute_cq`, the `evaluate_curve` detection cascade, spike-only rejection, ROX-unavailable/suppression, well-verdict precedence — all per-curve, untouched by well count.
+
+### 23b. MECHANICAL — scaling (loop/list bumps)
+- [ ] `_WELLS = [1,2,3,4]` (`curve.py:341`) → N from geometry; drives the results dict.
+- [ ] `plot_utils.py:66` `range(4)` → N.
+- [ ] results dict (channel `"1"`/`"2"` × well) simply grows to N keys — downstream event/UI consume more entries.
+- [ ] per-well `thresholds` / `cross_talk_matrix` → N (§21e; currently dead path).
+
+### 23c. REAL WORK — not just a loop bump
+- [ ] **Tube identity from the file (blocked on §21d):** `extract_data`'s `position = well + dpos` must locate each of 15 tubes; needs the 15-well optics-file tube id. Without it, tubes 5–15 can't be found.
+- [ ] **Plot layout redesign:** `generate_optics_plot` draws **all wells on ONE axis** (`fig, ax = plt.subplots`) — 8 lines today, **30 lines at 15 wells = unreadable**. Move to a **3×5 small-multiples grid** (one mini-plot per tube, laid out like the physical plate). Also update the device History/results UI plot (§11).
+
+### 23d. NEW DESIGN DECISION — control-aware run QC
+`aq_curve` is currently **control-agnostic** — every tube is analyzed independently, with no notion of a positive control (PC) or no-template control (NTC). But the **entire rationale for 15 wells** (PDF) is dedicated PC + NTC without eating 50% of capacity. So we likely want a **control-aware QC layer**:
+- NTC must be **Not Detected**, PC must be **Detected** — else flag/invalidate the run.
+- [ ] **Decide:** where are control positions defined — per-protocol? a per-plate map? Does a failed control **invalidate the whole run** or just annotate it? Does this QC live **on-device** (`aq_curve`) or in the **app/cloud**?
+- This is the **only analysis item that's a new capability**, not a scaling chore — and it shapes the plot layout (mark control tubes) and the event/results schema. Recommend tackling this design first.
+
+Cross-ref: §21d (tube identity in file), §21e (per-well calibration arrays), §11 (device UI plot), §8 (curve analysis), §22 (lit-only math).
+
+## 24. Open verification items by category (mechanisms exist — confirm they work)
+
+The mechanisms mostly exist; these are the under-examined *verification* and *un-ported* gaps per category.
+
+**Motor**
+- [ ] Backend decision undecided (§19e A/B/C) — run the lgpio timing benchmark.
+- [ ] Homing-error → optics-QC coupling (§5) — confirm stall telemetry is actually wired to disqualify samples in the new motion.
+- [ ] Scan-time ≤18 s at 15 wells — never measured with real motion.
+- [ ] 5-well axis calibration (§21b); degenerate `move_wo_home_flag(0)` on repeat drawer gotos.
+
+**Recording data**
+- [ ] 🔴 **`run_complete` EVENT is still 4-well** — `aquila_web/main.py` `_build_results = range(1,5)`, `_normalize_tube_names` **hard-capped at 4**, tube_names keyed 1–4 (§10). Even after the optics file records 15 tubes, the event that syncs to the cloud is 4-well. **Least-examined gap; squarely in "recording data."**
+- [ ] Optics file writer + format (§21a/§21d); deferred-write/cancel (§7); dark cleanup (§22).
+- [ ] `call_evidence` / `optics_readings` events scale to 15 wells.
+
+**New ADC**
+- [ ] Self-detect/validate not built (§1b); RDY 7-vs-20 policy (§19c #9); CS-toggle robustness (#6).
+- [ ] Temperature acquisition on dual-ADC verified (§9); single-ADC backward-compat verified.
+
+---
+
 ### Changelog
 - 2026-09-25 — Doc created from Mk II Design Rationale + cross-repo scoping sweep. Confirmed this checkout is still 4-well; no Mk II code merged here.
 - 2026-09-25 — Added §1b (birth-certificate model identity) and §19 (review of the engineers' 5-file Mk II draft).
@@ -417,3 +468,4 @@ Cross-ref: §12 (crosstalk becomes a non-issue for the current path), §21 (outp
 - 2026-09-28 — Added §21 (blocking gaps: 21a out_data writes only 4 of 15 tubes, 21b axis stops need real 5-well calibration, 21c overhang bursts implicit) + §19c hazard pointer. These must be built before 15-well output is real.
 - 2026-09-28 — Added §22: verified `aq_curve` is lit-only/baseline-subtracted (dark `y0` computed in extract_data then dropped by all consumers). Decision: stop averaging dark into `y0` (dead code); verify no other path uses dark first. §12 flagged as moot for current path.
 - 2026-09-28 — Added §21d (optics file format must carry a 15-well tube id — the missing spec behind §21a) and §21e (per-well `cross_talk_matrix`/`thresholds` are 4-hardcoded and on the dead `is_detected` path; spectral not LED crosstalk; make N-from-geometry if reactivated).
+- 2026-09-28 — Added §23 (plotting & analysis: per-tube qPCR math unchanged; scaling is loop/list bumps + plot small-multiples + §21d tube identity; NEW control-aware QC design decision) and §24 (open verification items by category — incl. the still-4-well `run_complete` event).
