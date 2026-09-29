@@ -527,6 +527,164 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 
 ---
 
+## 26. IMPLEMENTATION PLAN (target: 3.5 weeks)
+
+**Timeline:** ~18 working days. **MVP milestone (~day 10 / end of week 2):** *motor moves correctly through the 3×5 serpentine AND the optics file records all 15 tubes correctly.* Everything after that (parse → analysis → GUI) builds on that working model. GUI (Phase G) and control-QC (Phase F) are the compressible/at-risk items if the schedule slips.
+
+**Two non-negotiable guardrails (apply to every phase):**
+1. **Reactive, never hardcoded.** No `NUM_WELLS`-as-literal, no `[1,2,3,4]`, no `if well_15 / elif updated4`, no int-vs-tuple type-sniffing. Everything derives from one `PlateGeometry`. A new well count = new geometry data, **zero code change**.
+2. **4-well never regresses.** SENTRI runs through the *same* code as the degenerate `rows=1` geometry; verify byte-identical optics + identical calls at each phase.
+
+**Critical path:** A → B → C/D → E → F. G (GUI) and the motor bench work in C can parallelize if a second dev is available.
+
+---
+
+### Phase A — Configuration & hardware identity (Days 1–2)
+*Your priority #1: determine 4-well vs 15-well from a variable ON THE HARDWARE, not just a config file.*
+
+**Goal:** `detect_model() → PlateGeometry`, resolved from a hardware signal, fail-loud on ambiguity.
+
+**Tasks:**
+- Define `PlateGeometry` value object (§1a): `rows, cols, axis_stops, drawer_rows, sensor_gap, channels`; `well_count`/`tube_ids` derived. Immutable.
+- Build the model registry: `sentri` = 1×4, `mk2` = 3×5.
+- **Hardware identity mechanism (the hardware variable):** allocate **2–3 GPIO strap pins** (or a small I²C EEPROM byte) on the Mk II board that encode the model. `detect_model()` reads the straps → model. *Coordinate the pin/EEPROM allocation with hardware (Nick) on day 1 — it's the one hardware dependency that gates everything.*
+- **Interim (until the strap exists):** two-signal detect — probe the 2nd ADC ID register (`REG_ID=0x05`, §1b) for the dual-ADC *board*, plus a declared `model` in `device.env` validated against homing-travel as a cross-check. Ship the strap read as the primary path; keep the declared value as fallback only.
+- Wire `config`/detection → geometry as the single source of truth injected everywhere.
+
+**Problems:** board ≠ plate (a Mk II board could sit in a 4-well chassis — §1b): the strap must encode the *plate/geometry*, not just "dual-ADC present." Detection MUST halt-and-log on mismatch, never default. Needs a hardware pin budget confirmed early.
+
+**Exit:** on a 15-well unit `detect_model()` returns the 3×5 geometry from a hardware read; on a 4-well unit, 1×4; mismatch fails loud.
+
+---
+
+### Phase B — Reactive foundation + remediate the engineers' code (Days 3–6)
+*Your priorities #2 (reactive refactor) and #3 (fix Nick/Jake's changes) — done together, because making their code reactive IS the remediation.*
+
+**Goal:** one geometry-driven code path; all §4 literals and §19 structural debt gone.
+
+**Tasks:**
+- **Unified `read_plan(geo)`** (§1a) replacing `OPTICS_READ_PLAN` + the `if well_15/elif updated4` branch in `optics_read_tasks`. Generates the serpentine 3×5 (or 1×4) as data. `READS_PER_CYCLE` derived (kill the hardcoded `21`, §21a/#13).
+- **Executor: one `drawer_to` task type** (§19b#3) — delete the int-vs-tuple sniffing in `Axis`/`Drawer.goto_position`; positions are always structured coords from geometry.
+- Replace every literal (§4): `curve.py:341 _WELLS`, `notebook_evaluator` well_maps, `plot_utils:66 range(4)`, `motor_class` `range(6)` + `append(0)` pad, `main.py _build_results range(1,5)` / `_normalize_tube_names` cap-4. Delete dead `DEFAULT_CURVE_WELLS`.
+- **Reconcile the sensor-offset bug** (§4): unify `curve.py` `dpos=±1` with the 2-position gap into one `geo.sensor_gap`.
+- Fold in the cheap §19d remediations while here: collapse redundant flags into the model (#14), derive constants (#13).
+
+**Problems:** keep 4-well byte-identical during the refactor (regression-test each literal removal); the sensor-offset unification is subtle — test against a known 4-well optics file.
+
+**Exit:** 4-well runs unchanged through the new geometry path; no `well_15`/`elif`/type-sniff remain; a 15-well geometry produces the full 21-stop serpentine plan.
+
+---
+
+### Phase C — Motor: 15-well motion working, calibrated, tested (Days 5–8, can start once B's read_plan lands)
+*Your priority #4a.*
+
+**Goal:** the instrument physically steps the 3×5 serpentine and homes reliably within the scan budget.
+
+**Tasks:**
+- Drive motion from `read_plan(geo)`: axis across columns, drawer between the 3 rows.
+- **Motion backend (§19e):** ship **A (pigpiod in-container → `localhost`)** now for the working model — removes the hardcoded `172.18.0.1` network hop, keeps the proven waveform code. Run the **lgpio (B) timing benchmark** in parallel (using existing `steps_to_flag`/`residual` logging) to decide the durable backend; keep C (motion IC) for the respin.
+- **Real 5-well axis calibration (§21b):** measure the 7 stops/row on the bench; put them in `geo.axis_stops`; remove `append(0)`; validate `len(axis_stops)==cols+sensor_gap`.
+- Drawer 3-row moves (±9 mm / 320 steps) + homing; handle the degenerate `move_wo_home_flag(0)` on repeat gotos.
+- **Homing-error → QC hook (§5):** log per-move stall telemetry so downstream can disqualify samples.
+- **Measure scan time** at 15 wells; confirm ≤18 s (§ scan budget).
+
+**Problems:** physical calibration needs bench + the real 3×5 hardware; scan-time budget is tight; container pigpiod needs elevated device access (fleet policy — confirm).
+
+**Exit:** a dry 15-well run steps every tube in serpentine order, homes clean, scan-time ≤18 s.
+
+---
+
+### Phase D — Optics file: record all 15 tubes correctly + define the format (Days 8–10) → **MVP**
+*Your priority #4b. This + Phase C = the working model.*
+
+**Goal:** a 15-well run writes an optics file with all 15 tubes, each unambiguously identified.
+
+**Tasks:**
+- **Rewrite the writer (§21a):** replace the 4-well `for k in range(6)` in `out_data` with an N-well emit driven by geometry — the current code drops 11 of 15 tubes. Prefer a **native dual-ADC writer** (#12) over padding to the legacy shape.
+- **Define + stamp the 15-well file format (§21d):** each line carries a real **tube id (`1A`–`5C`, per §25b)** — add the row/drawer dimension the current `position` column lacks.
+- **Fix deferred-write on cancel/crash (§7, RISK C):** flush incrementally or via a `finally`/signal handler so an interrupted run still writes partial data.
+- Overhang handling (§21c): mark ROX/FAM-valid stops in the plan so the writer selects real-tube samples by construction.
+- **Dark samples:** given §22 (analysis ignores them), decide now — simplest is stop *writing* the LED-off block to save scan time/space, or keep logging but stop the `y0` averaging. (Confirm no other consumer first — §22 checklist.)
+
+**Problems:** format design must serve both the writer and the parser (Phase E); native-vs-legacy-shape decision; cancel-flush correctness.
+
+**Exit / MVP:** run a 15-well profile → motor sweeps correctly → optics file contains 15 correctly-labelled tubes with sane values; canceling mid-run still writes what was captured.
+
+---
+
+### Phase E — Parse the optics file (Days 11–12)
+*Your priority #5.*
+
+**Goal:** `extract_data` reads the new 15-well format and locates every tube.
+
+**Tasks:**
+- Update `extract_data` (`curve.py`) to read the tube id (§23c) instead of the 4-well `position = well + dpos` math; drive tube enumeration from geometry.
+- Golden-file test: the parser round-trips the writer's output; a 4-well file still parses identically.
+
+**Problems:** parser/writer format lock-step; keep the 4-well path working.
+
+**Exit:** parsing a 15-well optics file yields 15 per-tube, per-dye curves.
+
+---
+
+### Phase F — Analysis on 15-well + control QC + event path (Days 12–15)
+*Your priority #6.*
+
+**Goal:** calls, Cq, and the synced event all correct for 15 tubes.
+
+**Tasks:**
+- Scale the per-tube loop (§23b): `_WELLS`→N, results dict, `plot range`→N. **Per-tube qPCR math is unchanged (§23a)** — no touching baseline/threshold/Cq.
+- Per-well calibration arrays → N (§21e) if reactivated.
+- **`run_complete` EVENT (§24, §10):** `main.py _build_results`/`_normalize_tube_names`/tube_names → N, so the cloud receives 15-well data. (Warehouse already scales — §13.)
+- **NEW: control-aware QC (§23d)** — define control positions (per-protocol / plate map), enforce NTC=Not-Detected & PC=Detected, decide run-invalidate vs annotate, on-device vs app. *This is the one genuine new feature — timebox it; if it slips, ship per-tube calls first and layer control-QC after.*
+
+**Problems:** control-QC is a design decision, not a port — get the "where are controls defined" answer early; event/tube_names cap-4 is the least-examined gap.
+
+**Exit:** a 15-well run produces 15×2 calls + Cq, a valid `run_complete` event, and (if in scope) control-based run QC.
+
+---
+
+### Phase G — GUI for 15-well (Days 14–17, parallelizable)
+*Your priority #7. Full design in §25.*
+
+**Goal:** the kiosk shows and names 15 tubes usably on 768×1024.
+
+**Tasks:**
+- **Dynamic-render refactor first (§25e):** replace the 4 hand-authored `.results-tube` blocks (×3 files) with a JS loop from geometry; CSS `repeat(4)` → geometry-driven grid.
+- **3×5 plate-mirroring grid** (§25a) with **`1A`–`5C` labels** (§25b — and canonicalize vs the internal `A1–C5`).
+- **Tap-a-tube → larger edit panel** for naming (§25c); controls auto-labelled.
+- Status dots scale (§25d); controls marking + count exclusion (§25f); history table → N rows (§25g); optional live scan indicator (§25h).
+
+**Problems:** touch layout at 150px cells; naming UX; keep 4-well rendering identical.
+
+**Exit:** operator can load, name, run, and read 15 tubes on the kiosk; 4-well UI unchanged.
+
+---
+
+### Phase H — Integration, 4-well regression, buffer (Days 17–18)
+- End-to-end: 15-well run → motor → optics file → parse → analysis → event → GUI → history.
+- Full 4-well regression (same code, `rows=1`) — byte-identical optics + identical calls.
+- Schedule buffer for slippage (calibration, control-QC, GUI most likely).
+
+---
+
+### Risk register (top items)
+| Risk | Phase | Mitigation |
+|---|---|---|
+| Hardware strap/EEPROM not ready | A | Coordinate day 1; interim ADC-ID + declared-model fallback |
+| 5-well physical calibration slips | C | Bench early; it gates D's tube ids |
+| Scan-time > 18 s at 15 wells | C | Measure early; lgpio/backend + fewer flashes are levers |
+| Optics format churn (writer↔parser) | D/E | Freeze the §21d format before coding either |
+| Control-QC is new design, not a port | F | Timebox; ship per-tube calls first |
+| 3.5 wks is tight for GUI + control-QC | F/G | Both are the declared compressible items |
+
+### Definition of done
+- 4-well and 15-well both run through **one** geometry-driven path; no hardcoded counts or `elif` mode branches anywhere.
+- 15-well: correct serpentine motion, correct 15-tube optics file, correct parse/analysis/Cq, correct synced event, usable kiosk UI.
+- Model resolved from a **hardware** signal, fail-loud.
+
+---
+
 ### Changelog
 - 2026-09-25 — Doc created from Mk II Design Rationale + cross-repo scoping sweep. Confirmed this checkout is still 4-well; no Mk II code merged here.
 - 2026-09-25 — Added §1b (birth-certificate model identity) and §19 (review of the engineers' 5-file Mk II draft).
@@ -538,3 +696,4 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 - 2026-09-28 — Added §21d (optics file format must carry a 15-well tube id — the missing spec behind §21a) and §21e (per-well `cross_talk_matrix`/`thresholds` are 4-hardcoded and on the dead `is_detected` path; spectral not LED crosstalk; make N-from-geometry if reactivated).
 - 2026-09-28 — Added §23 (plotting & analysis: per-tube qPCR math unchanged; scaling is loop/list bumps + plot small-multiples + §21d tube identity; NEW control-aware QC design decision) and §24 (open verification items by category — incl. the still-4-well `run_complete` event).
 - 2026-09-28 — Added §25 (device kiosk GUI redesign: 768×1024 portrait, 3×5 plate-mirroring grid, `1A–5C` col-row labels, tap→larger edit panel for naming, dynamic-render refactor, controls marking, history table, optional live scan indicator). Flagged the A1–C5 vs 1A–5C labeling reconciliation.
+- 2026-09-28 — Added §26 IMPLEMENTATION PLAN (3.5 wks, ~18 days): Phases A(config/hardware identity) → B(reactive refactor + remediate) → C(motor) → D(optics file) = **MVP ~day 10** → E(parse) → F(analysis + control-QC + event) → G(GUI) → H(integration). Guardrails: reactive/no-hardcode, 4-well never regresses. Risk register + DoD.
