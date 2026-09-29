@@ -169,7 +169,7 @@ Current committed block is 4-well only: `axis.positions: [320, 675, 1030, 1380, 
 
 ## 11. Device UI  — `aquilla-main/aquila_web/static`
 
-Layout **will visually break at 15** (fixed 4-col grid). Best fix: replace the 3 hand-authored 4-tube HTML blocks with a JS render-loop driven by well count, and switch the grid to `auto-fit`.
+Layout **will visually break at 15** (fixed 4-col grid). Best fix: replace the 3 hand-authored 4-tube HTML blocks with a JS render-loop driven by well count, and switch the grid to `auto-fit`. **Full GUI redesign (3×5 plate grid, `1A–5C` labels, tap→larger edit panel, controls marking) is in §25.**
 - [ ] `static/run.html:102-131`, `static/ready.html:43-72`, `static/complete.html:38-66` — four literal `results-tube` blocks (data-tube 1-4, "Tube 1".."Tube 4", FAM/ROX half-dots) → render dynamically
 - [ ] `static/styles.css:1515-1520` `grid-template-columns: repeat(4, …)`; `:1908-1910` (820px breakpoint, still 4); `:2161-2164` (dead `flex-wrap` on a grid) → `repeat(auto-fit, minmax(…))`
 - [ ] `static/script.js:49` `DEFAULT_TUBE_NAMES` len 4; `:1105-1106` `Array(4)`; `:1115` `for col=1..4`; `:1447-1462` `/tube_names` fetch bound to len-4 fallback
@@ -459,6 +459,74 @@ The mechanisms mostly exist; these are the under-examined *verification* and *un
 
 ---
 
+## 25. Device GUI (kiosk) redesign for 15 wells
+
+**Constraint:** the device is a **768×1024 portrait touch kiosk**, 44px minimum touch targets (viewport `width=768,height=1024`; kiosk notes in `styles.css`). **Current UI:** each tube is a `.results-tube` = FAM/ROX status dot + a text input (`"Tube 1"`…), **4 hand-authored blocks** in a `repeat(4,…)` row, copy-pasted across `run.html` / `ready.html` / `complete.html` + the History views (`history.js`, `history_detail.js`). Code-location checklist is in §11; this section is the design.
+
+### 25a. Layout — 3×5 grid mirroring the physical plate
+The results grid becomes a **3×5 grid laid out to match how tubes are physically loaded** (so "back-left tube" = "back-left on screen"). 5 columns across 768px ≈ ~150px/cell; 3 rows fit within 1024px without scrolling.
+
+```
+         1      2      3      4      5
+       ┌─────────────────────────────────┐
+   A   │ 1A     2A     3A     4A     5A   │
+       │ ◐      ◐      ◐      ◐      ◐    │   row A (drawer -1)
+       │ name   name   name   name   name│
+   B   │ 1B     2B     3B     4B     5B   │
+       │ ◐      ◐      ◐      ◐      ◐    │   row B (drawer 0)
+       │ name   name   name   name   name│
+   C   │ 1C     2C     3C     4C     5C   │
+       │ ◐      ◐      ◐      ◐      ◐    │   row C (drawer +1)
+       │ name   name   name   PC     NTC │   ← controls marked
+       └─────────────────────────────────┘
+```
+
+### 25b. Labeling scheme (operator-facing) — `1A` … `5C`
+- **Columns numbered 1–5** across the top; **rows lettered A–C** down the side.
+- Each tube is labeled **column-then-row**: **`1A`** (col 1, row A) … **`5C`** (col 5, row C). Operators read/press these.
+- ⚠️ **Canonicalize:** the motion/optics sections (§20, §21d) used `A1–C5` (row-then-column) as internal shorthand. **Pick ONE scheme and use it everywhere** — recommend adopting the operator's `1A–5C` (col-then-row) as canonical so UI, file tube-ids, and docs agree. [Decision needed.]
+
+### 25c. Naming UX — tap a tube → LARGER edit panel
+15 tiny inline inputs on a touch kiosk is painful. Instead: the grid shows **compact labels**, and **tapping a tube opens a larger edit panel/tab** — a big, touch-friendly field + on-screen keyboard to rename just that one tube. Avoids 15 keyboard sessions crammed into 150px cells.
+
+```
+tap  3B  →   ┌──────────────────────────────┐
+             │  Edit  3B                     │
+             │  ┌────────────────────────┐   │
+             │  │ Sample name…           │   │  ← large field
+             │  └────────────────────────┘   │
+             │  [   on-screen keyboard    ]   │
+             │  [ Cancel ]          [ Save ]  │
+             └──────────────────────────────┘
+```
+- Controls (PC/NTC) can **auto-label** so operators only name samples (ties §23d).
+- Optional: plate templates / batch naming so 15 names aren't retyped every run.
+
+### 25d. Status dots
+FAM/ROX half-dot per tube, live over WebSocket during the run. The existing `querySelectorAll(".results-tube")` update loops in `script.js` **adapt automatically** once N tubes render — no per-dot rewrite.
+
+### 25e. Enabling refactor — render dynamically (do this FIRST)
+Replace the 4 hand-authored `.results-tube` blocks (×3 files) with a **JS loop that renders N tubes from geometry**, and change CSS `repeat(4,…)` → a geometry-driven grid. One template → 4-well *or* 15-well (§11/§1a). This is the foundation everything else builds on; low-risk.
+
+### 25f. Controls marking + counts
+Mark PC/NTC visually (badge/color) and **exclude them from the Detected/Inconclusive counts** (which shift from `/4` to `/(sample count)`). Depends on the §23d control-aware decision.
+
+### 25g. History views
+`history_detail.js` builds a per-tube Cq table → **N rows** instead of 4; give it the same dynamic-render treatment; may need vertical scroll.
+
+### 25h. Optional (v1?) — live scan indicator
+Since the serpentine visits tubes in a known order (§20), the UI could **highlight the currently-scanning tube** (1A→2A→…→5A→5B→…). New, optional, satisfying on a kiosk.
+
+### Decisions to make
+- **Grid orientation:** which physical corner is `1A` (must match the loading orientation).
+- **Labeling:** adopt `1A–5C` everywhere and reconcile the internal `A1–C5` shorthand (§25b).
+- **Naming UX:** tap → larger edit panel (chosen); all 15 named vs. controls auto-named.
+- **Live scan highlight:** build in v1 or defer.
+
+**Sequencing:** dynamic-render refactor (25e) → larger naming panel (25c) → controls marking (25f, once §23d lands) → optional scan indicator (25h).
+
+---
+
 ### Changelog
 - 2026-09-25 — Doc created from Mk II Design Rationale + cross-repo scoping sweep. Confirmed this checkout is still 4-well; no Mk II code merged here.
 - 2026-09-25 — Added §1b (birth-certificate model identity) and §19 (review of the engineers' 5-file Mk II draft).
@@ -469,3 +537,4 @@ The mechanisms mostly exist; these are the under-examined *verification* and *un
 - 2026-09-28 — Added §22: verified `aq_curve` is lit-only/baseline-subtracted (dark `y0` computed in extract_data then dropped by all consumers). Decision: stop averaging dark into `y0` (dead code); verify no other path uses dark first. §12 flagged as moot for current path.
 - 2026-09-28 — Added §21d (optics file format must carry a 15-well tube id — the missing spec behind §21a) and §21e (per-well `cross_talk_matrix`/`thresholds` are 4-hardcoded and on the dead `is_detected` path; spectral not LED crosstalk; make N-from-geometry if reactivated).
 - 2026-09-28 — Added §23 (plotting & analysis: per-tube qPCR math unchanged; scaling is loop/list bumps + plot small-multiples + §21d tube identity; NEW control-aware QC design decision) and §24 (open verification items by category — incl. the still-4-well `run_complete` event).
+- 2026-09-28 — Added §25 (device kiosk GUI redesign: 768×1024 portrait, 3×5 plate-mirroring grid, `1A–5C` col-row labels, tap→larger edit panel for naming, dynamic-render refactor, controls marking, history table, optional live scan indicator). Flagged the A1–C5 vs 1A–5C labeling reconciliation.
