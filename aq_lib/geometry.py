@@ -76,14 +76,30 @@ DEFAULT_WELLS = 4  # An un-provisioned device is the 4-well baseline build.
 @lru_cache(maxsize=None)
 def _read_identity(config_dir: str) -> int:
     """Read the well count from the immutable device_identity.json under
-    config_dir. Absent file ⇒ the 4-well default. Cached per config_dir so the
-    identity file is read once."""
+    config_dir. Cached per config_dir so the identity file is read once.
+
+    Absent file ⇒ the 4-well default (an un-provisioned device still runs). A
+    present-but-malformed file (bad JSON, or no "wells" key) is NOT absent — it
+    fails loud rather than silently defaulting and driving the wrong plate."""
     path = os.path.join(config_dir, "device_identity.json")
     try:
         with open(path, "r") as fp:
-            return json.load(fp)["wells"]
+            record = json.load(fp)
     except FileNotFoundError:
         return DEFAULT_WELLS
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.error("Malformed device_identity.json at %s: %s. Halting.", path, exc)
+        raise ValueError(f"malformed device_identity.json at {path}: {exc}") from exc
+
+    try:
+        return record["wells"]
+    except (KeyError, TypeError) as exc:
+        logger.error(
+            "device_identity.json at %s has no 'wells' well count. Halting.", path
+        )
+        raise ValueError(
+            f"device_identity.json at {path} is missing the 'wells' well count"
+        ) from exc
 
 
 def geometry() -> PlateGeometry:
