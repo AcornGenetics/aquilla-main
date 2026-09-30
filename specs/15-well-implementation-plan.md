@@ -74,7 +74,7 @@
 
 **Tasks:**
 - Drive motion from `read_plan(geo)`: axis across columns, drawer between the 3 rows.
-- **Motion backend:** ship **pigpiod in-container → `localhost`** now for the working model (removes the hardcoded `172.18.0.1` network hop, keeps the proven waveform code). Run the **lgpio timing benchmark** in parallel (using existing `steps_to_flag` / `residual` logging) to decide the durable backend; leave a motion-controller IC for the respin.
+- **Motion backend (DECIDED — fleet is Pi 4B):** keep **pigpio** (DMA `wave_chain` = best stepper timing on Pi 4B; `lgpio.tx_wave` is software-timed and would be a *downgrade* here). Fix only the **deployment**: run `pigpiod -l` (localhost-only) **inside the app container** started by `entrypoint.sh`; `motor_class.py` `pigpio.pi()` → localhost (drop the hardcoded `172.18.0.1`); `apt-get install -y pigpio` in `Dockerfile.api`; disable host pigpiod (one DMA owner). **Bench-test SPI(optics)+pigpio(motor) DMA coexistence.** lgpio = Pi-5/fallback only; TMC5160 = respin. Full analysis + sources in tracker §19e.
 - **Real 5-well axis calibration:** measure the 7 stops/row on the bench; put them in `geo.axis_stops`; remove `append(0)`; validate `len(axis_stops) == cols + sensor_gap`.
 - Drawer 3-row moves (±9 mm / 320 steps) + homing; handle the degenerate `move_wo_home_flag(0)` on repeat gotos.
 - **Homing-error → QC hook:** log per-move stall telemetry so downstream can disqualify samples.

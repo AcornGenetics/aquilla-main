@@ -284,7 +284,7 @@ Numbering matches the decisions in the review. **Leverage:** three moves cover m
 
 **Motion**
 - [ ] **1 — pigpio waveform guards:** wrap waveform construction in one helper that enforces its own preconditions (`assert step_count % 8 == 0`; auto-chunk moves where `inner_count > 65000` into successive `wave_chain`s instead of erroring). Bit-bang fallback for tiny moves.
-- [ ] **2 — hardcoded pigpiod `172.18.0.1:8888` / motion GPIO backend:** this is a bigger decision than a config injection — see **§19e** for the full A/B/C analysis. Short version: the network hop is an artifact of running the app in a container while `pigpiod` runs on the host; **preferred fix is B (lgpio, in-process) gated on a timing benchmark**, A (pigpiod in-container) as fallback, C (motion IC) on the respin.
+- [ ] **2 — hardcoded pigpiod `172.18.0.1:8888` / motion GPIO backend:** RESOLVED — see **§19e**. Fleet is Pi 4B, so **keep pigpio** (best DMA timing there) and fix only the deployment: `pigpiod -l` in-container (localhost), client → `localhost`, `pigpio` added to the image, host pigpiod disabled. lgpio = Pi-5/fallback; TMC5160 = respin.
 - [ ] **3 — int/tuple type-sniffing:** emit two explicit task types from `read_plan(geo)` — `{"drawer_to": row}` and `{"goto_position": axis}`. Delete every `isinstance`/silent `return`. A 4-well plate (`rows=1`) emits NO `drawer_to` tasks, so the drawer stays put by construction.
 - [ ] **4 — `append(0)` hack:** put the real measured first-column stop in `geo.axis_stops` (len = `cols + sensor_gap`); validate length at load and raise if short (the author's own TODO). Immutable geometry object; never mutate `config.axis["positions"]`.
 - [ ] **5 — `motor_test()` in the driver:** move to `qaqc-cli`/`scripts/hardware/` as a standalone diagnostic importing `Motor`; drop the `motor_test` flag branch from `__init__`.
@@ -306,7 +306,7 @@ Numbering matches the decisions in the review. **Leverage:** three moves cover m
 
 **Migration approach:** cherry-pick the 19a mechanisms into the §1a/§1b architecture; do NOT merge these files wholesale (esp. `state_run_assay.py`).
 
-### 19e. Motion GPIO backend — pigpio vs lgpio vs motion IC (decision)
+### 19e. Motion GPIO backend — DECISION: pigpio on Pi 4B, deployment fixed
 
 **What the real problem is (and isn't).** The original inaccuracy was **software-timed pulsing on a non-realtime OS** (`RPi.GPIO` + `time.sleep()` at the mercy of the Linux scheduler) — NOT the container. That jitter is identical in a container or bare-metal. The container boundary is an **artifact of the pigpio fix**: DMA needs privileged `/dev/mem`, which is awkward in-container, so `pigpiod` runs on the host and the container reaches it over a socket.
 
@@ -316,20 +316,47 @@ Numbering matches the decisions in the review. **Leverage:** three moves cover m
 
 So accuracy depends on the **timing method**, not on where the code runs. An in-container backend can be fully accurate if its timing mechanism is good.
 
-**The three options:**
+**Library choice — settled by the hardware: the fleet runs Raspberry Pi 4B.** (2026-09-29.)
 
-| | Runs | Privilege | Timing mechanism | Verdict |
-|---|---|---|---|---|
-| **A — pigpio, in-container** | in the container (co-located daemon) | needs `/dev/mem` + root → **privileged container** | DMA (gold standard) | Fallback. Keeps proven wave code; drops the network hop; cost is a privileged container (fleet/Greengrass policy question). |
-| **B — lgpio, in-process** | in the container, in the app process; **no daemon, no socket** | needs only `/dev/gpiochip0` exposed + `gpio`-group access (like `/dev/spidev*` already) — **no `/dev/mem`/privileged** | kernel gpiochip chardev (NOT pigpio DMA) | **Preferred — gated on a timing benchmark.** Removes daemon, socket, AND per-step homing network latency, AND the privileged container. Risk: lgpio pulse precision at 30 mm/s must be proven. |
-| **C — motion IC / MCU** | Pi sends high-level SPI moves; a TMC5160 (or RP2040) generates steps | plain SPI; no root, no DMA | dedicated hardware ramp/step generator | Respin destination. Kills the jitter class at the source; StallGuard can replace the homing-error QC hack; hardware ramps help the ≤18 s budget. Cost: board + firmware scope. |
+**What online reviews / the library authors actually say (sourced):**
+- **`RPi.GPIO`** — worst for steppers: software `time.sleep()` timing, forum reports of *missed pulses* and *runaway* motion. No hardware waveforms. (Why the team already left it.)
+- **`pigpio` `wave_chain`** — the community **gold standard** for stepper timing: **DMA, zero CPU, the hardware counts the pulses**, so OS scheduling can't jitter it. **Works on Pi ≤4 (i.e. our 4B). Does NOT work on Pi 5** (RP1 chip).
+- **`lgpio` `tx_wave`** — per the author's own docs (`joan2937/lg`) this is a **"software timed wave"**, explicitly *"not 100% precise… will jitter"*. It is the *only* option on Pi 5, but on Pi 4B it is a **timing downgrade** vs pigpio's DMA. (Note: the `rpi-lgpio` RPi.GPIO-compat shim is software-PWM and twitches — do not confuse with native lgpio.)
 
-**Recommendation:** ship **B if a quick benchmark passes**, else **A**; evaluate **C** for the Mk II respin.
+**Timing ranking:** `pigpio DMA wave_chain` **>** `lgpio tx_wave (software)` **>** `RPi.GPIO`.
 
-- [ ] **Benchmark to decide B vs A:** prototype the step loop on `lgpio`, run at target speed (30 mm/s, 8–32 microsteps), and compare **step-skip rate / homing residual consistency** against the pigpio version. Instrumentation already exists (`steps_to_flag`/`residual` in `homing_log.py`). Pass → B; fail → A.
-- [ ] **If A:** run `pigpiod` in-container (device mounts + caps), connect `localhost`/unix socket; confirm privileged-container is acceptable to fleet/Greengrass policy.
-- [ ] **If B:** map `/dev/gpiochip0` into the container + `gpio`-group access; port the `wave_chain` fast path and the flag-polling homing path to lgpio's API.
-- [ ] **C (respin):** add "evaluate TMC5160-class motion controller" to the §16 electrical/respin list; weigh StallGuard vs the homing-error QC coupling (§5).
+### DECISION (Pi 4B): keep pigpio, fix only the DEPLOYMENT
+On Pi 4B, pigpio's DMA is the best timing available and we already have the wave code (the ramp file). The library was never the problem — the **deployment** was (daemon over TCP to the docker-gateway `172.18.0.1`, an unauthenticated root daemon reachable by other containers / LAN / tailnet — §19e security note above). Fix that without touching the motion code:
+
+1. **Run `pigpiod` INSIDE the `aquila-app` container** (already `privileged` + mounts `/dev/gpiomem`, so it can host the DMA daemon) — not on the host.
+2. **Bind localhost only:** start `pigpiod -l` (refuses non-loopback connections → closes the network exposure).
+3. **Client → localhost:** `motor_class.py` `pigpio.pi()` (drop the hardcoded `"172.18.0.1", 8888`).
+4. **Start pigpiod before the app** in `entrypoint.sh`, and wait until ready:
+   `pigpiod -l; until pigs t >/dev/null 2>&1; do sleep 0.1; done; exec "$@"`
+5. **Disable host pigpiod** (`systemctl disable --now pigpiod`) — only ONE pigpiod may run (it grabs the DMA channels); two instances conflict.
+6. **Add `pigpio` to the image:** `apt-get install -y pigpio` in `Dockerfile.api` (the `python:3.11-slim-bookworm` base doesn't ship the daemon).
+
+**Result:** best-in-class DMA timing kept; no gateway IP; no network-reachable root daemon; calibration one-shots (`compose run --rm app …`) bring up their own localhost pigpiod.
+
+**Gotchas to verify on the bench (Phase C):**
+- **DMA-channel contention with SPI:** the ADC uses `spidev` (DMA) and pigpio uses DMA — a clash can corrupt either. pigpiod can pick channels (`-d`/`-e`). **Test optics (SPI) + motor (pigpio) running simultaneously.** Most likely thing to bite.
+- **`privileged` stays** (pre-existing, needed for `/dev/gpiomem`/SPI/I²C/DMA). A later hardening pass could try `--device` + `SYS_RAWIO`; don't couple it to this.
+
+### Not chosen (and why)
+| Option | Verdict on Pi 4B |
+|---|---|
+| **lgpio (in-process)** | **Fallback / Pi-5-migration only.** Cleaner deploy (no daemon, `--device /dev/gpiochip0`, no `/dev/mem`), but `tx_wave` is **software-timed → worse jitter** than pigpio DMA on 4B, so not worth the timing regression here. Becomes mandatory if the fleet ever moves to Pi 5 (pigpio is dead there). Base-image caveat: `lgpio` doesn't `pip`/`apt` cleanly on `python:3.11-slim`. |
+| **Motion IC / MCU (TMC5160)** | **Respin destination.** Hardware ramp/step generation + StallGuard (could replace the homing-error QC hack, §5). Best long-term, but board + firmware scope — not this effort. |
+
+**Tasks (Phase C):**
+- [ ] `pigpiod -l` in `entrypoint.sh` (start + readiness wait) before the app CMD.
+- [ ] `motor_class.py`: `pigpio.pi()` → localhost; remove the hardcoded `172.18.0.1`.
+- [ ] `Dockerfile.api`: `apt-get install -y pigpio`.
+- [ ] Disable host pigpiod in setup scripts.
+- [ ] **Bench test:** SPI (optics) + pigpio (motor) DMA coexistence, no corruption.
+- [ ] lgpio/TMC5160 recorded as fallback/respin only — NOT on the critical path.
+
+**Sources:** RPi forums (PIGPIO stepper control t=289203, t=151592; Understanding PIGPIO t=294804; Pi5 hardware-timed wave p=2321568), `joan2937/lg` lgpio.h / tx_wave example ("software timed wave"), gpiozero Docker Pi5 discussion #1117, RPi-GPIO-in-docker-without-privileged forum t=374456.
 
 ---
 
@@ -704,3 +731,4 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 - 2026-09-28 — Added §23 (plotting & analysis: per-tube qPCR math unchanged; scaling is loop/list bumps + plot small-multiples + §21d tube identity; NEW control-aware QC design decision) and §24 (open verification items by category — incl. the still-4-well `run_complete` event).
 - 2026-09-28 — Added §25 (device kiosk GUI redesign: 768×1024 portrait, 3×5 plate-mirroring grid, `1A–5C` col-row labels, tap→larger edit panel for naming, dynamic-render refactor, controls marking, history table, optional live scan indicator). Flagged the A1–C5 vs 1A–5C labeling reconciliation.
 - 2026-09-28 — Added §26 IMPLEMENTATION PLAN (3.5 wks, ~18 days): Phases A(config/hardware identity) → B(reactive refactor + remediate) → C(motor) → D(optics file) = **MVP ~day 10** → E(parse) → F(analysis + control-QC + event) → G(GUI) → H(integration). Guardrails: reactive/no-hardcode, 4-well never regresses. Risk register + DoD.
+- 2026-09-29 — RESOLVED §19e motion backend: fleet is **Pi 4B**, so **keep pigpio** (DMA wave_chain = best stepper timing; lgpio tx_wave is software-timed/worse on 4B, mandatory only on Pi5). Fix deployment: `pigpiod -l` in-container + client→localhost + `pigpio` in image + disable host daemon; bench-test SPI/pigpio DMA coexistence. lgpio=Pi5/fallback, TMC5160=respin. Reviews sourced. Updated §19d#2, plan Phase C.
