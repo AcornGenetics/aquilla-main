@@ -1,40 +1,40 @@
 {
     "sn01": {
-        "profile_group": "all"
+        "profile_group": "none"
     },
     "sn02": {
-        "profile_group": "duke"
+        "profile_group": "none"
     },
     "sn03": {
-        "profile_group": "classic"
+        "profile_group": "none"
     },
     "sn04": {
         "profile_group": "sn04 brewery",
         "profile_editing_disabled": true
     },
     "sn05": {
-        "profile_group": "sn05 brewery"
+        "profile_group": "none"
     },
     "sn06": {
         "profile_group": "sn06 brewery",
         "profile_editing_disabled": true
     },
     "sn07": {
-        "profile_group": "classic"
+        "profile_group": "none"
     },
     "sn08": {
-        "profile_group": "classic"
+        "profile_group": "none"
     },
     "sn09": {
-        "profile_group": "sn09 sn11 sn12 brewery"
+        "profile_group": "none"
     },
     "sn10": {
-        "profile_group": "sn10 brewery"
+        "profile_group": "none"
     },
     "sn11": {
-        "profile_group": "sn09 sn11 sn12 brewery"
+        "profile_group": "none"
     },
     "sn12": {
-        "profile_group": "sn09 sn11 sn12 brewery"
+        "profile_group": "none"
     }
 }
