@@ -102,6 +102,56 @@ run_test() {
     fi
 }
 
+# >>> device-identity lib >>>
+# Write-once, immutable well-count identity record (Phase A / Slice 3, #504).
+# Kept INLINE and self-contained: this script is fetched standalone (curl) and
+# run from /tmp, so it must not source sibling files. Tested by
+# tests/deploy/test_device_identity.sh, which sources only this marked block.
+
+# The well counts aq_lib.geometry() knows how to resolve. Keep in lockstep with
+# the GEOMETRIES registry — an unsupported count here would drive a plate the
+# device can't analyse.
+SUPPORTED_WELLS="4 15"
+
+wells_is_supported() {
+    local candidate=$1 supported
+    for supported in ${SUPPORTED_WELLS}; do
+        [[ "${candidate}" == "${supported}" ]] && return 0
+    done
+    return 1
+}
+
+# The well count defaults to the 4-well baseline build when the operator states
+# nothing (mirrors how an unset hostname is handled).
+resolve_wells() {
+    local stated=${1:-}
+    echo "${stated:-4}"
+}
+
+# Write the immutable well-count identity record.
+#   $1 = config dir   $2 = well count   $3 = ISO-8601 provisioned timestamp
+write_device_identity() {
+    local dir=$1 wells=$2 provisioned=$3
+    local path="${dir}/device_identity.json"
+    if ! wells_is_supported "${wells}"; then
+        echo "  ✗ Unsupported well count '${wells}' (supported: ${SUPPORTED_WELLS})" >&2
+        return 1
+    fi
+    if [[ -e "${path}" ]]; then
+        echo "  ℹ device_identity.json already present — leaving untouched (write-once)"
+        return 0
+    fi
+    cat > "${path}" <<EOF
+{
+    "wells": ${wells},
+    "schema": 1,
+    "provisioned_utc": "${provisioned}"
+}
+EOF
+    chattr +i "${path}"
+}
+# <<< device-identity lib <<<
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 1 — OS Prerequisites and Host Packages
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -366,6 +416,13 @@ prompt_if_unset AQ_SYNC_ENDPOINT  "Enter AQ_SYNC_ENDPOINT (AWS ingest URL, leave
 # The Fleet API Key is retired (ADR-013): the Sentri authenticates Sync with its
 # Device Certificate (mTLS), installed by scripts/enroll_device.py after deploy.
 
+# Well count identity (#504). One human input at build time; empty ⇒ 4-well
+# baseline. Skip the prompt when the immutable record already exists (write-once).
+if [[ ! -e /opt/aquila/config/device_identity.json && -z "${DEVICE_WELLS:-}" ]]; then
+    read -rp "[Phase ${PHASE}] Enter well count (4 or 15) [4]: " DEVICE_WELLS </dev/tty || true
+fi
+DEVICE_WELLS="$(resolve_wells "${DEVICE_WELLS:-}")"
+
 WATCHTOWER_TOKEN="${WATCHTOWER_TOKEN:-$(openssl rand -hex 32)}"
 
 # acorn-ca renew front for automatic Device Certificate renewal (#279). Defaults
@@ -450,6 +507,20 @@ cat > /opt/aquila/config/host_config.json <<EOF
     }
 }
 EOF
+
+# device_identity.json — immutable well-count record (#504). Written write-once
+# and separate from host_config.json / device.env above, so regeneration of
+# those on a re-deploy never touches it. Rejects an unsupported count (halts the
+# deploy via set -e). No Device Certificate / acorn-ca involvement.
+write_device_identity /opt/aquila/config "${DEVICE_WELLS}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+run_test "device_identity.json exists" \
+    "test -f /opt/aquila/config/device_identity.json"
+run_test "device_identity.json is valid JSON" \
+    "python3 -c 'import json; json.load(open(\"/opt/aquila/config/device_identity.json\"))'"
+run_test "device_identity.json names a supported well count" \
+    "python3 -c 'import json; assert json.load(open(\"/opt/aquila/config/device_identity.json\"))[\"wells\"] in (4, 15)'"
+run_test "device_identity.json is immutable" \
+    "lsattr /opt/aquila/config/device_identity.json | awk '{print \$1}' | grep -q i"
 
 # state_config.json — static, same on all devices
 cat > /opt/aquila/config/state_config.json <<'EOF'
