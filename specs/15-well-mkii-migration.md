@@ -33,12 +33,13 @@ Rationale (see scoping analysis):
 
 **Core insight — 4-well and 15-well are the same shape:** both are a grid of `rows × cols`. SENTRI = `1×4` (one drawer row, axis sweeps 4 cols). Mk II = `3×5` (drawer indexes 3 rows, axis sweeps 5 cols). **4-well is the degenerate 1-row case of the identical traversal** — so there is nothing for an `if well_15:` to switch on; only *data* differs, never control flow.
 
-- [ ] **`PlateGeometry` value object** = single source of truth (replaces every `[1,2,3,4]`/`range(6)`/`4`). Fields: `rows`, `cols`, `axis_stops` (MEASURED steps, len = `cols + sensor_gap` — keep calibrated, not computed; current deltas are irregular 355/355/350/360/340), `drawer_rows` (measured steps, len = `rows`), `sensor_gap` (FAM/ROX carriage-stop offset — **unifies the latent `±1` vs 2-position bug**), `channels`. `well_count` is a **derived property** (`rows*cols`), never authored.
-- [ ] **Model registry**: `{"sentri": PlateGeometry(1×4,…), "mk2": PlateGeometry(3×5,…)}`. Geometry is a property of *which instrument this is*, not a per-device knob. Makes illegal states unrepresentable; a future 24-well = one registry entry, zero code changes.
-- [ ] **Device declares its model once** (`"model": "mk2"`) instead of the flag pile. Storage location = OPEN QUESTION (§17: declared config field vs. hardware-detected vs. managed shadow).
+- [ ] **`PlateGeometry` value object = PURELY LOGICAL** (grilled 2026-09-30): the single source of truth for *shape*, holding **no measured/physical values**. Fields: `rows`, `cols`, `sensor_gap` (FAM/ROX carriage-stop offset — **unifies the latent `±1` vs 2-position bug**), `channels`; `well_count` (`rows*cols`), `tube_ids`, and the serpentine scan order are **derived**. **The MEASURED motor steps (`axis.positions`, `drawer.read_steps`, `home_steps`, `step_multiplier`) stay in `host_config.json`, read by the MOTOR — NOT in `PlateGeometry`, NOT read by `geometry()`.** (Earlier drafts put `axis_stops`/`drawer_rows` in geometry — dropped; that coupled geometry to host_config for no reason.)
+- [ ] **Registry keyed by WELL COUNT (int)**: `GEOMETRIES = {4: PlateGeometry(rows=1, cols=4, …), 15: PlateGeometry(rows=3, cols=5, …)}`, invariant `GEOMETRIES[n].well_count == n` asserted at load. Makes illegal states unrepresentable; a future 24-well = one registry entry, zero code changes. Assumption: one canonical layout per well count.
+- [ ] **`geometry()` accessor** (`aq_lib/geometry.py`): reads ONLY `device_identity.json` (`{"wells": 15}`), validates `wells ∈ GEOMETRIES` (halt+log on unknown), returns the cached logical `PlateGeometry`. Zero `host_config` dependency. Storage of the well count = the immutable `device_identity.json` (§1b) — RESOLVED.
+- [ ] **Physical mapping stays in the motor**: `read_plan(geo)` emits LOGICAL stops ("col 3, row B"); the motor translates each to steps via its existing `host_config` positions (unchanged). **Consistency assert** at motor load: `len(config.axis.positions) == geo.cols + geo.sensor_gap` — a 15-well unit with a 6-position host_config fails loud instead of misbehaving. (One assert, no new file, no calibration migration.)
 - [ ] **Unified plan generator** (subsumes `optics_read_plan.OPTICS_READ_PLAN` + `optics_read_tasks`): `read_plan(geo)` yields the task stream for one pass — `for r in range(geo.rows): drawer_to(row); for stop: goto_position; capture(dyes_at_stop)`. SENTRI (`rows=1`) yields byte-identical today's 6-stop sweep; Mk II (`rows=3`) interleaves drawer moves. **The entire new control flow in `state_run_assay.py` is ONE new task case (`drawer_to` → `drawer.move_abs`)** — not an `if well_15`. `READS_PER_CYCLE` stays derived (`× geo.rows`).
 - [ ] This **deletes the PDF's `well_15` "pad the row with a 0 to mimic 5 wells" hack** — padding only existed because they forced 4-well to pretend to be 15-well; with rows×cols both are first-class.
-- [ ] Keep **4-well working unchanged**: absent `model` ⇒ `"sentri"` default.
+- [ ] Keep **4-well working unchanged**: absent `device_identity.json` ⇒ default `wells: 4`.
 - [ ] Kill dead constants (e.g. `DEFAULT_CURVE_WELLS` `aq_curve/pcr_curve_config.py:64`, defined but never consumed).
 
 **Keep the dual-ADC `'both'` channel as a SEPARATE axis** — it's an optics *capability*, not geometry. `read_plan` decides *where* to read; the optics strategy decides *how* to sample channels at a stop (sequential 1-ADC vs simultaneous 2-ADC). Model capability as its own small enum on the instrument (same registry pattern). Folding it into geometry reintroduces branching.
@@ -63,7 +64,7 @@ And here's the elegant bit: **if the ID encodes the shape** (EEPROM record, or e
 > - **The record:** `/opt/aquila/config/device_identity.json` = `{ "wells": 15, "schema": 1, "provisioned_utc": "…" }`. Value is the **well count `4` or `15`** (integer) — self-describing, matches how the units are talked about. It only *names* the geometry; the geometry data lives in the `aq_lib` code registry keyed by well count (`GEOMETRIES[15] → PlateGeometry(rows=3, cols=5, …)`), with the invariant `GEOMETRIES[n].well_count == n`.
 > - **Assumption:** one canonical layout per well count (4→1×4, 15→3×5). Revisit only if a same-count/different-layout build ever appears.
 > - **Written by the Greengrass deploy script**, host-side as root, **write-once**: `if [ ! -e ]` guard → write → `chattr +i` (immutable). A separate filename from `host_config.json`/`device.env` (both deploy-regenerated), so regeneration never touches it; the immutable bit blocks stray scripts/OTA/fat-finger edits.
-> - **Read by `aq_lib.detect_model()`** (container-side, plain file read via the `/opt/aquila/config` bind-mount — host sets the immutable bit, container only reads, so no container capability needed). Maps `wells` → `PlateGeometry`. **Input validation only, NO hardware cross-check** (decision 2026-09-29): unknown well count (typo/malformed) → halt+log; otherwise trust the flag. A valid-but-wrong flag (15 on a 4-well unit) is NOT software-caught → motor misbehaves on first run; backstop is careful provisioning + one-command re-provision. Removed the ADC-ID/homing check to drop the hardware + calibration dependency.
+> - **Read by `aq_lib.geometry()`** (container-side, plain file read via the `/opt/aquila/config` bind-mount — host sets the immutable bit, container only reads, so no container capability needed). Maps `wells` → `PlateGeometry`. **Input validation only, NO hardware cross-check** (decision 2026-09-29): unknown well count (typo/malformed) → halt+log; otherwise trust the flag. A valid-but-wrong flag (15 on a 4-well unit) is NOT software-caught → motor misbehaves on first run; backstop is careful provisioning + one-command re-provision. Removed the ADC-ID/homing check to drop the hardware + calibration dependency.
 > - **Recovery (bench):** `sudo chattr -i … && sudo rm …` → re-provision with the correct well count. Deliberate, one command — hard to change, but recoverable.
 > - **Lifecycle:** survives OTA/container swap (persistent volume); a full SD reimage wipes it → re-provision (a reimage is a re-birth). Deploy script must not `rm -rf` the config dir (immutable file would error).
 > - See §26 Phase A. Candidate ADR (hard-to-reverse, trade-off-driven: immutable file chosen over OTP-permanence and over cert-binding).
@@ -577,20 +578,21 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 ### Phase A — Configuration & hardware identity (Days 1–2)
 *Your priority #1: the model is a **declared value written at device birth**, in the hardware code layer — NOT a physical pin, NOT a surface/mutable config file. (Decision 2026-09-28: "Mk II board ⇒ 3×5 plate" is NOT a safe assumption, so the model is declared, not inferred from the board.)*
 
-**Goal:** `aq_lib.detect_model() → PlateGeometry`, resolved from a durable birth-written record and validated against live hardware, fail-loud on mismatch.
+**Goal:** `aq_lib.geometry() → PlateGeometry`, resolved from the immutable birth-written well-count record. Input validation only (unknown count → halt+log); no hardware cross-check.
 
 **Model-identity design — immutable well-count file (grilled 2026-09-29; full detail in §1b):**
 - **The record:** `/opt/aquila/config/device_identity.json` = `{ "wells": 15, "schema": 1, "provisioned_utc": "…" }`. Value = **well count `4`/`15`** (int). Names the geometry; geometry data is in the `aq_lib` registry keyed by well count (`GEOMETRIES[n].well_count == n` invariant).
 - **Written by the Greengrass deploy script**, host-side, **write-once + `chattr +i`** (immutable). Separate file from `host_config.json`/`device.env`. NOT attached to `acorn-ca`/cert.
-- **Read by `aq_lib.detect_model()`** (plain read via bind-mount) → geometry. Input validation only (unknown well count → halt+log); NO hardware cross-check — trusted flag.
+- **Read by `aq_lib.geometry()`** (plain read via bind-mount) → geometry. Input validation only (unknown well count → halt+log); NO hardware cross-check — trusted flag.
 - **Recovery:** `chattr -i` + re-provision. Survives OTA; SD reimage → re-provision.
 
 **Tasks:**
-- `PlateGeometry` value object (§1a): `rows, cols, axis_stops, drawer_rows, sensor_gap, channels`; `well_count`/`tube_ids` derived. Immutable.
+- `PlateGeometry` value object (§1a) — **purely logical**: `rows, cols, sensor_gap, channels`; `well_count`/`tube_ids`/scan-order derived. NO measured steps (those stay in host_config). Immutable.
 - `GEOMETRIES` registry in `aq_lib` keyed by well count: `4` = 1×4, `15` = 3×5; assert `well_count == n` at load.
 - Write the identity file (write-once + `chattr +i`) in the **Greengrass deploy script**.
-- `aq_lib.detect_model()`: read `device_identity.json` → `wells` → geometry; validate `wells ∈ GEOMETRIES` (halt+log on unknown); NO hardware cross-check.
-- Wire geometry as the single source of truth everywhere.
+- `aq_lib/geometry.py` `geometry()`: read `device_identity.json` → `wells` → cached logical `PlateGeometry`; validate `wells ∈ GEOMETRIES` (halt+log); reads NOTHING from host_config.
+- Motor keeps reading measured positions from `host_config` (unchanged); add the consistency assert `len(config.axis.positions) == geo.cols + geo.sensor_gap`.
+- Wire `geometry()` as the single source of truth for shape everywhere.
 
 **Problems:** deploy script must write the identity file write-once + `chattr +i` and not later `rm -rf` the config dir; a valid-but-wrong well count is a trusted-flag risk (not software-caught — accepted trade). **Board ≠ plate** (§1b) reinforces declaring the well count rather than inferring it.
 
