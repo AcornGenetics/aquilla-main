@@ -27,7 +27,8 @@
 - **The record:** `/opt/aquila/config/device_identity.json` = `{ "wells": 15, "schema": 1, "provisioned_utc": "…" }`. Value is the **well count `4` or `15`** (integer) — self-describing. It only *names* the geometry; the geometry data lives in the `aq_lib` code registry keyed by well count.
 - **Registry keyed by well count:** `GEOMETRIES = { 4: PlateGeometry(rows=1, cols=4, …), 15: PlateGeometry(rows=3, cols=5, …) }`, with the load-time invariant `GEOMETRIES[n].well_count == n`. Assumption: one canonical layout per well count (revisit only if a same-count/different-layout build appears).
 - **Written by the Greengrass deploy script**, host-side as root, **write-once**: `if [ ! -e ] → write → chattr +i` (immutable). Separate filename from `host_config.json`/`device.env` (both deploy-regenerated), so regeneration never touches it; the immutable bit blocks stray scripts / OTA / fat-finger edits. `DEVICE_MODEL`/well-count is the one human input at provisioning (default 4).
-- **Read by `aq_lib.detect_model()`** — container-side, plain file read via the `/opt/aquila/config` bind-mount (host sets the immutable bit; container only reads → no container capability needed). Maps `wells` → `PlateGeometry`, then cross-checks live hardware → halt+log on mismatch.
+- **Read by `aq_lib.detect_model()`** — container-side, plain file read via the `/opt/aquila/config` bind-mount (host sets the immutable bit; container only reads → no container capability needed). Maps `wells` → `PlateGeometry`. **Input validation only, NO hardware cross-check** (decision 2026-09-29): if `wells` is not a known geometry (e.g. a typo like `5`/`150`, or a malformed file) → halt+log; otherwise trust the flag and return the geometry.
+- **Trusted flag, accepted trade:** a *valid-but-wrong* flag (`wells: 15` on a physical 4-well unit, or vice-versa) is **not** software-caught → the motor drives to positions that don't exist on the first run. Backstop = careful once-at-build provisioning + one-command re-provision. No ADC-ID probe, no homing-travel check (removes the calibration dependency and the hardware coupling).
 - **Recovery (bench):** `sudo chattr -i … && sudo rm …` → re-provision. Deliberate, one command — hard to change, recoverable.
 - **Lifecycle:** survives OTA/container swap (persistent volume); a full SD reimage wipes it → re-provision. Deploy script must not `rm -rf` the config dir (immutable file errors).
 - **NOT attached to `acorn-ca`** — fully independent of the Device Certificate and the enroll/renew path. (OTP and cert-binding both considered and rejected: OTP is permanently un-recoverable; cert-binding couples to acorn-ca.)
@@ -36,15 +37,15 @@
 - Define `PlateGeometry` value object (§1a): `rows, cols, axis_stops, drawer_rows, sensor_gap, channels`; `well_count` / `tube_ids` derived. Immutable.
 - `GEOMETRIES` registry in `aq_lib` keyed by well count: `4` = 1×4, `15` = 3×5; assert `well_count == n` at load.
 - Add the write-once + `chattr +i` identity-file write to the **Greengrass deploy script** (`deployment3_greengrass.sh` / `deployment2.sh`).
-- Implement `aq_lib.detect_model()`: read `device_identity.json` → `wells` → geometry; cross-check hardware; fail loud on mismatch.
+- Implement `aq_lib.detect_model()`: read `device_identity.json` → `wells` → geometry; validate `wells ∈ GEOMETRIES` (halt+log on unknown); NO hardware cross-check.
 - Wire geometry as the single source of truth injected everywhere.
 
 **Problems:**
 - Deploy script must write the identity file write-once and set `chattr +i`; must not later `rm -rf` the config dir.
-- Homing-travel cross-check needs a calibrated threshold (soft signal → likely deferred until after Phase C calibration; see cross-check decision).
-- **Board ≠ plate** (§1b): a Mk II board can sit in a 4-well chassis — this is why the well count is *declared* (authoritative) and hardware is only a *cross-check*, not the source.
+- **Trusted flag:** a valid-but-wrong well count isn't software-caught (see design note) — relies on careful provisioning; accepted trade for removing the hardware/calibration dependency.
+- **Board ≠ plate** (§1b): a Mk II board can sit in a 4-well chassis — reinforces that the well count is *declared* (authoritative), not inferred from hardware.
 
-**Exit:** the well count comes from the immutable `device_identity.json` (not host_config); `aq_lib` resolves geometry from it; the live-hardware cross-check fails loud on mismatch; changing it requires `chattr -i` + re-provision.
+**Exit:** the well count comes from the immutable `device_identity.json` (not host_config); `aq_lib` resolves geometry from it; an unknown well count fails loud; changing it requires `chattr -i` + re-provision.
 
 ---
 
@@ -173,7 +174,8 @@
 ## Risk register (top items)
 | Risk | Phase | Mitigation |
 |---|---|---|
-| Identity file not written by deploy script | A | Add write-once + `chattr +i` to the Greengrass deploy script; ADC-ID + homing cross-check catches a mis-set well count |
+| Identity file not written by deploy script | A | Add write-once + `chattr +i` to the Greengrass deploy script |
+| Well count mis-provisioned (valid-but-wrong flag) | A | Accepted trade (no hardware check); careful once-at-build provisioning + one-command re-provision; motor misbehaves on first run if wrong |
 | 5-well physical calibration slips | C | Bench early; it gates D's tube ids |
 | Scan-time > 18 s at 15 wells | C | Measure early; backend + fewer flashes are levers |
 | Optics format churn (writer↔parser) | D/E | Freeze the file format before coding either |
@@ -183,5 +185,5 @@
 ## Definition of done
 - 4-well and 15-well both run through **one** geometry-driven path; no hardcoded counts or `elif` mode branches anywhere.
 - 15-well: correct serpentine motion, correct 15-tube optics file, correct parse / analysis / Cq, correct synced `run_complete` event.
-- Well count resolved from the immutable `device_identity.json`, hardware cross-checked, fail-loud.
+- Well count resolved from the immutable `device_identity.json`; unknown count fails loud (no hardware cross-check — trusted flag).
 - (GUI only if scope allowed.)

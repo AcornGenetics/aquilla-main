@@ -63,7 +63,7 @@ And here's the elegant bit: **if the ID encodes the shape** (EEPROM record, or e
 > - **The record:** `/opt/aquila/config/device_identity.json` = `{ "wells": 15, "schema": 1, "provisioned_utc": "…" }`. Value is the **well count `4` or `15`** (integer) — self-describing, matches how the units are talked about. It only *names* the geometry; the geometry data lives in the `aq_lib` code registry keyed by well count (`GEOMETRIES[15] → PlateGeometry(rows=3, cols=5, …)`), with the invariant `GEOMETRIES[n].well_count == n`.
 > - **Assumption:** one canonical layout per well count (4→1×4, 15→3×5). Revisit only if a same-count/different-layout build ever appears.
 > - **Written by the Greengrass deploy script**, host-side as root, **write-once**: `if [ ! -e ]` guard → write → `chattr +i` (immutable). A separate filename from `host_config.json`/`device.env` (both deploy-regenerated), so regeneration never touches it; the immutable bit blocks stray scripts/OTA/fat-finger edits.
-> - **Read by `aq_lib.detect_model()`** (container-side, plain file read via the `/opt/aquila/config` bind-mount — host sets the immutable bit, container only reads, so no container capability needed). Maps `wells` → `PlateGeometry`, then cross-checks live hardware (ADC-ID probe + homing travel) → halt+log on mismatch.
+> - **Read by `aq_lib.detect_model()`** (container-side, plain file read via the `/opt/aquila/config` bind-mount — host sets the immutable bit, container only reads, so no container capability needed). Maps `wells` → `PlateGeometry`. **Input validation only, NO hardware cross-check** (decision 2026-09-29): unknown well count (typo/malformed) → halt+log; otherwise trust the flag. A valid-but-wrong flag (15 on a 4-well unit) is NOT software-caught → motor misbehaves on first run; backstop is careful provisioning + one-command re-provision. Removed the ADC-ID/homing check to drop the hardware + calibration dependency.
 > - **Recovery (bench):** `sudo chattr -i … && sudo rm …` → re-provision with the correct well count. Deliberate, one command — hard to change, but recoverable.
 > - **Lifecycle:** survives OTA/container swap (persistent volume); a full SD reimage wipes it → re-provision (a reimage is a re-birth). Deploy script must not `rm -rf` the config dir (immutable file would error).
 > - See §26 Phase A. Candidate ADR (hard-to-reverse, trade-off-driven: immutable file chosen over OTP-permanence and over cert-binding).
@@ -233,7 +233,7 @@ Not software tasks, but they set the config flags and constraints above:
 
 ## 17. Cross-cutting open questions
 
-- [ ] **Model identity — DIRECTION: self-detect (detect-and-validate), not a declared flag.** Two senses, do NOT conflate:
+- [x] **Model identity — RESOLVED (2026-09-29): declared immutable well-count file, NO hardware self-detect. See §1b + §26 Phase A.** (The self-detect exploration below is superseded — the well count is a trusted provisioned flag, not inferred from ADC-ID/homing.) Original notes kept for context:
   - *Capability (dual-ADC board)* — reliably probeable TODAY: `adc_class.py` already has `REG_ID = 0x05`; open the 2nd ADC's chip-select and read the AD7124 ID register (present → valid ID, absent → floating `0x00`/`0xFF`). No hardware change.
   - *Geometry (1×4 vs 3×5 plate)* — NOT directly countable (no per-well sensor). Infer from homing travel (`motor_class.py`/`homing_log.py` already log `steps_to_flag`) — a 3-row/5-col build homes over longer travel. Softer signal; needs thresholds/calibration.
   - **Danger:** signals can disagree (PDF allows a Mk II *board* in a SENTRI backward-compat build → dual-ADC present but 4-well mechanics). Board ≠ plate. Misdetecting geometry = axis sweeps wrong span → mechanical crash. Detection MUST fail-loud on ambiguity, never default.
@@ -582,19 +582,19 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 **Model-identity design — immutable well-count file (grilled 2026-09-29; full detail in §1b):**
 - **The record:** `/opt/aquila/config/device_identity.json` = `{ "wells": 15, "schema": 1, "provisioned_utc": "…" }`. Value = **well count `4`/`15`** (int). Names the geometry; geometry data is in the `aq_lib` registry keyed by well count (`GEOMETRIES[n].well_count == n` invariant).
 - **Written by the Greengrass deploy script**, host-side, **write-once + `chattr +i`** (immutable). Separate file from `host_config.json`/`device.env`. NOT attached to `acorn-ca`/cert.
-- **Read by `aq_lib.detect_model()`** (plain read via bind-mount) → geometry → cross-check hardware → halt-and-log on mismatch.
+- **Read by `aq_lib.detect_model()`** (plain read via bind-mount) → geometry. Input validation only (unknown well count → halt+log); NO hardware cross-check — trusted flag.
 - **Recovery:** `chattr -i` + re-provision. Survives OTA; SD reimage → re-provision.
 
 **Tasks:**
 - `PlateGeometry` value object (§1a): `rows, cols, axis_stops, drawer_rows, sensor_gap, channels`; `well_count`/`tube_ids` derived. Immutable.
 - `GEOMETRIES` registry in `aq_lib` keyed by well count: `4` = 1×4, `15` = 3×5; assert `well_count == n` at load.
 - Write the identity file (write-once + `chattr +i`) in the **Greengrass deploy script**.
-- `aq_lib.detect_model()`: read `device_identity.json` → `wells` → geometry; cross-check ADC-ID + homing travel; fail loud.
+- `aq_lib.detect_model()`: read `device_identity.json` → `wells` → geometry; validate `wells ∈ GEOMETRIES` (halt+log on unknown); NO hardware cross-check.
 - Wire geometry as the single source of truth everywhere.
 
-**Problems:** provisioning/enroll must write the birth record (coordinate early); persistent location must survive reimage AND sit off the deploy-regen path; homing-travel threshold needs calibration. **Board ≠ plate** (§1b) is *why* the model is declared-at-birth (authoritative) with hardware as cross-check only.
+**Problems:** deploy script must write the identity file write-once + `chattr +i` and not later `rm -rf` the config dir; a valid-but-wrong well count is a trusted-flag risk (not software-caught — accepted trade). **Board ≠ plate** (§1b) reinforces declaring the well count rather than inferring it.
 
-**Exit:** model comes from the birth record (not host_config); `aq_lib` resolves geometry from it; live-hardware cross-check fails loud on mismatch; changing the model requires re-provisioning.
+**Exit:** well count comes from the immutable `device_identity.json` (not host_config); `aq_lib` resolves geometry from it; an unknown well count fails loud; changing it requires `chattr -i` + re-provision.
 
 ---
 
@@ -712,7 +712,8 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 ### Risk register (top items)
 | Risk | Phase | Mitigation |
 |---|---|---|
-| Identity file not written by deploy script | A | Add write-once + `chattr +i` to the Greengrass deploy script; ADC-ID + homing cross-check catches a mis-set well count |
+| Identity file not written by deploy script | A | Add write-once + `chattr +i` to the Greengrass deploy script |
+| Well count mis-provisioned (valid-but-wrong flag) | A | Accepted trade (no hardware check); careful once-at-build provisioning + one-command re-provision |
 | 5-well physical calibration slips | C | Bench early; it gates D's tube ids |
 | Scan-time > 18 s at 15 wells | C | Measure early; lgpio/backend + fewer flashes are levers |
 | Optics format churn (writer↔parser) | D/E | Freeze the §21d format before coding either |
@@ -722,7 +723,7 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 ### Definition of done
 - 4-well and 15-well both run through **one** geometry-driven path; no hardcoded counts or `elif` mode branches anywhere.
 - 15-well: correct serpentine motion, correct 15-tube optics file, correct parse/analysis/Cq, correct synced event, usable kiosk UI.
-- Well count resolved from the immutable `device_identity.json`, hardware cross-checked, fail-loud.
+- Well count resolved from the immutable `device_identity.json`; unknown count fails loud (no hardware cross-check — trusted flag).
 
 ---
 
