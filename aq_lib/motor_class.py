@@ -2,6 +2,7 @@ import time
 import logging
 import pigpio
 from aq_lib.config_module import Config
+from aq_lib.geometry import geometry, assert_axis_positions_match
 from aq_lib.homing_log import emit_homing_sample
 
 HIGH = 1
@@ -254,6 +255,11 @@ class Axis ( Motor ):
         if "positions" in config.axis:
             self.positions = config.axis["positions"]
             logger.info("Loaded axis positions from config: %s", self.positions)
+
+            # Fail loud if the measured axis stops don't match the device's
+            # provisioned geometry (e.g. a 15-well unit still on the 4-well
+            # host_config), before we drive to positions that don't exist (#505).
+            assert_axis_positions_match(geometry(), self.positions)
 
             self.positions.append(0) # temprary fix to ensure that postions[-1] refers to 0 to imitate the first well while testing the 15-well setup
             # In the future, the code will check whether six or seven positions were provided

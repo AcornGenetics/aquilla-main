@@ -8,11 +8,28 @@ resolves it to a purely-logical PlateGeometry. 4-well is the baseline build;
 defaults to 4-well.
 """
 import json
+from pathlib import Path
 
 import pytest
 
 from aq_lib import geometry as geometry_mod
-from aq_lib.geometry import GEOMETRIES, PlateGeometry, geometry, validate_registry
+from aq_lib.geometry import (
+    GEOMETRIES,
+    PlateGeometry,
+    assert_axis_positions_match,
+    geometry,
+    validate_registry,
+)
+
+def _shipped_axis_positions():
+    """The real measured axis stops from the repo's 4-well host_config.json —
+    read, not hardcoded, so this stays a genuine 4-well regression guard."""
+    cfg = json.loads(
+        (Path(__file__).resolve().parents[2] / "config_files" / "host_config.json")
+        .read_text()
+    )
+    device = next(iter(cfg.values()))
+    return device["axis"]["positions"]
 
 
 @pytest.fixture
@@ -129,3 +146,18 @@ def test_geometry_halts_loud_when_the_well_count_is_missing(config_dir, caplog):
     with pytest.raises(ValueError):
         geometry()
     assert "device_identity.json" in caplog.text
+
+
+def test_shipped_four_well_host_config_matches_the_four_well_geometry():
+    # The real 4-well host_config has cols(4) + sensor_gap(2) = 6 stops — a
+    # match, so the check returns normally (no raise). Doubles as a guard that
+    # the shipped 4-well config stays consistent with the 4-well geometry.
+    assert_axis_positions_match(GEOMETRIES[4], _shipped_axis_positions())
+
+
+def test_mismatched_axis_positions_fail_loud():
+    # The issue's example: a 15-well unit whose host_config still only carries
+    # the 4-well axis stops (6, not 5+2=7). Fail loud before the motor drives to
+    # positions that don't exist.
+    with pytest.raises(ValueError):
+        assert_axis_positions_match(GEOMETRIES[15], _shipped_axis_positions())
