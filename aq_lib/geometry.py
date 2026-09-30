@@ -18,10 +18,11 @@ logger = logging.getLogger(__name__)
 class PlateGeometry:
     rows: int
     cols: int
-    # sensor_gap: the FAM/ROX carriage-stop offset — the measured axis has one
-    # stop per column PLUS this gap, so host_config carries cols + sensor_gap
-    # positions. 2 for both current builds.
-    sensor_gap: int = 2
+    sensor_gap: int = 2  # FAM/ROX carriage-stop offset: the two optical sensors
+    # sit this many stops apart, so a row sweeps cols + sensor_gap carriage stops
+    # and each dye reads a window of columns offset by the gap. Logical only —
+    # the measured step for each stop lives in host_config.json, read by the motor.
+    # 2 for both current builds.
 
     @property
     def well_count(self) -> int:
@@ -46,6 +47,14 @@ class PlateGeometry:
             for col in cols:
                 order.append(self._tube_id(row, col))
         return order
+
+    def tube_at(self, row: int, stop: int, dye: str) -> str:
+        """The tube id whose ``dye`` is captured at carriage ``stop`` in drawer
+        ``row``. ROX reads the column at its own stop; FAM trails by
+        ``sensor_gap``, so it reads the column ``sensor_gap`` stops back. This
+        inverts ``read_plan`` — it labels a capture with the tube it belongs to."""
+        col = stop if dye == "rox" else stop - self.sensor_gap
+        return self._tube_id(row, col)
 
     def _tube_id(self, row: int, col: int) -> str:
         return f"{col + 1}{chr(ord('A') + row)}"

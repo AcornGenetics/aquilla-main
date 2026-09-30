@@ -2,7 +2,8 @@ import time
 import logging
 import pigpio
 from aq_lib.config_module import Config
-from aq_lib.geometry import geometry, assert_axis_positions_match
+from aq_lib.geometry import geometry
+from aq_lib.plate_positions import axis_stops, drawer_rows
 from aq_lib.homing_log import emit_homing_sample
 
 HIGH = 1
@@ -211,8 +212,15 @@ class Drawer ( Motor ):
     DIR_FORWARD_STATE = HIGH
     step_multiplier = config.drawer["step_multiplier"]
     open_steps = config.drawer["open_steps"]
-    read_steps = config.drawer["read_steps"]
     home_steps = config.drawer["home_steps"]
+
+    def __init__( self ):
+        super().__init__()
+        # Measured read position per plate row (A, B, C…) from host_config.json
+        # (drawer.rows), validated against the provisioned geometry. A 4-well
+        # plate is the degenerate 1-row case with a single read position.
+        self.rows = drawer_rows( config.drawer, geometry() )
+        logger.info("Loaded drawer row positions from config: %s", self.rows)
 
     def open( self ):
         self.home()
@@ -226,14 +234,14 @@ class Drawer ( Motor ):
     def read( self ):
         self.home()
         # pulse_delay 0.00007 (was 0.0001) to match open(); step_delay kept at 0.001.
-        ret = self.move_wo_home_flag ( self.read_steps, 0.001, 0.0001 )
+        # Row A is the read position for a 4-well (1-row) plate.
+        ret = self.move_wo_home_flag ( self.rows[0], 0.001, 0.0001 )
 
-    def goto_position( self, N ):
-        if not isinstance(N, (int, float)): # if N is not a number; meant for "opening up" tuples while preserving backwards compatibility
-            N = N[1]
-        else: return
-        logger.info( "Drawer Go to position: %d", N )
-        self.move_abs_wo_home_flag( self.read_steps+N*320, 0.000, 0.0001)
+    def goto_row( self, row_index ):
+        # Position the drawer at plate row `row_index` (0=A, 1=B, 2=C…). Absolute
+        # addressing: each row is an independently-calibrated read position.
+        logger.info( "Drawer go to row %d", row_index )
+        self.move_abs_wo_home_flag( self.rows[row_index], 0.000, 0.0001 )
 
 class Axis ( Motor ):
 
@@ -250,31 +258,15 @@ class Axis ( Motor ):
     def __init__( self ):
         super().__init__()
 
-        # Read positions directly from config if available,
-        # otherwise fall back to calculating from well_one and well_spacing
-        if "positions" in config.axis:
-            self.positions = config.axis["positions"]
-            logger.info("Loaded axis positions from config: %s", self.positions)
-
-            # Fail loud if the measured axis stops don't match the device's
-            # provisioned geometry (e.g. a 15-well unit still on the 4-well
-            # host_config), before we drive to positions that don't exist (#505).
-            assert_axis_positions_match(geometry(), self.positions)
-
-            self.positions.append(0) # temprary fix to ensure that postions[-1] refers to 0 to imitate the first well while testing the 15-well setup
-            # In the future, the code will check whether six or seven positions were provided
-            # If seven - all is good, less - throw an error that 15-well mode cannot be used unless all positions are provided
-
-        else:
-            # Legacy fallback: calculate from well_one and well_spacing
-            w0 = config.axis.get("well_one", 300)
-            dw = config.axis.get("well_spacing", 355)
-            self.positions = [ w0 + dw*i for i in range(6) ]
-            logger.info("Calculated axis positions (legacy): %s", self.positions)
+        # Measured carriage steps come from host_config.json (axis.stops), one
+        # per stop index the read plan emits (cols + sensor_gap). axis_stops
+        # validates them against the device's provisioned geometry (via
+        # assert_axis_positions_match, #505) — a host_config that doesn't match
+        # the plate fails loud here, not mid-run.
+        self.positions = axis_stops( config.axis, geometry() )
+        logger.info("Loaded axis stops from config: %s", self.positions)
 
     def goto_position( self, N ):
-        if not isinstance(N, (int, float)): # if N is not a number
-            N = N[0]
         logger.info( "Go to position: %d", N )
         self.move_abs_wo_home_flag( self.positions[N], 0.000, 0.0001 )
 

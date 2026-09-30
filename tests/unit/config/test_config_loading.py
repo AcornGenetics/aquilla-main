@@ -164,13 +164,14 @@ def test_loaded_config_has_required_top_level_keys(monkeypatch):
 
 
 @pytest.mark.unit
-def test_drawer_config_has_open_read_home_steps(monkeypatch):
-    """drawer config must include open_steps, read_steps, and home_steps."""
+def test_drawer_config_has_open_rows_home_steps(monkeypatch):
+    """drawer config must include open_steps, per-row read positions, and
+    home_steps. read_steps was replaced by labelled drawer.rows (#510)."""
     monkeypatch.setenv("DEVICE_HOSTNAME", "sn01")
     monkeypatch.setenv("CONFIG_DIR", REAL_CONFIG_DIR)
     cfg = Config()
     drawer = cfg.dict["drawer"]
-    for key in ("open_steps", "read_steps", "home_steps"):
+    for key in ("open_steps", "rows", "home_steps"):
         assert key in drawer, f"drawer missing key '{key}'"
 
 
@@ -189,15 +190,17 @@ def test_drawer_open_steps_is_integer(monkeypatch):
 
 
 @pytest.mark.unit
-def test_axis_config_has_positions_list_of_length_6(monkeypatch):
-    """axis.positions must be a list with exactly 6 entries."""
+def test_axis_config_has_stops_list_of_length_6(monkeypatch):
+    """axis.stops must be a list with exactly 6 entries for a 4-well device
+    (4 columns + a 2-stop FAM/ROX sensor gap). positions was renamed to stops
+    when the schema became a 2-D coordinate system (#510)."""
     monkeypatch.setenv("DEVICE_HOSTNAME", "sn01")
     monkeypatch.setenv("CONFIG_DIR", REAL_CONFIG_DIR)
     cfg = Config()
-    positions = cfg.dict["axis"]["positions"]
-    assert isinstance(positions, list), "axis.positions is not a list"
-    assert len(positions) == 6, (
-        f"axis.positions has {len(positions)} entries, expected 6"
+    stops = cfg.dict["axis"]["stops"]
+    assert isinstance(stops, list), "axis.stops is not a list"
+    assert len(stops) == 6, (
+        f"axis.stops has {len(stops)} entries, expected 6"
     )
 
 

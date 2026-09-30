@@ -23,13 +23,14 @@ from aq_lib.geometry import (
 
 def _shipped_axis_positions():
     """The real measured axis stops from the repo's 4-well host_config.json —
-    read, not hardcoded, so this stays a genuine 4-well regression guard."""
+    read, not hardcoded, so this stays a genuine 4-well regression guard.
+    axis.positions was renamed axis.stops in the 2-D coordinate schema (#510)."""
     cfg = json.loads(
         (Path(__file__).resolve().parents[2] / "config_files" / "host_config.json")
         .read_text()
     )
     device = next(iter(cfg.values()))
-    return device["axis"]["positions"]
+    return device["axis"]["stops"]
 
 
 @pytest.fixture
@@ -90,6 +91,37 @@ def test_tube_ids_stay_row_major_regardless_of_scan_order():
         "1B", "2B", "3B", "4B", "5B",
         "1C", "2C", "3C", "4C", "5C",
     ]
+
+
+def test_four_well_sensor_gap_defaults_to_two():
+    # The FAM/ROX carriage offset the 4-well profile has always used.
+    assert PlateGeometry(rows=1, cols=4).sensor_gap == 2
+
+
+def test_tube_at_maps_rox_to_its_stop_and_fam_to_the_gap_shifted_stop():
+    # ROX reads the column at its own carriage stop; FAM trails by sensor_gap,
+    # so the SAME tube's FAM capture happens `sensor_gap` stops later. The
+    # inverse — (row, stop, dye) -> tube id — is what labels a capture.
+    geo = PlateGeometry(rows=3, cols=5)  # sensor_gap 2
+    assert geo.tube_at(row=0, stop=0, dye="rox") == "1A"
+    assert geo.tube_at(row=0, stop=2, dye="fam") == "1A"  # same tube, 2 stops later
+    assert geo.tube_at(row=1, stop=4, dye="rox") == "5B"
+    assert geo.tube_at(row=2, stop=6, dye="fam") == "5C"
+
+
+def test_read_plan_reads_every_fifteen_well_tube_in_both_dyes_exactly_once():
+    # Coverage: the generated plan, labelled through tube_at, touches all 15
+    # tubes and captures each in BOTH dyes — no tube missed, none doubled.
+    from aq_lib.optics_read_plan import read_plan
+
+    geo = PlateGeometry(rows=3, cols=5)
+    seen: dict[str, list[str]] = {}
+    for row, stop, dyes in read_plan(geo):
+        for dye in dyes:
+            seen.setdefault(geo.tube_at(row=row, stop=stop, dye=dye), []).append(dye)
+
+    assert set(seen) == set(geo.tube_ids)
+    assert all(sorted(d) == ["fam", "rox"] for d in seen.values())
 
 
 def test_shipping_registry_satisfies_the_well_count_invariant():
