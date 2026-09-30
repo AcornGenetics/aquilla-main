@@ -58,7 +58,15 @@ And here's the elegant bit: **if the ID encodes the shape** (EEPROM record, or e
 
 **If you have no NVM today:** keep a config file, but reframe it as *"the QC-generated birth certificate for this unit"* (calibration + shape, written by a QC tool, validated by detection) — **not** engineer-toggled behavior flags. That's a normal, defensible use of a file, and it's a drop-in path to the EEPROM version later.
 
-> **DECISION (2026-09-28) — software birth record, no physical marker.** Not a GPIO strap / EEPROM (rejected: no physical add). And **"Mk II board ⇒ 3×5 plate" is NOT a safe assumption**, so the model can't be inferred from the board alone. Instead: a **small declared `model` written at device *birth* (enrollment/provisioning)**, stored in a **root-owned file on the persistent volume, outside the deploy-regenerated `host_config.json`** — durable, survives reimage, and *not easy to change* (re-provisioning, not a JSON edit). `aq_lib.detect_model()` reads it → geometry, and **cross-checks live hardware** (ADC-ID probe + homing travel) to fail loud on a mis-set record. Tamper dial: Tier 1 = root-owned birth file (now); Tier 2 = sign / bind into the device certificate at enrollment (`acorn-ca`) later. See §26 Phase A for the plan. This supersedes the strap/EEPROM framing above: the "birth certificate" is a **provisioning-written protected file read in the hardware layer**, not an NVM chip.
+> **DECISION (2026-09-29, grilled) — immutable well-count file, deploy-written, NO acorn-ca.** Resolved design (supersedes the strap/EEPROM and the cert-binding framing above):
+> - **Rejected:** GPIO strap / EEPROM (no physical add); inferring from the board (**"Mk II board ⇒ 3×5 plate" is NOT safe**); binding into the Device Certificate (**explicitly NOT attached to `acorn-ca`** — the model record is fully independent of the cert/enroll/renew path).
+> - **The record:** `/opt/aquila/config/device_identity.json` = `{ "wells": 15, "schema": 1, "provisioned_utc": "…" }`. Value is the **well count `4` or `15`** (integer) — self-describing, matches how the units are talked about. It only *names* the geometry; the geometry data lives in the `aq_lib` code registry keyed by well count (`GEOMETRIES[15] → PlateGeometry(rows=3, cols=5, …)`), with the invariant `GEOMETRIES[n].well_count == n`.
+> - **Assumption:** one canonical layout per well count (4→1×4, 15→3×5). Revisit only if a same-count/different-layout build ever appears.
+> - **Written by the Greengrass deploy script**, host-side as root, **write-once**: `if [ ! -e ]` guard → write → `chattr +i` (immutable). A separate filename from `host_config.json`/`device.env` (both deploy-regenerated), so regeneration never touches it; the immutable bit blocks stray scripts/OTA/fat-finger edits.
+> - **Read by `aq_lib.detect_model()`** (container-side, plain file read via the `/opt/aquila/config` bind-mount — host sets the immutable bit, container only reads, so no container capability needed). Maps `wells` → `PlateGeometry`, then cross-checks live hardware (ADC-ID probe + homing travel) → halt+log on mismatch.
+> - **Recovery (bench):** `sudo chattr -i … && sudo rm …` → re-provision with the correct well count. Deliberate, one command — hard to change, but recoverable.
+> - **Lifecycle:** survives OTA/container swap (persistent volume); a full SD reimage wipes it → re-provision (a reimage is a re-birth). Deploy script must not `rm -rf` the config dir (immutable file would error).
+> - See §26 Phase A. Candidate ADR (hard-to-reverse, trade-off-driven: immutable file chosen over OTP-permanence and over cert-binding).
 
 ---
 
@@ -571,18 +579,17 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 
 **Goal:** `aq_lib.detect_model() → PlateGeometry`, resolved from a durable birth-written record and validated against live hardware, fail-loud on mismatch.
 
-**Model-identity design — software "birth certificate":**
-- **What:** a minimal record `{ "model": "mk2" }` read by `aq_lib` to select the `PlateGeometry` from the code registry. Geometry *data* is code; the record only names the profile.
-- **When (birth):** written **once at enrollment/provisioning** (`provision --model mk2`); not per-run, not operator-set.
-- **Where (durable, not surface):** **root-owned file on the persistent data volume**, *outside* the deploy-regenerated `host_config.json` path (so `deployment2.sh` never rewrites it; survives reimage/OTA). Changing it = re-provisioning, not a JSON edit.
-- **Validated in hardware code:** `detect_model()` reads the record → model → geometry, then cross-checks live hardware — 2nd-ADC ID probe (`REG_ID=0x05`) + homing travel. Mismatch → halt-and-log, never default.
-- **Tamper dial:** Tier 1 (this effort) = root-owned persistent birth file; Tier 2 (follow-up) = sign / bind into the device certificate at enrollment (`acorn-ca`). Design Tier 1 so Tier 2 layers on.
+**Model-identity design — immutable well-count file (grilled 2026-09-29; full detail in §1b):**
+- **The record:** `/opt/aquila/config/device_identity.json` = `{ "wells": 15, "schema": 1, "provisioned_utc": "…" }`. Value = **well count `4`/`15`** (int). Names the geometry; geometry data is in the `aq_lib` registry keyed by well count (`GEOMETRIES[n].well_count == n` invariant).
+- **Written by the Greengrass deploy script**, host-side, **write-once + `chattr +i`** (immutable). Separate file from `host_config.json`/`device.env`. NOT attached to `acorn-ca`/cert.
+- **Read by `aq_lib.detect_model()`** (plain read via bind-mount) → geometry → cross-check hardware → halt-and-log on mismatch.
+- **Recovery:** `chattr -i` + re-provision. Survives OTA; SD reimage → re-provision.
 
 **Tasks:**
 - `PlateGeometry` value object (§1a): `rows, cols, axis_stops, drawer_rows, sensor_gap, channels`; `well_count`/`tube_ids` derived. Immutable.
-- Model registry in `aq_lib`: `sentri` = 1×4, `mk2` = 3×5.
-- Write the birth record in the **enrollment/provisioning** path → root-owned persistent file.
-- `aq_lib.detect_model()`: read record → geometry; validate via ADC-ID + homing travel; fail loud.
+- `GEOMETRIES` registry in `aq_lib` keyed by well count: `4` = 1×4, `15` = 3×5; assert `well_count == n` at load.
+- Write the identity file (write-once + `chattr +i`) in the **Greengrass deploy script**.
+- `aq_lib.detect_model()`: read `device_identity.json` → `wells` → geometry; cross-check ADC-ID + homing travel; fail loud.
 - Wire geometry as the single source of truth everywhere.
 
 **Problems:** provisioning/enroll must write the birth record (coordinate early); persistent location must survive reimage AND sit off the deploy-regen path; homing-travel threshold needs calibration. **Board ≠ plate** (§1b) is *why* the model is declared-at-birth (authoritative) with hardware as cross-check only.
@@ -705,7 +712,7 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 ### Risk register (top items)
 | Risk | Phase | Mitigation |
 |---|---|---|
-| Hardware strap/EEPROM not ready | A | Coordinate day 1; interim ADC-ID + declared-model fallback |
+| Identity file not written by deploy script | A | Add write-once + `chattr +i` to the Greengrass deploy script; ADC-ID + homing cross-check catches a mis-set well count |
 | 5-well physical calibration slips | C | Bench early; it gates D's tube ids |
 | Scan-time > 18 s at 15 wells | C | Measure early; lgpio/backend + fewer flashes are levers |
 | Optics format churn (writer↔parser) | D/E | Freeze the §21d format before coding either |
@@ -715,7 +722,7 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 ### Definition of done
 - 4-well and 15-well both run through **one** geometry-driven path; no hardcoded counts or `elif` mode branches anywhere.
 - 15-well: correct serpentine motion, correct 15-tube optics file, correct parse/analysis/Cq, correct synced event, usable kiosk UI.
-- Model resolved from a **hardware** signal, fail-loud.
+- Well count resolved from the immutable `device_identity.json`, hardware cross-checked, fail-loud.
 
 ---
 

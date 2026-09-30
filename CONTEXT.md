@@ -50,7 +50,7 @@ The on-device reconciler that keeps a Sentri's [[Managed Profile]]s in step with
 _Avoid_: treating the agent as part of the app/backend — it is deliberately decoupled so profile delivery does not ride on the app's lifecycle or its credentials.
 
 **Run**
-A single execution of a Protocol on a Sentri, producing results for up to 4 Wells. A Run has a start time, end time, and status (completed, aborted). A Run is the unit of event emission — one `run_complete` event per Run. The `run_complete` event records `{profile name, canonical content sha256}` so the exact recipe is reconstructable from versioned S3 (ADR-0002).
+A single execution of a Protocol on a Sentri, producing results for each of its Wells (the count set by the instrument's [[Plate Geometry]] — 4 or 15). A Run has a start time, end time, and status (completed, aborted). A Run is the unit of event emission — one `run_complete` event per Run. The `run_complete` event records `{profile name, canonical content sha256}` so the exact recipe is reconstructable from versioned S3 (ADR-0002).
 
 ### Profile Authoring
 
@@ -77,13 +77,17 @@ A [[Profile]] authored by the structured editor. Identified solely by the presen
 Any [[Profile]] without a `stages` object — every Profile that predates the structured editor, plus all bundled Profiles. Opens read-only in the app (no in-app editing); still runnable and still hand-editable as a JSON file on disk. Adding a valid `stages` block to a Legacy Profile's file promotes it to a Structured Profile.
 
 **Well**
-One of 4 sample positions (numbered 1–4) in the Sentri carousel. Each Well is read independently.
+One of the sample positions in the Sentri carousel; each Well is read independently. The number of Wells depends on the instrument's [[Plate Geometry]]: the 4-well build has 4 (numbered 1–4, a single row), the 15-well (Mk II) build has 15 (a 3×5 grid). "Well count" is not a fixed constant — it is derived from the Plate Geometry the device is provisioned as.
+_Avoid_: hardcoding "4" — the 4-well layout is the degenerate single-row case of the same model.
+
+**Plate Geometry**
+The physical arrangement of a Sentri's Wells, as `rows × columns` (4-well = 1×4, 15-well = 3×5). It is the single source of truth for how many Wells exist, where they sit, and the scan order; `well_count` is derived (`rows × cols`). Which geometry a given unit has is fixed at the physical build and recorded once as a **well count** in the device's immutable identity record (provisioned, not a live config toggle). Distinct from a [[Protocol]] (which defines the assay, not the hardware layout).
 
 **Channel**
 One of 2 optical measurement channels: `fam` or `rox`. Channels are labels for optical hardware, not named biological targets. Each Well produces one Call per Channel per Run.
 
 **Call**
-The analytical outcome for a single Well × Channel pair within a Run. One of: `Detected`, `Not Detected`, `Inconclusive`, `ROX Unavailable`. A Run produces up to 8 Calls (4 wells × 2 channels).
+The analytical outcome for a single Well × Channel pair within a Run. One of: `Detected`, `Not Detected`, `Inconclusive`, `ROX Unavailable`. A Run produces up to `well_count × 2` Calls (2 Channels per Well) — 8 on a 4-well build, 30 on a 15-well build.
 
 **Well Verdict**
 The single aggregated outcome for a Well, derived from its two Channel Calls for display in the History detail view. One of: `Detected`, `Inconclusive`, `Not Detected`. Resolved by precedence **Detected > Inconclusive > Not Detected** — a Well is Detected if *any* Channel is Detected, else Inconclusive if any Channel is Inconclusive, else Not Detected. A `ROX Unavailable` Call is excluded from the verdict (the Well Verdict then comes from FAM alone). Distinct from a Call: a Call is per Channel; a Well Verdict is per Well. The Well Verdict drives the pill color and the Detected/Inconclusive KPI counts (a Well counts toward exactly one bucket — its verdict), while the pill *text* still names both Channels' individual Calls. Note: the Well Verdict does **not** drive [[QC Status]] — QC is evaluated on the underlying Channel Calls, so an Inconclusive Channel still flags QC even when the Well Verdict is Detected. (Earlier the precedence was Inconclusive > Detected; see ADR for the reversal.)
