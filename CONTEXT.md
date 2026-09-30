@@ -86,6 +86,12 @@ The physical arrangement of a Sentri's Wells, as `rows × columns` (4-well = 1×
 **Channel**
 One of 2 optical measurement channels: `fam` or `rox`. Channels are labels for optical hardware, not named biological targets. Each Well produces one Call per Channel per Run.
 
+**Sensor Gap**
+The fixed offset — measured in carriage read stops — between the ROX optical sensor and the FAM optical sensor along a row of Wells. Because the two sensors sit that far apart, each Well passes under ROX first and under FAM `sensor_gap` stops later, so a row of `cols` Wells requires `cols + sensor_gap` carriage stops to read both Channels of every Well. It is a property of the [[Plate Geometry]] (currently 2 for every build) and the single source of the Channel offset — superseding the scattered "±1 / 2-position" offsets in the older read and parse code.
+
+**Overhang**
+The carriage read stops at each end of a row where only **one** Channel's sensor has a real Well beneath it (the other sensor is off the end of the row). Overhang stops are a direct consequence of the [[Sensor Gap]]: there are `sensor_gap` of them at each end. A reading captured for a Channel with no Well under its sensor at that stop is not a real sample and is excluded by construction, not by index arithmetic.
+
 **Call**
 The analytical outcome for a single Well × Channel pair within a Run. One of: `Detected`, `Not Detected`, `Inconclusive`, `ROX Unavailable`. A Run produces up to `well_count × 2` Calls (2 Channels per Well) — 8 on a 4-well build, 30 on a 15-well build.
 

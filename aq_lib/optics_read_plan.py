@@ -6,6 +6,7 @@ so the optics completeness math stays in sync if the pattern ever changes
 (acorn-analytics#45: reads_per_cycle is a property of the capture pattern, not a
 magic 8/480). Kept hardware-free so both read_wells and the tests import it.
 """
+from aq_lib.geometry import geometry
 
 # position -> dyes captured at that carriage position, in capture order.
 # rox at phases 0-3, fam at phases 2-5 (8 blinks per pass for this profile).
@@ -27,31 +28,81 @@ OPTICS_READ_PLAN_2ADC = [
     (5, ("both",)),
 ]
 
-OPTICS_READ_PLAN_15 = [] # positions here are tuples of two values, where the first value is axis position, and the second value - drawer position
-OPTICS_READ_PLAN_15.extend( ((i-1, -1), ("both",)) for i in range(7) )
-OPTICS_READ_PLAN_15.extend( ((5-i, 0), ("both",)) for i in range(7) )
-OPTICS_READ_PLAN_15.extend( ((i-1, 1), ("both",)) for i in range(7) )
+def read_plan(geo):
+    """Generate the optical capture pattern for one read pass from plate geometry.
+
+    Hardware-free: yields LOGICAL ``(row_index, stop_index, dyes)`` triples in
+    traversal order. The motor maps ``stop_index`` -> ``axis.stops[stop_index]``
+    and ``row_index`` -> ``drawer.rows``; nothing here knows measured steps.
+
+    The FAM/ROX sensors sit ``geo.sensor_gap`` carriage stops apart, so each row
+    sweeps ``cols + sensor_gap`` stops: ROX reads columns ``[0, cols)``, FAM the
+    gap-shifted window ``[sensor_gap, sensor_gap + cols)``, both captured where
+    the windows overlap. Rows serpentine (alternate direction) so the axis never
+    doubles back to the start of a row. The 4-well device is the degenerate
+    1-row case and reproduces ``OPTICS_READ_PLAN`` exactly.
+
+    Single-ADC sequential rox/fam model (#510). Dual-ADC simultaneous ``'both'``
+    capture (Risk B) will later swap the per-stop dye set, not this traversal.
+    """
+    stops = geo.cols + geo.sensor_gap
+    plan = []
+    for row in range(geo.rows):
+        stop_order = range(stops) if row % 2 == 0 else reversed(range(stops))
+        for stop in stop_order:
+            dyes = []
+            if 0 <= stop < geo.cols:
+                dyes.append("rox")
+            if geo.sensor_gap <= stop < geo.sensor_gap + geo.cols:
+                dyes.append("fam")
+            if dyes:
+                plan.append((row, stop, tuple(dyes)))
+    return plan
 
 # Blinks fired per read pass = number of captures in the plan.
 READS_PER_CYCLE = sum(len(dyes) for _, dyes in OPTICS_READ_PLAN)
-READS_PER_CYCLE_15 = sum(len(dyes) for _, dyes in OPTICS_READ_PLAN_15)
 
 
-def optics_read_tasks(cycle, well_15_mode = False, updated4 = False):
-    """Executor tasks for one optical read pass: goto + capture per position,
-    then re-home for the next pass. read_wells enqueues exactly these."""
+def optics_read_tasks(cycle, geo=None, updated4=False):
+    """Executor tasks for one optical read pass, generated from plate geometry.
+
+    For each ``(row, stop, dyes)`` in ``read_plan(geo)``: emit a ``drawer_to`` when
+    the plate row changes (multi-row plates only — a 1-row 4-well plate emits
+    none, staying byte-identical to the legacy sequence), a ``goto_position`` for
+    the axis stop, then a ``capture`` per dye. The pass closes by re-homing the
+    axis. ``geo`` defaults to the device's provisioned geometry.
+
+    ``updated4`` keeps the single-row dual-ADC ``'both'`` path unchanged (Risk B,
+    out of #510)."""
+    if updated4:
+        return _sequential_tasks(cycle, OPTICS_READ_PLAN_2ADC)
+
+    if geo is None:
+        geo = geometry()
+
     tasks = []
-    plan = OPTICS_READ_PLAN
-    if well_15_mode: 
-        plan = OPTICS_READ_PLAN_15
-    elif updated4:
-        plan = OPTICS_READ_PLAN_2ADC
+    prev_row = None
+    for row, stop, dyes in read_plan(geo):
+        if geo.rows > 1 and row != prev_row:
+            tasks.append({"drawer_to": row})
+            prev_row = row
+        tasks.append({"goto_position": stop})
+        for dye in dyes:
+            tasks.append({"capture": dye, "cycle": cycle, "position": stop})
+    # in future iterations the following two tasks will be moved to after thermal tasks or in parallel with them
+    # extra task can be checking and logging ambient temperature (w14)
+    tasks.append({"home": 0})
+    tasks.append({"goto_position": 0})
+    return tasks
+
+
+def _sequential_tasks(cycle, plan):
+    """Legacy flat-position task builder for the dual-ADC ``'both'`` path."""
+    tasks = []
     for position, dyes in plan:
         tasks.append({"goto_position": position})
         for dye in dyes:
             tasks.append({"capture": dye, "cycle": cycle, "position": position})
-    # in future iterations the following two tasks will be moved to after thermal tasks or in parallel with them
-    # extra task can be checking and logging ambient temperature (w14)
     tasks.append({"home": 0})
     tasks.append({"goto_position": 0})
     return tasks

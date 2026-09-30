@@ -22,14 +22,14 @@
     "drawer":{
         "open_steps": 4500,
         "close_steps": 0,
-	"read_steps": 152,
+	"rows": { "A": 152 },
 	"home_steps": 5000,
 	"step_multiplier": 32
     },
     "axis":{
 	"home_steps": 2500,
 	"step_multiplier": 8,
-        "positions": [320, 675, 1030, 1380, 1740, 2080]
+        "stops": [320, 675, 1030, 1380, 1740, 2080]
     },
     "adc":{
 	"famP": 0, "famN": 1,
@@ -59,14 +59,14 @@
     "drawer":{
         "open_steps": 4500,
         "close_steps": 0,
-	"read_steps": 160,
+	"rows": { "A": 160 },
 	"home_steps": 5000,
 	"step_multiplier": 32
     },
     "axis":{
 	"home_steps": 2500,
 	"step_multiplier": 8,
-        "positions": [320, 675, 1030, 1380, 1740, 2080]
+        "stops": [320, 675, 1030, 1380, 1740, 2080]
     },
     "adc":{
 	"famP": 0, "famN": 1,
@@ -100,14 +100,14 @@
     "drawer":{
         "open_steps": 4500,
         "close_steps": 0,
-	"read_steps": 115,
+	"rows": { "A": 115 },
 	"home_steps": 5000,
 	"step_multiplier": 32
     },
     "axis":{
 	"home_steps": 2500,
 	"step_multiplier": 8,
-        "positions": [320, 675, 1030, 1380, 1740, 2080]
+        "stops": [320, 675, 1030, 1380, 1740, 2080]
     },
     "adc":{
 	"famP": 0, "famN": 1,

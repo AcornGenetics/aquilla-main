@@ -26,13 +26,15 @@ from tests.unit.conftest import MockGPIO
 AXIS_CONFIG = {
     "home_steps": 2500,
     "step_multiplier": 8,
-    "positions": [320, 675, 1030, 1380, 1740, 2080],
+    # 4-well carriage stops: 4 columns + a 2-stop FAM/ROX sensor gap (#510).
+    "stops": [320, 675, 1030, 1380, 1740, 2080],
 }
 
 DRAWER_CONFIG = {
     "open_steps": 4500,
     "close_steps": 0,
-    "read_steps": 152,
+    # 4-well is a 1-row plate: a single read position, labelled row A (#510).
+    "rows": {"A": 152},
     "home_steps": 5000,
     "step_multiplier": 32,
 }

@@ -142,7 +142,11 @@ class AssayInterface():
                 elif type(item) is dict and "goto_position" in item:
                     position = item["goto_position"]
                     ret = self.axis.goto_position( position )
-                    self.drawer.goto_position( position )
+
+                elif type(item) is dict and "drawer_to" in item:
+                    # Multi-row plates (15-well) step the drawer between rows;
+                    # read_plan emits one drawer_to per plate row.
+                    self.drawer.goto_row( item["drawer_to"] )
 
                 elif type(item) is str and item == "quit":
                     lfn = LogFileName()
@@ -168,7 +172,10 @@ class AssayInterface():
         # math can't drift from the blinks actually fired (#288).
         self._optics_pass_count += 1
 
-        for task in optics_read_tasks(cycle, self.well_15, self.updated4):
+        # Capture pattern is driven by the device's provisioned plate geometry
+        # (device_identity.json via aq_lib.geometry), not the host_config well_15
+        # flag. 4-well resolves to the byte-identical legacy sequence.
+        for task in optics_read_tasks(cycle, updated4=self.updated4):
             self.queue_task( task )
 
     def callback( self, args ):
