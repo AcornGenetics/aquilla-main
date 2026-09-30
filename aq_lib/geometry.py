@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 class PlateGeometry:
     rows: int
     cols: int
+    # sensor_gap: the FAM/ROX carriage-stop offset — the measured axis has one
+    # stop per column PLUS this gap, so host_config carries cols + sensor_gap
+    # positions. 2 for both current builds.
+    sensor_gap: int = 2
 
     @property
     def well_count(self) -> int:
@@ -68,6 +72,28 @@ def validate_registry(geometries: dict[int, PlateGeometry]) -> None:
 
 # Fail loud at import if the shipping registry ever violates the invariant.
 validate_registry(GEOMETRIES)
+
+
+def assert_axis_positions_match(geo: PlateGeometry, positions) -> None:
+    """Consistency check between the device's declared geometry and the measured
+    axis stops it reads from host_config.json. The motor still owns those
+    positions — this only asserts their shape: one stop per column plus the
+    sensor gap. A mismatch (e.g. a 15-well unit still carrying the 4-well stops)
+    fails loud before the motor drives to positions that don't exist."""
+    expected = geo.cols + geo.sensor_gap
+    actual = len(positions)
+    if actual != expected:
+        logger.error(
+            "host_config axis positions (%d) do not match geometry: "
+            "cols(%d) + sensor_gap(%d) = %d. Halting — re-calibrate or "
+            "re-provision this device.",
+            actual, geo.cols, geo.sensor_gap, expected,
+        )
+        raise ValueError(
+            f"host_config has {actual} axis positions but the "
+            f"{geo.well_count}-well geometry expects {expected} "
+            f"(cols={geo.cols} + sensor_gap={geo.sensor_gap})"
+        )
 
 
 DEFAULT_WELLS = 4  # An un-provisioned device is the 4-well baseline build.
