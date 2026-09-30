@@ -1,9 +1,11 @@
 """
 Unit tests for instrument Plate Geometry + the geometry() read spine
-(Phase A, Slice 1, #502).
+(Phase A, Slices 1-2, #502 / #503).
 
 The device's well count comes from an immutable identity record; geometry()
-resolves it to a purely-logical PlateGeometry. 4-well is the baseline build.
+resolves it to a purely-logical PlateGeometry. 4-well is the baseline build;
+15-well (3x5) is the Mk II build. A malformed record fails loud; an absent one
+defaults to 4-well.
 """
 import json
 
@@ -25,6 +27,10 @@ def config_dir(tmp_path, monkeypatch):
 
 def _write_identity(config_dir, wells):
     (config_dir / "device_identity.json").write_text(json.dumps({"wells": wells}))
+
+
+def _write_raw_identity(config_dir, text):
+    (config_dir / "device_identity.json").write_text(text)
 
 
 def test_four_well_registry_entry_is_one_by_four():
@@ -105,3 +111,21 @@ def test_geometry_halts_loud_on_an_unknown_well_count(config_dir, caplog):
     with pytest.raises(ValueError, match="7"):
         geometry()
     assert "7" in caplog.text
+
+
+def test_geometry_halts_loud_on_a_malformed_identity_file(config_dir, caplog):
+    # A present-but-corrupt record is NOT an un-provisioned device: fail loud
+    # rather than silently defaulting to 4-well and driving the wrong plate.
+    _write_raw_identity(config_dir, "{not valid json")
+    with pytest.raises(ValueError):
+        geometry()
+    assert "device_identity.json" in caplog.text
+
+
+def test_geometry_halts_loud_when_the_well_count_is_missing(config_dir, caplog):
+    # Valid JSON but no "wells" key — the record exists but doesn't name a
+    # geometry. Must fail loud, not default.
+    _write_raw_identity(config_dir, '{"schema": 1}')
+    with pytest.raises(ValueError):
+        geometry()
+    assert "device_identity.json" in caplog.text
