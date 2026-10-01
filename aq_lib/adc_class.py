@@ -7,6 +7,7 @@ import RPi.GPIO as GPIO
 from RPi.GPIO import HIGH, LOW, IN, OUT
 import logging
 from aq_lib.config_module import Config
+from aq_lib.run_clock import MonotonicStopwatch
 
 logger = logging.getLogger( "aquila_logger" )
 
@@ -29,7 +30,7 @@ LED_PIN2 = 27
 
 class OpticalRead():
 
-    def __init__(self ):
+    def __init__(self, clock=time.monotonic):
 
         config = Config()
         self.LED_ON = [GPIO.LOW, GPIO.HIGH] [ config.optics["LED_ON" ] ]
@@ -39,7 +40,13 @@ class OpticalRead():
         self.rox_channel = ( config.adc["roxP"], config.adc["roxN"], )
 
         self.data_file = sys.stdout
+        # Wall-clock start, kept only so data rows stay correlatable to real time.
         self.t0 = time.time()
+        # Monotonic timing drives the data-row time axis and capture pacing so a
+        # mid-capture system-clock step can't distort them (#512).
+        self._clock = clock
+        self._run_stopwatch = MonotonicStopwatch(clock=clock)
+        self._run_stopwatch.start()
 
         self.gpio = GPIO
         self.gpio.setwarnings(False) 
@@ -187,7 +194,7 @@ class OpticalRead():
 
         def my_print( x ): return print ( x, end = " ", file = self.data_file )
 
-        my_print ( "%6.3f"%( ( time.time() - self.t0 ) )           )
+        my_print ( "%6.3f"%( self._run_stopwatch.elapsed() )       )
         #my_print ( ".".join ( [ "%02x"%r for r in reply1])    )
         my_print ( ".".join ( [ "%02x"%r for r in reply2])    )
         my_print ( "%.5f"%adc_value                           )
@@ -197,7 +204,8 @@ class OpticalRead():
         if channel == "fam": LED_PIN = 27
         elif channel == "rox": LED_PIN = 22
 
-        pcr_t0 = time.time()
+        pacing = MonotonicStopwatch(clock=self._clock)
+        pacing.start()
 
         for j in range ( 1 * 60 ):  # 2 seconds at 60Hz.
             if (j%20)==0:
@@ -207,7 +215,7 @@ class OpticalRead():
                 self.gpio.output( LED_PIN, self.LED_OFF )
                 led_state_nr = 0
 
-            dt = time.time() - pcr_t0
+            dt = pacing.elapsed()
 
             labels = [ led_state_nr, channel, tag1, tag2 ]
 
