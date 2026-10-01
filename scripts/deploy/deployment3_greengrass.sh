@@ -973,6 +973,15 @@ curl -fsSL \
     "${RAW_REPO_URL}/aquila_web/static/splash.html" \
     -o /opt/aquila/splash.html
 
+# The splash on main still hard-codes http://localhost:8090 for its /health poll
+# and its post-boot redirect (deployment2.sh's file:// kiosk needs the absolute
+# form, so the shared asset keeps it). Served behind the :8080 front door those
+# are cross-origin, which fails the "splash is same-origin" check below and costs
+# the warm-renderer handoff. Rewrite them to relative here so the installed splash
+# polls /health and navigates to / on the one :8080 origin, regardless of what
+# main currently ships.
+sed -i "s#http://localhost:8090/health#/health#g; s#'http://localhost:8090'#'/'#g" /opt/aquila/splash.html
+
 mkdir -p "${PI_HOME}/.config/openbox"
 
 cat > "${PI_HOME}/.config/openbox/autostart" <<'EOF'

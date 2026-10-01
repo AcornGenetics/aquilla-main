@@ -339,3 +339,13 @@ def test_nginx_phase_frees_port_8080_on_rerun():
     """
     assert "docker stop aquila-ui" in SCRIPT
     assert "Address already in use" in SCRIPT or ":8080 already held" in SCRIPT
+
+
+def test_splash_normalised_to_same_origin():
+    # The splash on main still hard-codes http://localhost:8090 for its /health
+    # poll and post-boot redirect. Phase 9b rewrites those to relative URLs right
+    # after the curl so the installed splash stays on the :8080 front-door origin
+    # and the "splash is same-origin" check passes, regardless of what main ships.
+    assert "s#http://localhost:8090/health#/health#g" in SCRIPT
+    assert "s#'http://localhost:8090'#'/'#g" in SCRIPT
+    assert 'run_test "splash is same-origin"' in SCRIPT
