@@ -5,6 +5,7 @@ from aquila_web.optics_readings import build_optics_readings, count_data_lines
 from aq_curve.curve import ALGO_VERSION
 from aquila_web.profile_assembly import assemble_steps, validate_stages
 from aq_lib.profile_hash import canonical_profile_hash
+from aq_lib.run_clock import MonotonicStopwatch
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -30,6 +31,10 @@ state_change_event = asyncio.Event()
 start_time = None
 elapsed_time = 0
 timer_running = None
+# Run elapsed is measured monotonically so a mid-run wall-clock step (NTP
+# correcting the no-RTC Pi after boot) can't drive the countdown to 0:00 (#512).
+# start_time (wall clock) is retained only for run-record correlation.
+run_stopwatch = MonotonicStopwatch()
 #results_path = Path("/home/pi/aquilla-main/aquila_web/results.json")
 results_path = None
 results_cleared = False
@@ -773,6 +778,7 @@ async def _simulate_run(profile_name: str) -> None:
     run_in_progress = True
     run_complete_ack = False
     start_time = datetime.now()
+    run_stopwatch.start()
     # Canonical run_timestamp captured once at run start (#287).
     run_timestamp = _utc_now()
     elapsed_time = 0
@@ -940,17 +946,19 @@ async def timer(payload: TimerControl):
 
     if action == "start":
         start_time = datetime.now()
+        run_stopwatch.start()
         timer_running = True
         return {"message": "Timer Started"}
-    
+
     elif action == "stop":
-        if start_time and timer_running:
-            elapsed_time = ( datetime.now() - start_time ).total_seconds() 
+        if run_stopwatch.running and timer_running:
+            elapsed_time = run_stopwatch.elapsed()
             timer_running = False
             return {"message": "Timer stopped", "elapsed": elapsed_time}
         return {"message": "Timer Stopped"}
     elif action == "reset":
         start_time = None
+        run_stopwatch.reset()
         elapsed_time = 0
         timer_running = False
         return {"message": "Timer reset"}
@@ -2161,8 +2169,8 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             panel_with_timer = current_item.dict()
-            if timer_running and start_time:
-                panel_with_timer["elapsed"] = int((datetime.now() - start_time).total_seconds())
+            if timer_running and run_stopwatch.running:
+                panel_with_timer["elapsed"] = int(run_stopwatch.elapsed())
             else:
                 panel_with_timer["elapsed"] = int(elapsed_time)
 
