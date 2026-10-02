@@ -30,7 +30,7 @@ class DummyMeer:
     def output_stage_enable(self, value):
         self.output_stages.append(value)
 
-    def log(self, endtime=None, logfile=None, stop_event=None):
+    def log(self, endtime=None, logfile=None, stop_event=None, check_latch=False):
         self.log_calls.append({"endtime": endtime})
         # Respect stop_event so tests that set it don't hang
         if stop_event and stop_event.is_set():

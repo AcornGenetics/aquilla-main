@@ -69,7 +69,7 @@ def test_stop_event_mid_run_halts_at_next_iteration(dummy_meer, logfile):
     # Override log() to set the stop_event on first call, then raise RunStopped
     first_call_done = []
 
-    def log_and_stop(endtime=None, logfile=None, stop_event=None):
+    def log_and_stop(endtime=None, logfile=None, stop_event=None, check_latch=False):
         dummy_meer.log_calls.append({"endtime": endtime})
         if not first_call_done:
             first_call_done.append(True)

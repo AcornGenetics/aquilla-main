@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from aq_lib.meerstetter import MeerStetter
+from aq_lib.meerstetter import MeerStetter, TecError
 from aq_lib.meerstetter import set_time, get_time
 from aq_lib.thermal_engine import RunStopped, thermal_engine
 from aq_lib.thermal_parser import thermal_parser
@@ -46,6 +46,11 @@ from aq_lib.lid_heater_log import configure_lid_sample_logger
 configure_lid_sample_logger()
 logger = logging.getLogger( "aquila" )
 config = Config()
+
+# Production TEC output-current ceiling (A), applied to both output stages.
+# Below the 9 A limit the controller was latching at on back-to-back runs
+# (#519 Phase 3). Tune from captured-trip data before trusting it as final.
+TEC_MAX_CURRENT_A = 8.0
 
 class AssayInterface():
 
@@ -84,12 +89,39 @@ class AssayInterface():
         logger.debug ( "Temperature controller port: %s", device )
         self.meer = MeerStetter( device, baudrate = 57600, timeout = 1 )
 
-        self.meer.setKp(80)
-        self.meer.setTi(5)
-        self.meer.setTd(4)
+        self._apply_tec_config()
 
         self.thermal_profile = ""
         self._profile_sha256 = None
+
+    def _apply_tec_config(self):
+        """Apply runtime TEC parameters to both output stages.
+
+        Called at init and re-applied after a reset (an RS reset reverts
+        RAM-set params to flash). Caps the output current below the 9 A ceiling
+        the controller was latching at on back-to-back runs (#519 Phase 3): the
+        95 C holds and 60<->95 cycling ramps only draw ~2-6 A, so this only
+        mildly slows the one-time cold warm-up from ambient.
+        """
+        self.meer.setKp(80)
+        self.meer.setTi(5)
+        self.meer.setTd(4)
+        self.meer.change_max_current(TEC_MAX_CURRENT_A)
+        self.meer.setCurrentLimitation(TEC_MAX_CURRENT_A)
+
+    def _ensure_tec_ready(self):
+        """Recover a latched TEC before a run, then re-apply config (#519).
+
+        A latched over-current error from a prior run persists until the
+        controller is reset; without this the next run reused a dead controller
+        and produced a flat, no-heat trace. recover() raises TecError if the
+        controller will not return to Ready, which run() surfaces to the
+        operator instead of silently running with the output cut.
+        """
+        if self.meer.is_latched():
+            logger.warning("TEC latched at run start; resetting controller")
+            self.meer.recover()
+            self._apply_tec_config()
 
     def executor( self ):
         logger.info( "Execution thread started." )
@@ -258,6 +290,9 @@ class AssayInterface():
                 print ( "# Starting optics log", file = optics_fp, flush=True )
                 t0_sync = set_time()
                 print ( "# Starting log t0 = %f"% t0_sync, file = pcr_fp )
+                # Clear any error the controller latched on a previous run before
+                # driving the profile; otherwise the output stays cut (#519).
+                self._ensure_tec_ready()
                 actions = thermal_parser( steps )
                 try:
                     thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
@@ -272,6 +307,14 @@ class AssayInterface():
         except RunStopped:
             logger.info("Run stopped by user")
             self.run_aborted = True
+        except TecError as te:
+            # Thermal controller latched and could not be cleared. Fail loud
+            # instead of silently producing a flat, no-heat run (#519).
+            # Operator guidance: "Thermal controller fault — power-cycle the
+            # device and try again; if it persists, contact Acorn Genetics."
+            logger.error("Thermal controller fault, aborting run: %s", te)
+            self.run_aborted = True
+            sr.change_screen("-1")
         except KeyboardInterrupt as ki:
             logger.error ( "Keyboard Interrupt. Turning off Meerstetter controller. " )
             sr.change_screen("-3")
