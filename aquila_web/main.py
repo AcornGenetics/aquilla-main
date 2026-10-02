@@ -447,6 +447,10 @@ class ResultPath(BaseModel):
     path: str
 
 current_item = Item( title = "title_bm", text = "text_bm", screen="init" )
+# Dismissable operator fault message (#519), orthogonal to the screen state
+# machine: {"title","text"} while a fault is active, else None. Set via POST
+# /fault/, cleared when the operator taps the X (POST /fault/dismiss).
+active_fault = None
 #start_time = datetime.now()
 
 def _sanitize_name(value: str) -> str:
@@ -928,6 +932,26 @@ async def change_screen(state: Item ):
     state_change_event.clear()
     logger.info ( "Screen changed" )
     return current_item.json()
+
+@app.post("/fault/")
+async def set_fault(state: Item):
+    """Raise the dismissable operator fault message (#519)."""
+    global active_fault
+    active_fault = {"title": state.title, "text": state.text}
+    logger.error("Fault raised: %s", active_fault)
+    return {"ok": True, "fault": active_fault}
+
+@app.post("/fault/dismiss")
+async def dismiss_fault():
+    """Operator tapped the X on the fault message (#519)."""
+    global active_fault
+    active_fault = None
+    logger.info("Fault dismissed")
+    return {"ok": True}
+
+@app.get("/fault/")
+async def get_fault():
+    return {"fault": active_fault}
 
 """@app.post("/change_screen/")
 async def change_screen(state: Item ):
@@ -2176,6 +2200,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
             panel_with_timer["drawer_state_open"] = drawer_state_open
             panel_with_timer["drawer_state_closed"] = drawer_state_closed
+
+            # Dismissable fault overlay (#519): the frontend shows a modal with
+            # an X whenever this is non-null, independent of the screen.
+            panel_with_timer["fault"] = active_fault
 
             # Server-authoritative run identity for the Run-card header (issue #265).
             # The header must keep showing the active run's profile/run name even

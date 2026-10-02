@@ -1,5 +1,10 @@
 
 {
+    "-6":{
+        "title"  :"THERMAL CONTROLLER FAULT",
+        "text"   :"Power cycle the device and try again. If the error persists, contact Acorn Genetics.",
+        "screen" :"init"
+    },
     "-4":{
         "title"  :"EXIT",
         "text"   :"Closing GUI...",

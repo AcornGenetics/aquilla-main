@@ -527,6 +527,74 @@ function showRunCompleteModal() {
   runCompleteModal.classList.remove("is-hidden");
 }
 
+// --- Dismissable thermal-controller fault overlay (#519) ---------------------
+// Shown whenever the WebSocket panel carries a non-null `fault`. Built
+// dynamically (like confirmModal) so it works on any page, and dismissed with
+// the X, which clears it server-side so it does not re-appear on the next tick.
+let faultModalRoot = null;
+let faultDismissing = false;
+
+function hideFaultModal() {
+  if (faultModalRoot && faultModalRoot.parentNode) {
+    faultModalRoot.parentNode.removeChild(faultModalRoot);
+  }
+  faultModalRoot = null;
+}
+
+function dismissFault() {
+  // Guard the gap between this click and the server clearing the fault, so an
+  // in-flight WebSocket tick can't immediately reopen the modal.
+  faultDismissing = true;
+  fetch("/fault/dismiss", { method: "POST" }).catch(() => null);
+  hideFaultModal();
+}
+
+function showFaultModal(fault) {
+  if (faultModalRoot) {
+    return; // already visible — don't rebuild on every 1s tick
+  }
+  const root = document.createElement("div");
+  root.className = "confirm-modal";
+  root.setAttribute("role", "alertdialog");
+  root.setAttribute("aria-modal", "true");
+
+  const card = document.createElement("div");
+  card.className = "confirm-modal__card fault-modal__card";
+
+  const close = document.createElement("button");
+  close.className = "fault-modal__close";
+  close.setAttribute("aria-label", "Dismiss");
+  close.textContent = "×"; // ×
+  close.addEventListener("click", dismissFault);
+  card.appendChild(close);
+
+  const title = document.createElement("h2");
+  title.className = "confirm-modal__title";
+  title.textContent = (fault && fault.title) || "THERMAL CONTROLLER FAULT";
+  card.appendChild(title);
+
+  const message = document.createElement("p");
+  message.className = "confirm-modal__message";
+  message.textContent = (fault && fault.text) || "";
+  card.appendChild(message);
+
+  root.appendChild(card);
+  document.body.appendChild(root);
+  faultModalRoot = root;
+}
+
+function handleFault(fault) {
+  if (fault) {
+    if (faultDismissing) {
+      return; // dismiss in flight; wait for the server to clear it
+    }
+    showFaultModal(fault);
+  } else {
+    faultDismissing = false;
+    hideFaultModal();
+  }
+}
+
 function showRunStoppingModal() {
   if (!runStoppingModal) {
     return;
@@ -659,6 +727,11 @@ function wsHandleMessage(event) {
       activeRunName = panel.run_name;
     }
     showPanel(panel);
+    // Fault overlay is orthogonal to the screen: handle it before any of the
+    // screen branches below can early-return (#519).
+    if ("fault" in panel) {
+      handleFault(panel.fault);
+    }
     // Lock in countdown vs. stopwatch mode on the transition into a run.
     if (panel.screen === "running" && lastScreen !== "running") {
       beginTimerMode();

@@ -10,6 +10,17 @@ from serial.tools import list_ports
 
 from .mecrc16 import crc16_list
 
+
+class TecError(Exception):
+    """The Meerstetter TEC is in a latched error state the run cannot clear.
+
+    Raised when recovery (reset + wait-for-Ready) fails, or when an error
+    latches mid-run. Surfaced to the operator rather than silently producing a
+    flat, no-heat run (#519).
+    """
+    pass
+
+
 global t0
 global t0_mono
 
@@ -61,6 +72,11 @@ def long_factory( self, func_name, parid ):
 
 
 class MeerStetter( Serial ):
+
+    # Meerstetter device status (parid 104): 0=Init, 1=Ready, 2=Run,
+    # 3=Error (latched until reset/power-cycle), 4=Bootloader, 5=Resetting.
+    STATUS_READY = 1
+    STATUS_ERROR = 3
 
     def __init__( self, *args, **kwargs ):
         
@@ -171,6 +187,49 @@ class MeerStetter( Serial ):
     def get_common_params( self ):
         for par_id, name in self.common_params:
             yield par_id, name, self.get_parid_long( par_id, 1 ),
+
+    def get_status( self, inst=1 ):
+        """Device status (parid 104). See STATUS_* constants."""
+        return self.get_parid_long( 104, inst )
+
+    def get_error_number( self, inst=1 ):
+        """Latched error number (parid 105); meaningful only in STATUS_ERROR."""
+        return self.get_parid_long( 105, inst )
+
+    def get_error_param( self, inst=1 ):
+        """Latched error parameter (parid 107); meaningful only in STATUS_ERROR."""
+        return self.get_parid_long( 107, inst )
+
+    def is_latched( self, inst=1, reads=2 ):
+        """True only if ``reads`` consecutive status reads all report ERROR.
+
+        Debounced against the controller's serial framing noise (#519): a
+        single garbled/None status read must not be mistaken for a latch.
+        """
+        for _ in range( reads ):
+            if self.get_status( inst ) != MeerStetter.STATUS_ERROR:
+                return False
+        return True
+
+    def recover( self, inst=1, timeout=15.0, poll=0.5 ):
+        """Clear a latched error: reset the controller and wait until Ready.
+
+        The RS reset also reverts RAM-set parameters (PID, current/ramp limits)
+        to their flash values, so the caller MUST re-apply its runtime config
+        after recover() returns (#519).
+
+        Raises TecError if the controller does not reach Ready within timeout.
+        """
+        self.reset()
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.get_status( inst ) == MeerStetter.STATUS_READY:
+                return
+            time.sleep( poll )
+        raise TecError(
+            "TEC did not return to Ready within %.1fs after reset (error_nr=%s)"
+            % ( timeout, self.get_error_number( inst ) )
+        )
 
 
 
@@ -295,7 +354,7 @@ class MeerStetter( Serial ):
 
     def get_current_temp ( self ): return self.get_temp()
 
-    def log( self, endtime, logfile, stop_event=None ):
+    def log( self, endtime, logfile, stop_event=None, check_latch=False ):
 
         send_cmds = [
             self.compile( 1000, 1, seq_nr=1543 ),  # Object Temperature
@@ -314,6 +373,17 @@ class MeerStetter( Serial ):
         while (condition):
             if stop_event and stop_event.is_set():
                 break
+            # A latched TEC error (#519) must stop the run loudly rather than
+            # keep "logging" a dead, no-heat controller. Opt-in so legacy
+            # callers and the standalone diagnostic are unaffected.
+            if check_latch and self.is_latched():
+                error_nr = self.get_error_number( 1 )
+                error_param = self.get_error_param( 1 )
+                logging.error(
+                    "TEC latched mid-run: status=%d error_nr=%s error_param=%s",
+                    MeerStetter.STATUS_ERROR, error_nr, error_param,
+                )
+                raise TecError( "TEC latched mid-run (error_nr=%s)" % ( error_nr, ) )
             t = get_time()
             if t>=endtime:
                 condition = False
@@ -334,6 +404,10 @@ class MeerStetter( Serial ):
                     logging.error("Unknown exception in meerstetter logger %s", e.__str__() )
                 
                 time.sleep ( 0.05 )  # original 0.05 Mon 10 Mar 14:22:32 PDT 2025
+            # Trailing dev_Status column: captures the controller's approach to
+            # a latch continuously so the next trip is diagnosable (#519).
+            if check_latch:
+                print ( f"{self.get_status( 1 )}", file = logfile, end = " " )
             print ( file = logfile, flush = True )
 
     @staticmethod

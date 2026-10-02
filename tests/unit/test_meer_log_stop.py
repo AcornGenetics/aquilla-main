@@ -58,8 +58,9 @@ class RecordingMeer:
     def __init__(self):
         self.log_calls = []
 
-    def log(self, endtime=None, logfile=None, stop_event=None):
-        self.log_calls.append({"endtime": endtime, "stop_event": stop_event})
+    def log(self, endtime=None, logfile=None, stop_event=None, check_latch=False):
+        self.log_calls.append({"endtime": endtime, "stop_event": stop_event,
+                               "check_latch": check_latch})
 
     def change_setpoint(self, setpoint):
         pass
