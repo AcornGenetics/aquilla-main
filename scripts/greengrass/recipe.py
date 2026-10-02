@@ -9,6 +9,19 @@ import copy
 # The recipe schema version Greengrass v2 expects.
 RECIPE_FORMAT_VERSION = "2020-01-25"
 
+# A stable docker-compose project name for the app stack, pinned on both `up` and
+# `down`. Without it, compose derives the project from the artifact directory — the
+# component version — so each version runs as its own project and the new version's
+# `up` collides with the previous version's hardcoded-name containers while `down`
+# can never remove them (#515). Run and Shutdown MUST use the same name.
+COMPOSE_PROJECT = "aquila"
+
+# com.acorn.sentri's own hardcoded-name containers, force-removed before `up` so a
+# corpse left by a cut-off teardown can't squat the name. Deliberately excludes
+# aquila-profile-sync, which belongs to the separate com.acorn.profile-sync
+# component (ADR-022) and must never be touched here.
+SENTRI_CONTAINERS = ("aquila-backend", "aquila-app", "aquila-ui")
+
 
 def pin_compose(compose, api_ref, ui_ref):
     """Rewrite the on-device compose to run the exact built images by digest.
@@ -150,7 +163,19 @@ def build_recipe(
                         # this process env (Greengrass sets them) and compose passes
                         # them through; the thing name is not, so export it here.
                         'export AWS_IOT_THING_NAME="{iot:thingName}"; '
-                        + ("docker compose -f %s up -d; " % compose_path)
+                        # Sweep this stack's own hardcoded-name containers before
+                        # `up`. A previous version's teardown can be cut off mid-`down`
+                        # (deploy-transition timeout), leaving an Exited aquila-backend
+                        # that squats the name and makes the next `up` fail with a
+                        # Conflict → component BROKEN → UI stuck on the loading screen
+                        # (#515). Only com.acorn.sentri's services — never
+                        # aquila-profile-sync, which is a separate component.
+                        + ("docker rm -f %s " % " ".join(SENTRI_CONTAINERS))
+                        + "2>/dev/null || true; "
+                        + (
+                            "docker compose -p %s -f %s up -d --remove-orphans; "
+                            % (COMPOSE_PROJECT, compose_path)
+                        )
                         # buffer: do not check /health for the first 25s (boot ~15s)
                         + "sleep 25; "
                         # grace: then poll up to ~1 min for the first healthy response
@@ -164,7 +189,10 @@ def build_recipe(
                         + "while curl -fsS http://localhost:8090/health >/dev/null 2>&1; "
                         + "do sleep 30; done; exit 1"
                     ),
-                    "Shutdown": "docker compose -f %s down" % compose_path,
+                    "Shutdown": (
+                        "docker compose -p %s -f %s down --remove-orphans"
+                        % (COMPOSE_PROJECT, compose_path)
+                    ),
                 },
             }
         ],

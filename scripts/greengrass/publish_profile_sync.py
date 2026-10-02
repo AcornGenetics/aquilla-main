@@ -18,6 +18,15 @@ from scripts.greengrass.recipe import RECIPE_FORMAT_VERSION
 
 COMPONENT_NAME = "com.acorn.profile-sync"
 
+# A stable docker-compose project name for this component, pinned on both `up` and
+# `down` (#515). Without it, compose derives the project from the artifact directory
+# (the version), so each version runs as its own project and a cut-off teardown can
+# leave an Exited aquila-profile-sync squatting the name. It MUST differ from the
+# sentri stack's project (recipe.COMPOSE_PROJECT = "aquila"): if they shared a
+# project, the sentri `up --remove-orphans` would treat this component's container as
+# an orphan and reap it.
+PROFILE_SYNC_PROJECT = "aquila-profile-sync"
+
 
 def pin_compose(compose, api_ref):
     """Pin the profile-sync service to the exact api image digest (no build on-device)."""
@@ -95,9 +104,19 @@ def build_recipe(version, compose_artifact_uri, api_ref):
                     # `up` foreground keeps the component RUNNING tied to the container.
                     "Run": (
                         'export AWS_IOT_THING_NAME="{iot:thingName}"; '
-                        + "docker compose -f %s up" % compose_path
+                        # Sweep this component's own container before `up` so a corpse
+                        # left by a cut-off teardown can't squat the name (#515). Only
+                        # aquila-profile-sync — never the sentri stack's containers.
+                        + "docker rm -f aquila-profile-sync 2>/dev/null || true; "
+                        + (
+                            "docker compose -p %s -f %s up --remove-orphans"
+                            % (PROFILE_SYNC_PROJECT, compose_path)
+                        )
                     ),
-                    "Shutdown": "docker compose -f %s down" % compose_path,
+                    "Shutdown": (
+                        "docker compose -p %s -f %s down --remove-orphans"
+                        % (PROFILE_SYNC_PROJECT, compose_path)
+                    ),
                 },
             }
         ],

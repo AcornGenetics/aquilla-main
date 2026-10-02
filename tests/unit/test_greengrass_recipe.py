@@ -308,3 +308,85 @@ def test_compose_path_is_still_formatted_correctly_with_the_prune_step():
 
     assert "%s" not in run
     assert "{artifacts:path}/compose.yaml" in run
+
+
+# --- self-healing version switch (#515) -------------------------------------
+# A version switch must not brick on a container-name conflict. The compose
+# project name defaulted to the artifact directory (the version), so 0.1.56 and
+# 0.1.61 ran as separate projects: the new project's `up` collided with the old
+# project's leftover hardcoded-name container (aquila-backend), and the new
+# project's `down` could never remove it. Pin a stable project name, sweep the
+# fixed container names before `up`, and remove orphans — so any version switch
+# (gated, rollback, or manual) applies cleanly instead of BROKEN-looping.
+
+def _shutdown_step(recipe):
+    return recipe["Manifests"][0]["Lifecycle"]["Shutdown"]
+
+
+def test_run_brings_the_stack_up_under_a_stable_project_name():
+    """If the project name is the version dir, each version is its own compose
+    project and the next version's `up` collides with the previous version's
+    hardcoded-name containers. Pin it so successive versions are one project."""
+    run = _run_step(_recipe_with_prune())
+
+    assert "docker compose -p aquila" in run
+
+
+def test_run_sweeps_stale_fixed_name_containers_before_up():
+    """A prior version's teardown can be cut off mid-`down` (deploy-transition
+    timeout), leaving an Exited hardcoded-name container that squats the name. Force
+    -remove this stack's fixed names before `up` so the switch can't collide with a
+    corpse — this also clears containers left under the old per-version project name."""
+    run = _run_step(_recipe_with_prune())
+
+    assert "docker rm -f" in run
+    for name in ("aquila-backend", "aquila-app", "aquila-ui"):
+        assert name in run
+    # The sweep must run before the stack comes up, or it would kill the fresh stack.
+    assert run.index("docker rm -f") < run.index("docker compose -p aquila")
+
+
+def test_run_does_not_sweep_the_profile_sync_container():
+    """profile-sync is a *separate* Greengrass component (com.acorn.profile-sync,
+    ADR-022) with its own live container. The sentri stack must never force-remove it,
+    or every sentri restart would stomp the other component."""
+    run = _run_step(_recipe_with_prune())
+
+    assert "aquila-profile-sync" not in run
+
+
+def test_run_up_removes_orphans():
+    """`up --remove-orphans` clears containers dropped from the compose across
+    versions (e.g. a retired service), scoped to this stack's own project — so it
+    can never reach the separate profile-sync component."""
+    run = _run_step(_recipe_with_prune())
+
+    assert "up -d --remove-orphans" in run
+
+
+def test_shutdown_tears_down_under_the_same_stable_project_name():
+    """Shutdown must target the same project as Run, or `down` operates on a different
+    project than the running containers and never actually removes them — which is how
+    the previous version's containers were orphaned in the first place (#515)."""
+    shutdown = _shutdown_step(_recipe_with_prune())
+
+    assert "docker compose -p aquila" in shutdown
+    assert "down" in shutdown
+
+
+def test_shutdown_removes_orphans():
+    """`down --remove-orphans` clears anything left in this stack's project, scoped to
+    com.acorn.sentri — it never reaches the separate profile-sync component."""
+    shutdown = _shutdown_step(_recipe_with_prune())
+
+    assert "--remove-orphans" in shutdown
+    assert "aquila-profile-sync" not in shutdown
+
+
+def test_shutdown_is_formatted_correctly():
+    """Regression: Shutdown now interpolates both the project name and the compose
+    path via `%` — a mismatched format tuple would leave a literal %s in the command."""
+    shutdown = _shutdown_step(_recipe_with_prune())
+
+    assert "%s" not in shutdown
+    assert "{artifacts:path}/compose.yaml" in shutdown
