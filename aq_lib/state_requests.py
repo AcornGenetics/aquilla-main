@@ -37,6 +37,28 @@ def change_screen( state ):
     except requests.exceptions.RequestException as e:
         logger.exception( "Error in change screen request. Intended screen request: %s", state )
 
+def raise_tec_fault():
+    """Show the dismissable THERMAL CONTROLLER FAULT message (#519).
+
+    Orthogonal to the screen state machine: the message persists over whatever
+    screen the device lands on until the operator dismisses it (the frontend X
+    posts /fault/dismiss). Reuses the "-6" entry in state_config so the wording
+    lives in one place.
+    """
+    payload = config.state.get(
+        "-6",
+        {"title": "THERMAL CONTROLLER FAULT",
+         "text": "Power cycle the device and try again. "
+                 "If the error persists, contact Acorn Genetics.",
+         "screen": "init"},
+    )
+    url = f"{BACKEND_URL}/fault/"
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error posting TEC fault. Intended payload: %s", payload)
+
+
 def update_results_path( results_filename ):
     url = f"{BACKEND_URL}/results/path"
     base_dir = Path(get_src_basedir())

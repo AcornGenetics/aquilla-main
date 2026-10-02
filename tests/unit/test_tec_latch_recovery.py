@@ -122,6 +122,34 @@ def test_log_does_not_check_latch_by_default():
     meer.is_latched.assert_not_called()
 
 
+def test_log_appends_status_column_when_check_latch():
+    """With check_latch on, each pcr line gains a trailing dev_Status column so
+    the approach to a trip is captured continuously (#519 Phase 2)."""
+    meer_module.set_time()
+    meer = LoggingMeer(latched=False)
+    meer.get_status = MagicMock(return_value=2)  # 2 = RUN
+    logfile = io.StringIO()
+    endtime = meer_module.get_time() + 0.15
+    meer.log(endtime=endtime, logfile=logfile, check_latch=True)
+
+    first_line = logfile.getvalue().strip().splitlines()[0].split()
+    # time + 10 telemetry values + status
+    assert len(first_line) == 12
+    assert first_line[-1] == "2"
+
+
+def test_log_omits_status_column_by_default():
+    """Legacy pcr logs keep their original column count (no status)."""
+    meer_module.set_time()
+    meer = LoggingMeer(latched=False)
+    logfile = io.StringIO()
+    endtime = meer_module.get_time() + 0.15
+    meer.log(endtime=endtime, logfile=logfile)
+
+    first_line = logfile.getvalue().strip().splitlines()[0].split()
+    assert len(first_line) == 11  # time + 10 telemetry values
+
+
 # ---------------------------------------------------------------------------
 # thermal_engine wires mid-run latch detection into every log() call
 # ---------------------------------------------------------------------------

@@ -309,12 +309,14 @@ class AssayInterface():
             self.run_aborted = True
         except TecError as te:
             # Thermal controller latched and could not be cleared. Fail loud
-            # instead of silently producing a flat, no-heat run (#519).
-            # Operator guidance: "Thermal controller fault — power-cycle the
-            # device and try again; if it persists, contact Acorn Genetics."
+            # with a dismissable operator fault message instead of silently
+            # producing a flat, no-heat run (#519). Mark aborted so teardown
+            # emits the partial optics labelled aborted (not a bogus "complete"
+            # result). The device auto-recovers on the next run via
+            # _ensure_tec_ready, so the operator can dismiss (X) and retry.
             logger.error("Thermal controller fault, aborting run: %s", te)
             self.run_aborted = True
-            sr.change_screen("-1")
+            sr.raise_tec_fault()
         except KeyboardInterrupt as ki:
             logger.error ( "Keyboard Interrupt. Turning off Meerstetter controller. " )
             sr.change_screen("-3")

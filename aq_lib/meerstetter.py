@@ -404,6 +404,10 @@ class MeerStetter( Serial ):
                     logging.error("Unknown exception in meerstetter logger %s", e.__str__() )
                 
                 time.sleep ( 0.05 )  # original 0.05 Mon 10 Mar 14:22:32 PDT 2025
+            # Trailing dev_Status column: captures the controller's approach to
+            # a latch continuously so the next trip is diagnosable (#519).
+            if check_latch:
+                print ( f"{self.get_status( 1 )}", file = logfile, end = " " )
             print ( file = logfile, flush = True )
 
     @staticmethod
