@@ -50,7 +50,7 @@ config = Config()
 # Production TEC output-current ceiling (A), applied to both output stages.
 # Below the 9 A limit the controller was latching at on back-to-back runs
 # (#519 Phase 3). Tune from captured-trip data before trusting it as final.
-TEC_MAX_CURRENT_A = 8.0
+TEC_MAX_CURRENT_A = 7.6
 
 class AssayInterface():
 
