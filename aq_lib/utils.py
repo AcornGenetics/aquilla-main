@@ -69,6 +69,16 @@ LOGGING_CONFIG = {
             'level': 'DEBUG',
             'propagate': True,
         },
+        # adc_class.py (and melt_curve.py) call logging.getLogger("aquila_logger").
+        # That is a separate top-level name, not a child of "aquila", so without an
+        # entry here it has no handler and falls through to root -- its messages go
+        # to stdout (docker logs) and never reach logs/logger.log. Same handler and
+        # level as "aquila" so it lands in the same file.
+        'aquila_logger': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
     },
 }
 
