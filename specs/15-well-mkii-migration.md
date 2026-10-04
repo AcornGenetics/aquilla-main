@@ -727,6 +727,48 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 - 15-well: correct serpentine motion, correct 15-tube optics file, correct parse/analysis/Cq, correct synced event, usable kiosk UI.
 - Well count resolved from the immutable `device_identity.json`; unknown count fails loud (no hardware cross-check — trusted flag).
 
+## 27. Colleague's 2026-09-30 source files — review, locked decisions, and re-scope
+
+**Tracking issue:** [#517](https://github.com/AcornGenetics/aquilla-main/issues/517). This section is the written-up review the issue references.
+
+### 27.0 Source + constraint
+A colleague's newer Aquila device files (authoritative set, dated **2026-09-30 17:46** in `~/Downloads`): `adc_class (1).py`, `motor_class (2).py`, `thermal_parser.py`, `utils.py`. (The `~/Downloads/aquilla-main/` copies are stale March baselines — ignore.)
+
+**Hard constraint — cherry-pick only, never wholesale-replace:** the colleague's `motor_class` is **pre-geometry** (hardcodes positions + a 320-step row pitch, drops the `geometry()` imports). Wholesale-replacing it would destroy the Slice 1–5 geometry spine. Already on this branch (not new from him): `home()`+`emit_homing_sample`, `count_optics_passes()`.
+
+### 27.1 Locked decisions (confirmed 2026-10-01) — what to take / adapt / skip
+
+| Slice | File | Decision |
+|---|---|---|
+| **1** | `utils.py` | **Take** the `aquila_logger` logging block (prereq so ADC-health logs reach disk). Trim its dangling `adc_class_12well.py` reference (no such file here). |
+| **2** | `thermal_parser.py` | **Take** 2 bug fixes: top-level `duration = 0` init (fixes `UnboundLocalError` when optics is the first step of a repeat block) + `if len(args)==6` guard on the carry-forward unpack (fixes `ValueError` when a `ramp_rate`/`pcr_fanoff` step sits in a repeat block). **Skip** the abandoned setpoint step-limiting (`MAX_SETPOINT_STEP=0`; author measured no effect). |
+| **3** | `adc_class.py` (Tier 1) | **Take all** — `ADC_RDY_*` constants + RDY polling before each read, `_check_frame` stale-frame detection, health counters (`n_retries`/`n_failed_reads`/`n_stale_frames`/`n_unrepairable`, incl. the `n_unrepairable` init fix), `read_ambient_temp` RDY + `ROX_enabled=True` fix. Diagnostics only, no read-path impact. |
+| **4** | `adc_class.py` (Tier 2) | **Take** self-contained fixes: single-dye `append([a,b,c])` TypeError, `clean_up` `raise e`→`raise` (a latent `NameError` in our branch today), and the **half-period-aware `-123` repair** (only interpolates within the same LED half-period → never averages a good sample with `-123` into a fake ≈−60 mV reading). |
+| **5** | `motor_class.py` | **Take** the core acceleration ramp + auto-tuner (`ramp_test`, gated by `config.info["ramp_test"]`, inert in prod) + SINGLE/SCAN `motor_test`, **cherry-picked onto the geometry file**. Edit `move_wo_home_flag` / `move_abs_wo_home_flag` / `move_w_home_flag` (ramp-up / cruise / ramp-down). **Leave `Drawer`/`Axis` geometry `__init__`/`read`/`goto_row`/`goto_position` and `axis_stops`/`drawer_rows` untouched; keep explicit `pulse_delay` call-site args (do NOT adopt the None-default flip).** |
+| **6** | optics writer | **Variant C** — explicitly **rejected** the colleague's keep-everything incremental writer (no RAM win, restructures our 15-well read path). Instead: continuous RAW safety log during a run + mask on **ANY** stop (complete/cancel/crash); masking reads the raw back **pass-by-pass** (~2-pass bounded RAM). Build a re-mask recovery tool for leftover raw logs. |
+
+**Verify-before-porting flags:** `print_temp`/duplicate-temp-line (we have no `print_temp` — confirm where temperature is logged first); fam `j==0` fallback — his `2.1` vs our `2.0` (confirm intent, don't silently change output).
+
+### 27.2 Re-scope against the merged geometry spine (Slices 1–5: #506–#509, #511)
+The scope above predates the geometry merge. Reconciling against the current branch:
+
+- **Slices 1–4 are unaffected** — `utils.py`, `thermal_parser.py`, `adc_class.py` were barely touched by the geometry work; verified still-needed on the branch (`thermal_parser` still sets `duration` inside each branch with no top-level init; no `ADC_RDY`/`_check_frame`; the `-123` path is still the old non-half-period version). Port as scoped.
+- **Slice 5 graft target MOVED (approach unchanged).** `motor_class` is now geometry-driven: `Axis.__init__` → `self.positions = axis_stops(config.axis, geometry())`, `Drawer` has `self.rows = drawer_rows(...)` + `goto_row()`. The ramp grafts into the `Motor` base **move methods only**; the geometry `__init__`/`goto_row`/`axis_stops`/`drawer_rows` stay untouched. **New coupling:** the `Drawer` already has hand-tuned pulse_delays (`0.00007`, "verify full travel on sn01-03") — the ramp must reconcile with/supersede these, and the on-device `ramp_test` must now be run against the real 15-well `geometry()` axis stops **and** the 3 drawer-row moves (not just the axis, and not the colleague's hardware constants).
+- **Slice 6 (Variant C) now sequences AFTER Phase B (#514).** Both the `updated4` and `well_15` capture-mode flags are still live (`state_run_assay.py:54–76`), and `read_wells` still passes `updated4` (`:178`). #514 deletes those forks → one executor path, so Variant C grafts onto a single clean path instead of being redone. `out_data()`'s sole caller is the executor `quit` branch (`state_run_assay.py:154`); "mask on any stop" = wiring `clean_up`/finally on the cancel path (verify `clean_up` fires on cancel).
+- **`aq_curve/notebook_evaluator.py` was DELETED** (unused; see §4 literal list) — its `positions=[2,3,4,5]`/`well_map` well-count site is now moot, one fewer to reconcile.
+
+### 27.3 Revised order
+The geometry motor path is merged but **never driven on real hardware** — so Slice 5 is the highest-leverage item (it's both a #517 deliverable and what makes the geometry motion reliable enough to bench-test).
+1. **Slice 1** (logger) — prereq, trivial.
+2. **Slices 2, 3, 4** (thermal_parser + ADC diagnostics/fixes) — low-risk, independent, mechanical; land to get ADC health logging before any bench run.
+3. **Slice 5** (motor ramp) onto the geometry base → **bench `ramp_test` on a real 15-well device** for our axis *and* drawer-row constants. Unlocks testing the whole geometry spine.
+4. **#514 (Phase B, one read path)** → **then Slice 6 (Variant C)** on the collapsed path.
+
+### 27.4 Must-respect gotchas
+- Optics output file is a **FROZEN hashed contract** (ADR-0007 / acorn-analytics#45): `aquila_web/optics_readings.py` hashes the whole file + counts rows (`SAMPLES_PER_BLINK=60`). Output must stay **byte-identical**; "ring-mask == batch-mask" is a hard unit-test gate. The RAW safety log must be a **separate** file the uploader never scans.
+- `capture_blink` is shared with `scripts/tools/melt_curve.py` — raw-streaming must gate on run context so melt_curve isn't broken.
+- Land as incremental `Slice N` commits (match branch style), each with tests (`unit_tests/` for pure logic: mask parity + ramp-profile math; `@pytest.mark.hardware` for pigpio/SPI). Add an ADR alongside ADR-023 for the Variant C crash-safe writer.
+
 ---
 
 ### Changelog
@@ -742,3 +784,4 @@ Since the serpentine visits tubes in a known order (§20), the UI could **highli
 - 2026-09-28 — Added §25 (device kiosk GUI redesign: 768×1024 portrait, 3×5 plate-mirroring grid, `1A–5C` col-row labels, tap→larger edit panel for naming, dynamic-render refactor, controls marking, history table, optional live scan indicator). Flagged the A1–C5 vs 1A–5C labeling reconciliation.
 - 2026-09-28 — Added §26 IMPLEMENTATION PLAN (3.5 wks, ~18 days): Phases A(config/hardware identity) → B(reactive refactor + remediate) → C(motor) → D(optics file) = **MVP ~day 10** → E(parse) → F(analysis + control-QC + event) → G(GUI) → H(integration). Guardrails: reactive/no-hardcode, 4-well never regresses. Risk register + DoD.
 - 2026-09-29 — RESOLVED §19e motion backend: fleet is **Pi 4B**, so **keep pigpio** (DMA wave_chain = best stepper timing; lgpio tx_wave is software-timed/worse on 4B, mandatory only on Pi5). Fix deployment: `pigpiod -l` in-container + client→localhost + `pigpio` in image + disable host daemon; bench-test SPI/pigpio DMA coexistence. lgpio=Pi5/fallback, TMC5160=respin. Reviews sourced. Updated §19d#2, plan Phase C.
+- 2026-10-04 — Added §27 (colleague's 2026-09-30 source-file review + locked decisions, #517), reconstructing the write-up the issue references (it had never been committed). Re-scoped it against the merged geometry spine (Slices 1–5): Slices 1–4 unaffected; Slice 5 ramp graft target moved onto the geometry-driven `motor_class` (base move methods only) with `ramp_test` tuning now coupled to `geometry()` axis stops + 3 drawer rows; Slice 6 (Variant C) re-sequenced to AFTER Phase B (#514); `notebook_evaluator.py` deleted so its well-count literal site is moot.
