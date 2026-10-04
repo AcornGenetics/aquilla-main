@@ -5,12 +5,25 @@ logger = logging.getLogger("aquila")
 
 def thermal_parser(steps, last_temp = 25, last_time = 0, n = "-1", ramp_rate = 10.0):
     setpoint = 25# Initialization of setpoint
+    # BUGFIX: `duration` was only bound by the setpoint/disable/enable branches,
+    # so an "optics" step reached before any of them raised UnboundLocalError --
+    # including as the first step of a repeat block, which parses in a fresh
+    # scope. Inert for profiles that set a duration first; the field is not read
+    # on the optics path (state_run_assay.read_wells uses args[1] only).
+    duration = 0
     for s in steps:
         if "repeat" in s:
             cycles = s["cycles"]
             for i in range ( cycles ):
                 for args in thermal_parser ( s["repeat"], last_temp, last_time, i+1, ramp_rate ):
-                    _, _, last_temp, _, _, last_time = args
+                    # BUGFIX: this unpack carries temp/time forward between
+                    # cycles, but not every action is a 6-tuple: "call" yields 3
+                    # and the fan/cmd steps yield 2. Without the guard, a
+                    # ramp_rate or pcr_fanoff step inside a repeat block raised
+                    # ValueError and killed the run. Always true for 6-tuples,
+                    # so existing profiles are unaffected.
+                    if len( args ) == 6:
+                        _, _, last_temp, _, _, last_time = args
                     yield args
 
         elif "setpoint" in s:

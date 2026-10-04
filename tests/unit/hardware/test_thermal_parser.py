@@ -236,6 +236,61 @@ def test_pcr_fanoff_step_yields_pcr_fanoff_action():
 
 
 # ---------------------------------------------------------------------------
+# Regression: steps inside a repeat block (#517 Slice 2)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_optics_first_in_repeat_block_does_not_raise():
+    """optics as the first step of a repeat block (no preceding setpoint)
+    parses in a fresh scope where `duration` is unbound — must not raise
+    UnboundLocalError. Regression for #517."""
+    steps = [{"repeat": [{"optics": True}], "cycles": 2}]
+    actions = _collect(steps, last_temp=25.0)
+    names = [a[0] for a in actions]
+    assert names == ["optics", "optics"]
+    # duration defaults to 0 and rides on the optics tuple (index 4)
+    assert all(a[4] == 0 for a in actions)
+
+
+@pytest.mark.unit
+def test_ramp_rate_inside_repeat_block_does_not_raise():
+    """A ramp_rate step inside a repeat block yields a 3-tuple 'call'; the
+    carry-forward unpack must skip non-6-tuples instead of raising
+    ValueError. Regression for #517."""
+    steps = [
+        {
+            "repeat": [
+                {"ramp_rate": 5.0},
+                {"setpoint": 60.0, "duration": 10.0},
+            ],
+            "cycles": 2,
+        }
+    ]
+    actions = _collect(steps, last_temp=25.0)
+    names = [a[0] for a in actions]
+    assert names == ["call", "ramp", "hold", "call", "ramp", "hold"]
+
+
+@pytest.mark.unit
+def test_pcr_fanoff_inside_repeat_block_does_not_raise():
+    """A pcr_fanoff step inside a repeat block yields a 2-tuple; the
+    carry-forward unpack must skip it instead of raising ValueError.
+    Regression for #517."""
+    steps = [
+        {
+            "repeat": [
+                {"setpoint": 95.0, "duration": 5.0},
+                {"pcr_fanoff": True},
+            ],
+            "cycles": 2,
+        }
+    ]
+    actions = _collect(steps, last_temp=25.0)
+    names = [a[0] for a in actions]
+    assert names == ["ramp", "hold", "pcr_fanoff", "ramp", "hold", "pcr_fanoff"]
+
+
+# ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
 
