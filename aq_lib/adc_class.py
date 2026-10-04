@@ -28,6 +28,15 @@ SPI_SPEED_HZ = 100000  # SPI clock speed in Hz
 LED_PIN1 = 22
 LED_PIN2 = 27
 
+# --- RDY polling budget ----------------------------------------------------
+# Attempts are capped separately for the two paths because optics scan time is
+# the binding constraint. The capture loop keeps 7 attempts (~6 ms of wait);
+# read_ambient_temp is off the scan path so it can afford 20 (~19 ms, which
+# covers a full 16.7 ms conversion period at 60 SPS).
+ADC_RDY_ATTEMPTS_CAPTURE = 7
+ADC_RDY_ATTEMPTS_AMBIENT = 20
+ADC_RDY_SLEEP            = 0.001
+
 class OpticalRead():
 
     def __init__(self ):
@@ -41,6 +50,19 @@ class OpticalRead():
 
         self.data_file = sys.stdout
         self.t0 = time.time()
+
+        # --- diagnostic counters -------------------------------------------
+        # n_retries       : data reads that needed more than one RDY poll
+        # n_failed_reads  : reads that never came ready (a -123 was written)
+        # n_stale_frames  : frames whose byte0 was not 0x00 (see _check_frame)
+        # n_unrepairable  : -123 samples with no usable neighbour in their LED
+        #                   half-period. Initialized here; the actual increment
+        #                   lives in the -123 repair (Tier 2), so this stays 0
+        #                   until Tier 2 lands.
+        self.n_retries      = 0
+        self.n_failed_reads = 0
+        self.n_stale_frames = 0
+        self.n_unrepairable = 0
 
         self.gpio = GPIO
         self.gpio.setwarnings(False) 
@@ -176,18 +198,18 @@ class OpticalRead():
 
                 got = False
 
-                for attempt in range ( 20 ):
+                for attempt in range ( ADC_RDY_ATTEMPTS_AMBIENT ):
 
                     st = self.spi.xfer2( [ 0x40 | 0x00, 0x00 ] )        # read STATUS
                     if not ( st[1] & 0x80 ):                            # RDY low = ready
-                        reply2 = self.spi.xfer2( [ 0x42 ] + [0x00, 0x00, 0x00] )
+                        reply2 = self._check_frame( self.spi.xfer2( [ 0x42 ] + [0x00, 0x00, 0x00] ), "ambient" )
                         adc_value = 1000*self.convert ( reply2 )
                         got = True
 
                     if got:
                         break
 
-                    time.sleep ( 0.001 )
+                    time.sleep ( ADC_RDY_SLEEP )
 
                 if not got:
                     adc_value = -123
@@ -204,8 +226,9 @@ class OpticalRead():
             self.set_channel( * self.rox_channel )
             if self.two_adcs:
                 GPIO.output(self.cs_list[0], GPIO.HIGH)
+                self.ROX_enabled = True
 
-    #only FAM is routed to the second ADC 
+    #only FAM is routed to the second ADC
     def set_channel_dye( self, dye_name ):
         if dye_name.lower() == "fam": 
             if self.FAM_enabled:
@@ -270,8 +293,28 @@ class OpticalRead():
         time.sleep ( 0.1 )
 
 
+    def _check_frame( self, reply, where ):
+        """byte0 is the ADC's DOUT/RDY line sampled during the command byte.
+        0x00 means a fresh conversion was waiting; anything else means it was
+        not, and the data register is handing back the previous conversion.
+
+        With the RDY poll in front of every read this should be 0x00 on every
+        frame, so a non-zero value means the poll is not doing its job. Nothing
+        used to read this byte, so that failure would have been silent.
+
+        The test is != 0x00, not == 0xff: partial values (0x80, 0xc0, 0xf0,
+        0xfc) occur when the ready line changes state part way through the
+        command byte and are ~12% of all stale frames in the legacy logs.
+        """
+        if reply and reply[0] != 0x00:
+            self.n_stale_frames += 1
+            if self.n_stale_frames <= 10:          # cap the log noise
+                logger.warning( "stale frame at %s: byte0=%02x (RDY poll passed but data was not fresh)",
+                                where, reply[0] )
+        return reply
+
     def convert( self, reply ):
-        #code = int.from_bytes( reply[1:3 ], signed=True ) 
+        #code = int.from_bytes( reply[1:3 ], signed=True )
         code = ( reply[1]*256*256 + reply[2]*256 + reply[3] )  # p. 48
 
         return ( code / 2**23 - 1 ) * 2.5
@@ -383,6 +426,10 @@ class OpticalRead():
 
     def out_data ( self ): # outputs new optics data in the legacy format
         logger.info("Checking out_data conds")
+        logger.info( "ADC health: %d reads needed a retry, %d never came ready (-123 written), "
+                     "%d frames had byte0 != 0x00, %d samples had no usable neighbour in their half-period",
+                     self.n_retries, self.n_failed_reads, self.n_stale_frames,
+                     getattr( self, "n_unrepairable", 0 ) )
         if not self.both_channel_was_used:
             return
         if not self.two_adcs: # data is already out, there is nothing to do
@@ -463,13 +510,13 @@ class OpticalRead():
                 reply2 = None
                 reply2_adc2 = None
 
-                for attempt in range ( 7 ):
+                for attempt in range ( ADC_RDY_ATTEMPTS_CAPTURE ):
 
                     if not got_rox:
                         GPIO.output( self.cs_list[0], GPIO.LOW )
                         st = self.spi.xfer2( [ 0x40 | 0x00, 0x00 ] )        # read STATUS
                         if not ( st[1] & 0x80 ):                            # RDY low = ready
-                            reply2 = self.spi.xfer2( [ 0x42 ] + [0x00, 0x00, 0x00] )   # rox
+                            reply2 = self._check_frame( self.spi.xfer2( [ 0x42 ] + [0x00, 0x00, 0x00] ), "rox" )   # rox
                             adc_value = 1000*self.convert ( reply2 )                   # rox
                             got_rox = True
                         GPIO.output( self.cs_list[0], GPIO.HIGH )
@@ -478,22 +525,26 @@ class OpticalRead():
                         GPIO.output( self.cs_list[1], GPIO.LOW )
                         st = self.spi.xfer2( [ 0x40 | 0x00, 0x00 ] )        # read STATUS
                         if not ( st[1] & 0x80 ):                            # RDY low = ready
-                            reply2_adc2 = self.spi.xfer2( [ 0x42 ] + [0x00, 0x00, 0x00] )  # fam
+                            reply2_adc2 = self._check_frame( self.spi.xfer2( [ 0x42 ] + [0x00, 0x00, 0x00] ), "fam" )  # fam
                             adc_value_adc2 = 1000*self.convert ( reply2_adc2 )             # fam
                             got_fam = True
                         GPIO.output( self.cs_list[1], GPIO.HIGH )
 
                     if got_rox and got_fam:
+                        if attempt > 0:
+                            self.n_retries += 1      # needed more than one RDY poll
                         break
 
-                    time.sleep ( 0.001 )
+                    time.sleep ( ADC_RDY_SLEEP )
 
                 if not got_rox:
                     adc_value = -123
                     reply2 = [255, 255, 255, 255]
+                    self.n_failed_reads += 1
                 if not got_fam:
                     adc_value_adc2 = -123
                     reply2_adc2 = [255, 255, 255, 255]
+                    self.n_failed_reads += 1
 
                 self.data_both.append([reply2, reply2_adc2, adc_value, adc_value_adc2, led_state_nr, channel, tag1, tag2, pcr_t0, self.t0, time.time()])
 
@@ -528,14 +579,14 @@ class OpticalRead():
             got = False
             reply2 = None
 
-            for attempt in range ( 7 ):
+            for attempt in range ( ADC_RDY_ATTEMPTS_CAPTURE ):
 
                 if self.two_adcs:
                     GPIO.output( self.cs_list[cs_pin_index], GPIO.LOW )
 
                 st = self.spi.xfer2( [ 0x40 | 0x00, 0x00 ] )        # read STATUS
                 if not ( st[1] & 0x80 ):                            # RDY low = ready
-                    reply2 = self.spi.xfer2( [ 0x42 ] + [0x00, 0x00, 0x00] )
+                    reply2 = self._check_frame( self.spi.xfer2( [ 0x42 ] + [0x00, 0x00, 0x00] ), channel )
                     adc_value = 1000*self.convert ( reply2 )
                     got = True
 
@@ -545,11 +596,12 @@ class OpticalRead():
                 if got:
                     break
 
-                time.sleep ( 0.001 )
+                time.sleep ( ADC_RDY_SLEEP )
 
             if not got:
                 adc_value = -123
                 reply2 = [255, 255, 255, 255]
+                self.n_failed_reads += 1
 
             self.print_result( "", reply2, adc_value, labels )
 
@@ -557,6 +609,10 @@ class OpticalRead():
         print ( "Caught exception, turning off led" )
         self.gpio.output( LED_PIN1, self.LED_OFF)   # Turn pin 22 off
         self.gpio.output( LED_PIN2, self.LED_OFF)   # Turn pin 22 off
+        logger.info( "ADC health: %d reads needed a retry, %d never came ready (-123 written), "
+                     "%d frames had byte0 != 0x00, %d samples had no usable neighbour in their half-period",
+                     self.n_retries, self.n_failed_reads, self.n_stale_frames,
+                     getattr( self, "n_unrepairable", 0 ) )
         raise e
 
 
