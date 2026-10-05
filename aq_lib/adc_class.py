@@ -371,6 +371,7 @@ class OpticalRead():
         avg_num_fam = 0
         avg_num = 4
         self.data_both2 = []
+        self.n_unrepairable = 0
 
         for i in range(len(self.data_both)):
             self.data_both2.append(self.data_both[i])
@@ -382,16 +383,36 @@ class OpticalRead():
                     avg_num_fam = avg_num_fam + 1
                     avg_sum_fam += self.data_both[i][3]
             
-            if self.data_both[i][2] == -123:
-                if i == 0:
-                    self.data_both[i][2] = 2.0
-                else:
-                    self.data_both[i][2] = self.data_both[i-1][2]
-            if self.data_both[i][3] == -123:
-                if i == 0:
-                    self.data_both[i][3] = 2.1
-                else:
-                    self.data_both[i][3] = self.data_both[i-1][3]
+            for j in range(2):
+                idx = j + 2
+                if self.data_both[i][idx] == -123:
+                    # Sentinel-aware interpolation: neighbours come from inside
+                    # this LED half-period only (i % blink_num), so a repair
+                    # never crosses an on/off transition. data_both[i-1] is
+                    # already repaired; data_both[i+1] may still be -123 and is
+                    # skipped (averaging it would give (good + -123)/2 ~ -60 mV).
+                    has_prev = ( i % self.blink_num ) > 0
+                    has_next = ( i % self.blink_num ) < self.blink_num - 1
+
+                    prev_val = self.data_both[i-1][idx] if has_prev else None
+                    next_val = self.data_both[i+1][idx] if ( has_next and i+1 < len(self.data_both) ) else None
+                    if next_val == -123:
+                        next_val = None
+
+                    if prev_val is not None and next_val is not None:
+                        self.data_both[i][idx] = ( prev_val + next_val ) / 2
+                    elif prev_val is not None:
+                        self.data_both[i][idx] = prev_val
+                    elif next_val is not None:
+                        self.data_both[i][idx] = next_val
+                    else:
+                        self.n_unrepairable += 1
+                        if i - self.scan_num*4*self.blink_num > 0:
+                            self.data_both[i][idx] = self.data_both[i - self.scan_num*4*self.blink_num][idx] # same well/channel/phase, previous cycle
+                        elif i - 2*self.blink_num > 0: # previous well or flash, same channel/phase
+                            self.data_both[i][idx] = self.data_both[i - 2*self.blink_num][idx]
+                        else:
+                            self.data_both[i][idx] = 2.0 if idx == 2 else 2.1
 
 
             if i % self.blink_num == self.blink_num - 1:
@@ -613,7 +634,7 @@ class OpticalRead():
                      "%d frames had byte0 != 0x00, %d samples had no usable neighbour in their half-period",
                      self.n_retries, self.n_failed_reads, self.n_stale_frames,
                      getattr( self, "n_unrepairable", 0 ) )
-        raise e
+        raise
 
 
 def main():
