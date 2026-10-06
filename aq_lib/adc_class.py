@@ -104,6 +104,7 @@ class OpticalRead():
         ):
             self.two_adcs = True
         self.data_both = [] # calling "both" channel fills up this structure
+        self._raw_log_fp = None # when set (run context), 'both' rows are also streamed to a raw safety log (ADR-024)
         self.FAM_enabled = False
         self.ROX_enabled = False
         if self.two_adcs:
@@ -546,6 +547,22 @@ class OpticalRead():
         masked = self.mask_data_streaming(self._read_raw_passes(raw_path, pass_len))
         self._write_masked(masked)
 
+    def start_raw_log(self, raw_path):
+        """Begin streaming 'both' capture rows to a raw safety log for this run
+        (ADR-024). Keep this OUTSIDE logs/optics/ so the uploader (which syncs
+        only the reported logs/optics/*.log) never picks it up."""
+        self.stop_raw_log()
+        self._raw_log_fp = open(raw_path, "w")
+
+    def stop_raw_log(self):
+        """Close the raw safety log (idempotent)."""
+        if self._raw_log_fp is not None:
+            try:
+                self._raw_log_fp.flush()
+                self._raw_log_fp.close()
+            finally:
+                self._raw_log_fp = None
+
     def capture_blink( self, channel, tag1 = None, tag2=None  ):
         if channel == "both" and self.two_adcs:
             self.both_channel_was_used = True
@@ -612,7 +629,12 @@ class OpticalRead():
                     reply2_adc2 = [255, 255, 255, 255]
                     self.n_failed_reads += 1
 
-                self.data_both.append([reply2, reply2_adc2, adc_value, adc_value_adc2, led_state_nr, channel, tag1, tag2, pcr_t0, self.t0, time.time()])
+                row = [reply2, reply2_adc2, adc_value, adc_value_adc2, led_state_nr, channel, tag1, tag2, pcr_t0, self.t0, time.time()]
+                self.data_both.append(row)
+                if self._raw_log_fp is not None:
+                    # Crash-safe raw safety log (ADR-024): gated on run context so
+                    # the shared capture_blink used by melt_curve never writes it.
+                    self._raw_log_fp.write(repr(row) + "\n")
 
             self.gpio.output( ROX_LED_PIN, self.LED_OFF )
             self.gpio.output( FAM_LED_PIN, self.LED_OFF )
