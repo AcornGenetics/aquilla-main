@@ -5,6 +5,13 @@
 **Depends on:** Phase B `read_plan(geo)` (landed on `feat/15well`: #514, #521–#525)
 **Related:** `specs/15-well-mkii-migration.md` (§3 geometry source, §5 motion, §19e backend, §21b calibration), ADR-023 (optics read path), #519 (Meerstetter current-latch)
 
+**Sliced into issues:**
+- Slice 1 (#526) — per-row axis calibration (accept-both schema + row-aware axis) · AFK
+- Slice 2 (#527) — lid heater quiet during a TEC ramp (thermal/power) · AFK
+- Slice 3 (#528) — homing-error → QC telemetry (structure RDY/stale + correlation key) · AFK
+- Slice 4 (#529) — motion backend: in-container pigpiod → localhost · normal
+- Slice 5 (#530) — on-device bench validation: calibrate, scan-time ≤18s, power budget · HITL (blocked by #526, #527, #529)
+
 ---
 
 ## Problem Statement
@@ -68,9 +75,6 @@ it quiet. The device stays within its power budget during ramps.
 10. As a **firmware engineer**, I want the motion backend to run pigpiod
     in-container and connect to localhost, so that the hardcoded `172.18.0.1`
     network hop is removed while the proven waveform code is unchanged.
-11. As a **firmware engineer**, I want an lgpio timing benchmark run in parallel
-    (using the existing `steps_to_flag`/`residual` telemetry), so that we can
-    choose the durable motion backend on data, not guesswork.
 12. As an **analysis/QC consumer**, I want per-move stall telemetry (steps to
     flag, residual, reached-home) logged structured, so that samples downstream
     of a stall can be disqualified.
@@ -126,12 +130,11 @@ it quiet. The device stays within its power budget during ramps.
   row's stop).
 
 ### Motion backend (§19e)
-- Ship **A now**: run `pigpiod` in-container and connect to **localhost**,
-  removing the hardcoded `172.18.0.1`. Waveform code unchanged. Container pigpiod
-  needs elevated device access — **confirm fleet policy** (ops/infra).
-- Run the **lgpio** timing benchmark in parallel using the existing
-  `steps_to_flag`/`residual` telemetry to decide the durable backend. Leave a
-  motion-controller IC for the respin.
+- **Decided:** run `pigpiod` in-container and connect to **localhost**, removing
+  the hardcoded `172.18.0.1`. Waveform code unchanged. Container pigpiod needs
+  elevated device access — **confirm fleet policy** (ops/infra). This is THE
+  backend — the lgpio benchmark is dropped. A motion-controller IC is left for
+  the respin (future hardware, not this phase).
 
 ### Homing-error → QC hook
 - Per-move stall telemetry already lands structured in the **homing log**
@@ -204,8 +207,6 @@ lid/thermal tests must stay green; 4-well must stay byte-identical.
   drawer positions) — produced on the bench, dropped into `host_config`.
 - **The scan-time and power-budget measurements** — bench/HITL; this PRD delivers
   the software to drive and validate them.
-- **The durable motion-backend choice** (pigpio vs lgpio vs motion IC) — decided by
-  the benchmark; this PRD ships backend A (in-container pigpiod → localhost).
 - **Building the full homing-QC disqualification** in analysis — this PRD logs the
   telemetry structured and defines the correlation; the downstream
   outbox/warehouse join and sample-disqualification is a separate (analytics) piece.
