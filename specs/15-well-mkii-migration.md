@@ -434,8 +434,15 @@ Samples-per-half-flash + the padding-removal split (resolves §21a reshape + the
 
 Format specifics:
 - [x] **Tube-id label format (§21d): `A1…C5`** (row letter + column; 2026-10-05).
-- [ ] **Blinks per capture for 15-well:** the `both` capture physically fires **2** blinks (`4×blink_num` samples = ROX-phase + FAM-phase, ×2); the legacy format is **3** blinks, so today a 3rd is synthesized by averaging the 2. Decide: write the real **2** (honest, consistent with removing the pad; analysis must accept 2-blink captures) or keep synthesizing **3** (matches legacy blink count; fabricates 1/3). → sets rows-per-capture = `blinks × 2 × 7`.
-- [ ] Resulting `SAMPLES_PER_BLINK`/rows-per-capture for 15-well derives from the blink decision above.
+- [x] **Blinks per capture:** keep current behavior — the 3rd blink stays synthesized. Only the per-half-flash sample *width* changes (7 vs 10); blink count is out of scope for now.
+
+### Slice 7 — accept 7-sample half-flashes (decouple sample width from well count)
+
+Today `mask_data` force-pads the fast-settling **7** samples/half-flash back to **10** to fit the legacy format. "7 vs 10" is the **fast-settling filter** setting (`fast_settling` → `blink_num`), an *optics capability* — **not** a plate/geometry property — so it should be a free parameter: **any** plate (4-well included) can run at 7 or 10.
+
+- [ ] Parameterize the sample width end-to-end off one value (`blink_num`/samples-per-half-flash), removing the `10 - blink_num` pad and the `10/20/40/60` literals in `mask_data`/`out_data` (and `SAMPLES_PER_BLINK`). 4-well at 10 stays byte-identical; 4-well at 7 becomes possible.
+- [ ] Analysis (`aq_curve` + acorn-analytics #102) accept a 7-wide file; regenerate the ADR-0007 golden hash.
+- [ ] **Open design Q:** where does the 7-vs-10 selection live? It's an optics capability, and ADR-023 is deleting host_config flags — so it needs an explicit optics-capability home (per ADR-023 revisit conditions), not a resurrected `fast_settling` host_config flag.
 
 **Summary:** capture works; **write-out (21a) is the blocker**, **calibration (21b) makes the current stops physically wrong**, and **overhang (21c) is implicit tech debt.** Ground truth is now in (§21f); the remaining work is the padding-removal split (device + both analysis tools) once the two open format specifics are set.
 
