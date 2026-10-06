@@ -113,6 +113,7 @@ def _mask_reader(adc_module, rows, blink_num=7, scan_num=6):
     r.blink_num = blink_num
     r.scan_num = scan_num
     r.n_unrepairable = 0
+    r.n_retries = r.n_failed_reads = r.n_stale_frames = 0
     r.data_both = rows
     return r
 
@@ -192,6 +193,65 @@ def test_variantc_streaming_mask_is_byte_identical_to_batch(adc_module):
 
             assert stream == rb.data_both3, f"w={w} n_passes={n_passes}"
             assert rs.n_unrepairable == rb.n_unrepairable, f"w={w} n_passes={n_passes}"
+
+
+@pytest.mark.unit
+def test_variantc_recovery_from_raw_log_matches_live(adc_module, tmp_path):
+    """ADR-024: reconstructing the optics file from the raw safety log yields the
+    same output as the live out_data for the same capture (the write-time
+    timestamp column is pinned via a fixed clock)."""
+    import io
+    from unittest.mock import patch
+    scan_num, w, n_passes = 6, 7, 2
+    pass_len = scan_num * 4 * w
+    base = [_row(float(i % 13) - 3.0, float(i % 9) - 2.0) for i in range(n_passes * pass_len)]
+    for i in range(0, len(base), 5):
+        base[i][2] = -123
+
+    with patch("time.time", lambda: 1000.0):
+        live = _mask_reader(adc_module, [list(r) for r in base], blink_num=w, scan_num=scan_num)
+        live.well_15 = False
+        live.two_adcs = True
+        live.both_channel_was_used = True
+        live.t0 = 0.0
+        live.data_file = io.StringIO()
+        live.out_data()
+        live_out = live.data_file.getvalue()
+
+        raw_path = tmp_path / "raw.log"
+        raw_path.write_text("".join(repr(r) + "\n" for r in base))
+
+        rec = _mask_reader(adc_module, [], blink_num=w, scan_num=scan_num)
+        rec.well_15 = False
+        rec.two_adcs = True
+        rec.t0 = 0.0
+        rec.data_file = io.StringIO()
+        rec.optics_from_raw_log(str(raw_path))
+        rec_out = rec.data_file.getvalue()
+
+    assert len(rec_out) > 0
+    assert rec_out == live_out
+
+
+@pytest.mark.unit
+def test_variantc_recovery_drops_torn_trailing_line(adc_module, tmp_path):
+    """A crash mid-write leaves a torn final line; recovery stops at the last
+    intact pass rather than failing."""
+    import io
+    from unittest.mock import patch
+    scan_num, w = 6, 7
+    pass_len = scan_num * 4 * w
+    base = [_row(1.0, 2.0) for _ in range(pass_len)]
+    raw_path = tmp_path / "raw.log"
+    raw_path.write_text("".join(repr(r) + "\n" for r in base) + "[0, 0, 1.0, 2.")  # torn line
+    with patch("time.time", lambda: 1000.0):
+        rec = _mask_reader(adc_module, [], blink_num=w, scan_num=scan_num)
+        rec.well_15 = False
+        rec.two_adcs = True
+        rec.t0 = 0.0
+        rec.data_file = io.StringIO()
+        rec.optics_from_raw_log(str(raw_path))   # must not raise
+    assert len(rec.data_file.getvalue()) > 0
 
 
 @pytest.mark.unit

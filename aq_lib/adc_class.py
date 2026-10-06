@@ -470,15 +470,17 @@ class OpticalRead():
         if not self.two_adcs: # data is already out, there is nothing to do
             return
 
-        if self.well_15:
-            self.scan_num = 21 # this assumes 15 wells
-        else: self.scan_num = 6 # this assumes 4 wells
-
+        self.scan_num = 21 if self.well_15 else 6 # 15 vs 4 wells
         logger.info("Scan_num = %d\n", self.scan_num)
 
         self.mask_data()
-        self.data_both = self.data_both3
+        self._write_masked(self.data_both3)
+        self.data_both = []
 
+    def _write_masked(self, masked):
+        """Write masked optics rows to the data file in the legacy format.
+        Shared by the live path (out_data) and the crash-safe recovery path
+        (optics_from_raw_log) so both emit identical output (ADR-024)."""
         if self.scan_num == 21:
             legacy_well_one = 9
             rox_well_one = legacy_well_one
@@ -487,34 +489,62 @@ class OpticalRead():
             rox_well_one = 0
             fam_well_one = 2
         rpc = 6 * self.blink_num  # rows per capture = 3 blinks x 2*w (60 at w=10, 42 at w=7)
-        passes_num = int(len(self.data_both) / self.scan_num / rpc)
+        passes_num = int(len(masked) / self.scan_num / rpc)
         logger.info("Passes num = %d\n", passes_num)
         for i in range (passes_num):
             true_pass_num = i
             if i == 0: true_pass_num = -1
             for k in range(6):
-                logger.info("k = %d", k)
                 if k < 4: # rox comes first
                     for j in range(rpc):
-                        #self.print_result( "", reply2, adc_value, labels )
                         rox_index = (i*self.scan_num+rox_well_one+k)*rpc + j
-                        if self.data_both[rox_index][2] == -123:
+                        if masked[rox_index][2] == -123:
                             if j == 0:
-                                self.data_both[rox_index][2] = 2.0
+                                masked[rox_index][2] = 2.0
                             else:
-                                self.data_both[rox_index][2] = self.data_both[rox_index-1][2]
-                        self.print_result( "", self.data_both[rox_index][0], self.data_both[rox_index][2], [(j // self.blink_num + 1) % 2, "rox", true_pass_num, k] )
+                                masked[rox_index][2] = masked[rox_index-1][2]
+                        self.print_result( "", masked[rox_index][0], masked[rox_index][2], [(j // self.blink_num + 1) % 2, "rox", true_pass_num, k] )
 
                 if k > 1: # fam comes second
                     for j in range(rpc):
                         fam_index = (i*self.scan_num+fam_well_one+(k-2))*rpc + j
-                        if self.data_both[fam_index][3] == -123:
+                        if masked[fam_index][3] == -123:
                             if j == 0:
-                                self.data_both[fam_index][3] = 2.0
+                                masked[fam_index][3] = 2.0
                             else:
-                                self.data_both[fam_index][3] = self.data_both[fam_index-1][3]
-                        self.print_result( "", self.data_both[fam_index][1], self.data_both[fam_index][3], [(j // self.blink_num + 1) % 2, "fam", true_pass_num, k] )
-        self.data_both = []
+                                masked[fam_index][3] = masked[fam_index-1][3]
+                        self.print_result( "", masked[fam_index][1], masked[fam_index][3], [(j // self.blink_num + 1) % 2, "fam", true_pass_num, k] )
+
+    def _read_raw_passes(self, raw_path, pass_len):
+        """Yield whole passes of raw rows from a safety log, pass_len rows each,
+        keeping only one pass in memory (ADR-024 bounded read). A torn trailing
+        line from a crash mid-write is dropped; a partial trailing pass is
+        incomplete and not yielded."""
+        import ast
+        pass_rows = []
+        with open(raw_path) as fp:
+            for line in fp:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    pass_rows.append(ast.literal_eval(line))
+                except (ValueError, SyntaxError):
+                    logger.warning("raw log: dropping unparseable trailing line")
+                    break
+                if len(pass_rows) == pass_len:
+                    yield pass_rows
+                    pass_rows = []
+
+    def optics_from_raw_log(self, raw_path):
+        """Crash-safe write-out (ADR-024): reconstruct the optics file from a raw
+        safety log by masking it pass-by-pass (bounded raw read) and writing the
+        legacy format. Same output as the live out_data for the same capture
+        (modulo the write-time timestamp column — see print_result)."""
+        self.scan_num = 21 if self.well_15 else 6
+        pass_len = self.scan_num * 4 * self.blink_num
+        masked = self.mask_data_streaming(self._read_raw_passes(raw_path, pass_len))
+        self._write_masked(masked)
 
     def capture_blink( self, channel, tag1 = None, tag2=None  ):
         if channel == "both" and self.two_adcs:
