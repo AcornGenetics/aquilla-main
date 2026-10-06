@@ -364,25 +364,18 @@ class OpticalRead():
 
     def mask_data(self): # outputs new optics data in the legacy format 
 
-        # increase blink_num samples to full 10 samples via padding with extra samples that are averages of the last four samples
-        avg_sum_rox = 0
-        avg_sum_fam = 0
-        avg_num_rox = 0
-        avg_num_fam = 0
-        avg_num = 4
+        # Each LED half-flash is w = blink_num samples (7 with the fast-settling
+        # filter, 10 without). The honest capture width is written as-is — no
+        # padding up to 10 (#517 Slice 7). A blink = 2*w samples (ROX phase +
+        # FAM phase). Downstream reshape keys off w, so 4-well (w=10) stays
+        # byte-identical and 15-well (w=7) writes the real 7-sample blinks.
+        w = self.blink_num
         self.data_both2 = []
         self.n_unrepairable = 0
 
         for i in range(len(self.data_both)):
             self.data_both2.append(self.data_both[i])
-            if self.blink_num - i % self.blink_num <= avg_num:
-                if self.data_both[i][2] != -123:
-                    avg_sum_rox += self.data_both[i][2]
-                    avg_num_rox = avg_num_rox + 1
-                if self.data_both[i][3] != -123:
-                    avg_num_fam = avg_num_fam + 1
-                    avg_sum_fam += self.data_both[i][3]
-            
+
             for j in range(2):
                 idx = j + 2
                 if self.data_both[i][idx] == -123:
@@ -415,35 +408,22 @@ class OpticalRead():
                             self.data_both[i][idx] = 2.0 if idx == 2 else 2.1
 
 
-            if i % self.blink_num == self.blink_num - 1:
-                if avg_num_rox == 0:
-                    avg_num_rox = 1
-                    avg_sum_rox = 2.0
-                if avg_num_fam == 0:
-                    avg_num_fam = 1
-                    avg_sum_fam = 2.1
-                for k in range(10 - self.blink_num):
-                    self.data_both2.append([self.data_both[i][0], self.data_both[i][0], avg_sum_rox / avg_num_rox, avg_sum_fam / avg_num_fam, self.data_both[i][4], self.data_both[i][5], self.data_both[i][6], self.data_both[i][7], self.data_both[i][8], self.data_both[i][9], self.data_both[i][10]])
-                avg_sum_rox = 0
-                avg_sum_fam = 0
-                avg_num_rox = 0
-                avg_num_fam = 0
-
-        #increase number of blinks from 2 to 3 via adding a fake first blink; each blink is 20 datapoints
+        # Synthesize a 3rd blink (2 real blinks -> 3) as the average of the two,
+        # prepended per tube; each blink is 2*w datapoints.
         self.data_both = self.data_both2
         self.data_both3 = []
-        for i in range(len(self.data_both2)): # should be divisble by 10 now
-            if i%40 == 0:
-                for j in range(20):
-                    self.data_both3.append([self.data_both[i+j][0], self.data_both[i+j][0], (self.data_both[i+j][2] + self.data_both[i+20+j][2]) / 2, (self.data_both[i+j][3] + self.data_both[i+20+j][3]) / 2, self.data_both[i+j][4], self.data_both[i+j][5], self.data_both[i+j][6], self.data_both[i+j][7], self.data_both[i+j][8], self.data_both[i+j][9], self.data_both[i+j][10]])
+        for i in range(len(self.data_both2)):
+            if i % (4*w) == 0:
+                for j in range(2*w):
+                    self.data_both3.append([self.data_both[i+j][0], self.data_both[i+j][0], (self.data_both[i+j][2] + self.data_both[i+2*w+j][2]) / 2, (self.data_both[i+j][3] + self.data_both[i+2*w+j][3]) / 2, self.data_both[i+j][4], self.data_both[i+j][5], self.data_both[i+j][6], self.data_both[i+j][7], self.data_both[i+j][8], self.data_both[i+j][9], self.data_both[i+j][10]])
             self.data_both3.append(self.data_both2[i])
 
-        #fam is off then on, which violates the lagacy arangement. Thus, each ten samples have to be swapped
-        # list of lists x. The task is to swap x[20*k+i][3] and x[20*k+10+i][3] for k from zero to len(x)/20 (excluding the last one) and i from zero to 9
+        # FAM is off-then-on, which violates the legacy arrangement, so the two
+        # w-sample half-flashes of each blink are swapped.
         x = self.data_both3
-        for k in range(len(x) // 20):
-            for i in range(10):
-                x[20*k+i][3], x[20*k+10+i][3] = x[20*k+10+i][3], x[20*k+i][3]
+        for k in range(len(x) // (2*w)):
+            for i in range(w):
+                x[2*w*k+i][3], x[2*w*k+w+i][3] = x[2*w*k+w+i][3], x[2*w*k+i][3]
 
     def out_data ( self ): # outputs new optics data in the legacy format
         logger.info("Checking out_data conds")
@@ -472,7 +452,8 @@ class OpticalRead():
         else:
             rox_well_one = 0
             fam_well_one = 2
-        passes_num = int(len(self.data_both) / self.scan_num / 60)
+        rpc = 6 * self.blink_num  # rows per capture = 3 blinks x 2*w (60 at w=10, 42 at w=7)
+        passes_num = int(len(self.data_both) / self.scan_num / rpc)
         logger.info("Passes num = %d\n", passes_num)
         for i in range (passes_num):
             true_pass_num = i
@@ -480,25 +461,25 @@ class OpticalRead():
             for k in range(6):
                 logger.info("k = %d", k)
                 if k < 4: # rox comes first
-                    for j in range(60):
+                    for j in range(rpc):
                         #self.print_result( "", reply2, adc_value, labels )
-                        rox_index = (i*self.scan_num+rox_well_one+k)*60 + j
+                        rox_index = (i*self.scan_num+rox_well_one+k)*rpc + j
                         if self.data_both[rox_index][2] == -123:
                             if j == 0:
                                 self.data_both[rox_index][2] = 2.0
                             else:
                                 self.data_both[rox_index][2] = self.data_both[rox_index-1][2]
-                        self.print_result( "", self.data_both[rox_index][0], self.data_both[rox_index][2], [(j // 10 + 1) % 2, "rox", true_pass_num, k] )
+                        self.print_result( "", self.data_both[rox_index][0], self.data_both[rox_index][2], [(j // self.blink_num + 1) % 2, "rox", true_pass_num, k] )
 
                 if k > 1: # fam comes second
-                    for j in range(60):
-                        fam_index = (i*self.scan_num+fam_well_one+(k-2))*60 + j
+                    for j in range(rpc):
+                        fam_index = (i*self.scan_num+fam_well_one+(k-2))*rpc + j
                         if self.data_both[fam_index][3] == -123:
                             if j == 0:
                                 self.data_both[fam_index][3] = 2.0
                             else:
                                 self.data_both[fam_index][3] = self.data_both[fam_index-1][3]
-                        self.print_result( "", self.data_both[fam_index][1], self.data_both[fam_index][3], [(j // 10 + 1) % 2, "fam", true_pass_num, k] )
+                        self.print_result( "", self.data_both[fam_index][1], self.data_both[fam_index][3], [(j // self.blink_num + 1) % 2, "fam", true_pass_num, k] )
         self.data_both = []
 
     def capture_blink( self, channel, tag1 = None, tag2=None  ):

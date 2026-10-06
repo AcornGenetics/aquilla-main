@@ -153,6 +153,19 @@ def test_no_sentinels_leaves_values_unchanged(adc_module):
 
 
 @pytest.mark.unit
+def test_slice7_no_pad_and_rows_per_capture_is_six_w(adc_module):
+    """One tube = 2 real blinks = 4*w samples. mask_data writes the honest
+    w-wide half-flashes (no pad to 10) and synthesizes a 3rd blink → 6*w rows
+    per capture: 60 at w=10 (byte-identical), 42 at w=7 (#517 Slice 7)."""
+    for w in (7, 10):
+        rows = [_row(10.0, 20.0) for _ in range(4 * w)]
+        r = _mask_reader(adc_module, rows, blink_num=w)
+        r.mask_data()
+        assert len(r.data_both2) == 4 * w   # no padding rows added
+        assert len(r.data_both3) == 6 * w   # 3 blinks x 2*w
+
+
+@pytest.mark.unit
 def test_unrepairable_sentinel_is_counted_and_defaults(adc_module):
     """index 0 has no in-period predecessor and a -123 successor → no usable
     neighbour → counted and defaulted to 2.0 (rox)."""
