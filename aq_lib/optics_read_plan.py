@@ -54,6 +54,13 @@ def read_plan(geo):
 READS_PER_CYCLE = sum(len(dyes) for _, dyes in OPTICS_READ_PLAN)
 
 
+def reads_per_cycle(geo):
+    """Captures fired per read pass for a plate geometry, derived from the
+    generated plan so the optics-completeness math can't drift from the real
+    read pass (ADR-023, #514). The 4-well case equals ``READS_PER_CYCLE``."""
+    return sum(len(dyes) for _row, _stop, dyes in read_plan(geo))
+
+
 def optics_read_tasks(cycle, geo=None):
     """Executor tasks for one optical read pass, generated from plate geometry.
 

@@ -10,7 +10,15 @@ from aq_lib.optics_read_plan import (
     READS_PER_CYCLE,
     optics_read_tasks,
     read_plan,
+    reads_per_cycle,
 )
+
+
+def test_reads_per_cycle_derives_per_geometry():
+    # Derived from the generated plan (ADR-023 / #514), not a hardcoded 21:
+    # 4-well fires 8 captures/pass; 15-well (phased) fires 15 tubes x 2 dyes = 30.
+    assert reads_per_cycle(PlateGeometry(rows=1, cols=4)) == READS_PER_CYCLE == 8
+    assert reads_per_cycle(PlateGeometry(rows=3, cols=5)) == 30
 
 
 def test_read_plan_single_row_reproduces_the_legacy_four_well_pattern():

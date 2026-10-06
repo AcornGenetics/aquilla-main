@@ -34,7 +34,8 @@ from aq_curve.main import results_to_json
 from aq_lib.fan_class import Fan
 from aq_lib.adc_class import OpticalRead
 from aq_lib.thermal_parser import count_optics_passes
-from aq_lib.optics_read_plan import READS_PER_CYCLE, optics_read_tasks
+from aq_lib.optics_read_plan import optics_read_tasks, reads_per_cycle
+from aq_lib.geometry import geometry
 from aquila_web.optics_readings import expected_lines
 
 logging.config.dictConfig( LOGGING_CONFIG )
@@ -50,18 +51,6 @@ config = Config()
 class AssayInterface():
 
     def __init__( self ):
-
-        self.well_15 = False # this flag whether 4well or 15well arrangement should be used
-        value = config.info.get("well_15")
-        if (
-            value is not None
-            and value != 0
-            and not (
-                isinstance(value, str)
-                and value.strip().lower() in ("0", "false")
-            )
-        ):
-            self.well_15 = True
 
         self.axis = Axis()
         self.drawer = Drawer()
@@ -374,8 +363,9 @@ class AssayInterface():
         # expected_lines is the intended total (complete=false, honest coverage);
         # fall back to the runtime count if the profile couldn't be parsed (#288).
         passes = self._planned_optics_passes or self._optics_pass_count
-        if self.well_15: return expected_lines(passes, 21)
-        else: return expected_lines(passes, READS_PER_CYCLE)
+        # reads-per-cycle derives from the device's geometry-generated plan
+        # (ADR-023), so the completeness math can't drift from the real reads.
+        return expected_lines(passes, reads_per_cycle(geometry()))
 
     def hw_deinitialize(self):
         self.meer.setTargetObjectTemperature ( 25.0 )
