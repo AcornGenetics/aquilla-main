@@ -166,6 +166,35 @@ def test_slice7_no_pad_and_rows_per_capture_is_six_w(adc_module):
 
 
 @pytest.mark.unit
+def test_variantc_streaming_mask_is_byte_identical_to_batch(adc_module):
+    """ADR-024: mask_data_streaming (bounded 2-pass window) must produce the
+    exact same reshaped output as the whole-buffer mask_data, including the
+    cross-pass -123 repair look-back and the n_unrepairable count."""
+    scan_num = 6
+    for w in (7, 10):
+        pass_len = scan_num * 4 * w
+        for n_passes in (1, 2, 3):
+            base = []
+            for i in range(n_passes * pass_len):
+                r = _row(float(i % 13) - 3.0, float(i % 9) - 2.0)
+                if i % 5 == 0:    # sentinels to exercise in-pass + cross-pass repair
+                    r[2] = -123
+                if i % 11 == 0:
+                    r[3] = -123
+                base.append(r)
+
+            rb = _mask_reader(adc_module, [list(r) for r in base], blink_num=w, scan_num=scan_num)
+            rb.mask_data()
+
+            rs = _mask_reader(adc_module, [], blink_num=w, scan_num=scan_num)
+            passes = [[list(base[p * pass_len + k]) for k in range(pass_len)] for p in range(n_passes)]
+            stream = rs.mask_data_streaming(passes)
+
+            assert stream == rb.data_both3, f"w={w} n_passes={n_passes}"
+            assert rs.n_unrepairable == rb.n_unrepairable, f"w={w} n_passes={n_passes}"
+
+
+@pytest.mark.unit
 def test_unrepairable_sentinel_is_counted_and_defaults(adc_module):
     """index 0 has no in-period predecessor and a -123 successor → no usable
     neighbour → counted and defaulted to 2.0 (rox)."""

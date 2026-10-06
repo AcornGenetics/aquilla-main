@@ -362,68 +362,102 @@ class OpticalRead():
         my_print ( "%.5f"%adc_value                           )
         print ( *labels, sep=" ", file = self.data_file )
 
-    def mask_data(self): # outputs new optics data in the legacy format 
+    def _repair_sample(self, buf, wi, abs_i, w):
+        """Repair the -123 sentinel in buf[wi][2] and [3], in place.
 
-        # Each LED half-flash is w = blink_num samples (7 with the fast-settling
-        # filter, 10 without). The honest capture width is written as-is — no
-        # padding up to 10 (#517 Slice 7). A blink = 2*w samples (ROX phase +
-        # FAM phase). Downstream reshape keys off w, so 4-well (w=10) stays
-        # byte-identical and 15-well (w=7) writes the real 7-sample blinks.
-        w = self.blink_num
-        self.data_both2 = []
-        self.n_unrepairable = 0
+        Sentinel-aware interpolation: neighbours come from inside this LED
+        half-period only (abs_i % w), so a repair never crosses an on/off
+        transition. buf[wi-1] is already repaired; buf[wi+1] may still be -123
+        and is skipped (averaging it would give (good + -123)/2 ~ -60 mV).
 
-        for i in range(len(self.data_both)):
-            self.data_both2.append(self.data_both[i])
+        ``abs_i`` is the sample's absolute index in the run (drives the look-back
+        decisions); ``buf`` is a window in which wi-1 / wi-2w / wi-scan_num*4*w
+        resolve. Shared by mask_data (whole buffer) and mask_data_streaming
+        (bounded 2-pass window) so the two are byte-identical (ADR-024)."""
+        pass_back = self.scan_num * 4 * w
+        for j in range(2):
+            idx = j + 2
+            if buf[wi][idx] == -123:
+                has_prev = ( abs_i % w ) > 0
+                has_next = ( abs_i % w ) < w - 1
 
-            for j in range(2):
-                idx = j + 2
-                if self.data_both[i][idx] == -123:
-                    # Sentinel-aware interpolation: neighbours come from inside
-                    # this LED half-period only (i % blink_num), so a repair
-                    # never crosses an on/off transition. data_both[i-1] is
-                    # already repaired; data_both[i+1] may still be -123 and is
-                    # skipped (averaging it would give (good + -123)/2 ~ -60 mV).
-                    has_prev = ( i % self.blink_num ) > 0
-                    has_next = ( i % self.blink_num ) < self.blink_num - 1
+                prev_val = buf[wi-1][idx] if has_prev else None
+                next_val = buf[wi+1][idx] if ( has_next and wi+1 < len(buf) ) else None
+                if next_val == -123:
+                    next_val = None
 
-                    prev_val = self.data_both[i-1][idx] if has_prev else None
-                    next_val = self.data_both[i+1][idx] if ( has_next and i+1 < len(self.data_both) ) else None
-                    if next_val == -123:
-                        next_val = None
-
-                    if prev_val is not None and next_val is not None:
-                        self.data_both[i][idx] = ( prev_val + next_val ) / 2
-                    elif prev_val is not None:
-                        self.data_both[i][idx] = prev_val
-                    elif next_val is not None:
-                        self.data_both[i][idx] = next_val
+                if prev_val is not None and next_val is not None:
+                    buf[wi][idx] = ( prev_val + next_val ) / 2
+                elif prev_val is not None:
+                    buf[wi][idx] = prev_val
+                elif next_val is not None:
+                    buf[wi][idx] = next_val
+                else:
+                    self.n_unrepairable += 1
+                    if abs_i - pass_back > 0:
+                        buf[wi][idx] = buf[wi - pass_back][idx] # same well/channel/phase, previous cycle
+                    elif abs_i - 2*w > 0: # previous well or flash, same channel/phase
+                        buf[wi][idx] = buf[wi - 2*w][idx]
                     else:
-                        self.n_unrepairable += 1
-                        if i - self.scan_num*4*self.blink_num > 0:
-                            self.data_both[i][idx] = self.data_both[i - self.scan_num*4*self.blink_num][idx] # same well/channel/phase, previous cycle
-                        elif i - 2*self.blink_num > 0: # previous well or flash, same channel/phase
-                            self.data_both[i][idx] = self.data_both[i - 2*self.blink_num][idx]
-                        else:
-                            self.data_both[i][idx] = 2.0 if idx == 2 else 2.1
+                        buf[wi][idx] = 2.0 if idx == 2 else 2.1
 
+    def _synth_swap(self, rows, w):
+        """Reshape repaired raw rows into the legacy format: synthesize a 3rd
+        blink (average of the 2 real blinks, prepended per tube), then swap each
+        blink's two w-sample half-flashes (FAM is off-then-on).
 
-        # Synthesize a 3rd blink (2 real blinks -> 3) as the average of the two,
-        # prepended per tube; each blink is 2*w datapoints.
-        self.data_both = self.data_both2
-        self.data_both3 = []
-        for i in range(len(self.data_both2)):
+        Returns NEW rows (copies) so the caller's input is never mutated — the
+        streaming path depends on retaining an un-swapped previous pass. The
+        reshape is per-tube/per-blink local, so applying it per pass and
+        concatenating equals applying it to the whole run."""
+        out = []
+        for i in range(len(rows)):
             if i % (4*w) == 0:
                 for j in range(2*w):
-                    self.data_both3.append([self.data_both[i+j][0], self.data_both[i+j][0], (self.data_both[i+j][2] + self.data_both[i+2*w+j][2]) / 2, (self.data_both[i+j][3] + self.data_both[i+2*w+j][3]) / 2, self.data_both[i+j][4], self.data_both[i+j][5], self.data_both[i+j][6], self.data_both[i+j][7], self.data_both[i+j][8], self.data_both[i+j][9], self.data_both[i+j][10]])
-            self.data_both3.append(self.data_both2[i])
-
-        # FAM is off-then-on, which violates the legacy arrangement, so the two
-        # w-sample half-flashes of each blink are swapped.
-        x = self.data_both3
-        for k in range(len(x) // (2*w)):
+                    a = rows[i+j]
+                    b = rows[i+2*w+j]
+                    out.append([a[0], a[0], (a[2] + b[2]) / 2, (a[3] + b[3]) / 2, a[4], a[5], a[6], a[7], a[8], a[9], a[10]])
+            out.append(list(rows[i]))
+        for k in range(len(out) // (2*w)):
             for i in range(w):
-                x[2*w*k+i][3], x[2*w*k+w+i][3] = x[2*w*k+w+i][3], x[2*w*k+i][3]
+                out[2*w*k+i][3], out[2*w*k+w+i][3] = out[2*w*k+w+i][3], out[2*w*k+i][3]
+        return out
+
+    def mask_data(self): # outputs new optics data in the legacy format
+        # Whole-buffer mask. Half-flash width w = blink_num (#517 Slice 7); see
+        # _repair_sample / _synth_swap for the shared logic. mask_data_streaming
+        # produces byte-identical output pass-by-pass with bounded RAM (ADR-024).
+        w = self.blink_num
+        self.n_unrepairable = 0
+        for i in range(len(self.data_both)):
+            self._repair_sample(self.data_both, i, i, w)
+        self.data_both2 = self.data_both
+        self.data_both3 = self._synth_swap(self.data_both2, w)
+
+    def mask_data_streaming(self, raw_passes):
+        """Mask the run pass-by-pass with a bounded 2-pass window; returns the
+        reshaped output (== mask_data's self.data_both3 for the same raw rows).
+
+        ``raw_passes``: iterable of passes, each a list of scan_num*4*w raw rows.
+        Only the current + previous pass are held at once — the repair looks back
+        at most one pass (scan_num*4*w), so a 2-pass window is exact (ADR-024).
+        The retained previous pass is the repaired-but-not-reshaped rows
+        (_synth_swap copies, so it is never swapped)."""
+        w = self.blink_num
+        self.n_unrepairable = 0
+        out = []
+        prev = []
+        processed = 0
+        for cur in raw_passes:
+            cur = list(cur)
+            window = prev + cur
+            base = len(prev)
+            for wi in range(base, len(window)):
+                self._repair_sample(window, wi, processed + (wi - base), w)
+            out.extend(self._synth_swap(window[base:], w))
+            prev = window[base:]   # repaired, un-swapped cur = next pass's look-back
+            processed += len(cur)
+        return out
 
     def out_data ( self ): # outputs new optics data in the legacy format
         logger.info("Checking out_data conds")
