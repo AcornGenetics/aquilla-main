@@ -81,13 +81,15 @@ def reads_per_cycle(geo):
 def optics_read_tasks(cycle, geo=None):
     """Executor tasks for one optical read pass, generated from plate geometry.
 
-    For each ``((axis_stop, drawer_row), channels)`` in ``read_plan(geo)``: move a
-    motor only when its coordinate changes — a ``drawer_to`` when the drawer row
-    changes (multi-row plates only; a 1-row 4-well emits none), a
-    ``goto_position`` when the axis stop changes — then a ``capture`` per channel.
-    The serpentine repeats the axis stop across a row boundary, so the axis
-    skips the redundant re-goto there (only the drawer moves). The pass closes by
-    re-homing the axis. ``geo`` defaults to the device's provisioned geometry.
+    For each ``((axis_stop, drawer_row), channels)`` in ``read_plan(geo)``: emit a
+    ``drawer_to`` when the drawer row changes (multi-row plates only; a 1-row
+    4-well emits none), a ``goto_position`` for the axis stop, then a ``capture``
+    per channel. A goto is emitted at every stop: under per-row axis calibration
+    (#526) the axis target depends on the row, so the axis must re-goto even where
+    the serpentine repeats the stop index across a boundary; for shared stops that
+    re-goto is a 0-step no-op in the motor. The executor supplies the current row
+    (tracked from ``drawer_to``) so the axis selects the right row's stops. The
+    pass closes by re-homing the axis. ``geo`` defaults to the provisioned geometry.
 
     Capture-mode is derived from the plate (ADR-023): 4-well single-ADC phased,
     15-well dual-ADC ``both``. 4-well is byte-identical to the legacy sequence."""
@@ -95,15 +97,12 @@ def optics_read_tasks(cycle, geo=None):
         geo = geometry()
 
     tasks = []
-    prev_stop = None
     prev_row = None
     for (stop, row), channels in read_plan(geo):
         if geo.rows > 1 and row != prev_row:
             tasks.append({"drawer_to": row})
             prev_row = row
-        if stop != prev_stop:
-            tasks.append({"goto_position": stop})
-            prev_stop = stop
+        tasks.append({"goto_position": stop})
         for channel in channels:
             tasks.append({"capture": channel, "cycle": cycle, "position": stop})
     # in future iterations the following two tasks will be moved to after thermal tasks or in parallel with them

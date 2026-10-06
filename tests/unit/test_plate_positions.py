@@ -25,6 +25,47 @@ def test_axis_stops_accepts_the_fifteen_well_seven_stop_config():
     assert axis_stops(axis, GEOMETRIES[15]) == [320, 675, 1030, 1380, 1740, 2080, 2420]
 
 
+def test_axis_stops_accepts_per_row_dict_for_fifteen_well():
+    # Per-row calibration (Phase C Slice 1 / #526): 7 stops for each of the 3
+    # rows, returned as a per-row list-of-lists ordered A, B, C.
+    axis = {"stops": {
+        "A": [100, 101, 102, 103, 104, 105, 106],
+        "B": [200, 201, 202, 203, 204, 205, 206],
+        "C": [300, 301, 302, 303, 304, 305, 306],
+    }}
+    assert axis_stops(axis, GEOMETRIES[15]) == [
+        [100, 101, 102, 103, 104, 105, 106],
+        [200, 201, 202, 203, 204, 205, 206],
+        [300, 301, 302, 303, 304, 305, 306],
+    ]
+
+
+def test_axis_stops_per_row_fails_loud_when_a_row_has_the_wrong_stop_count():
+    axis = {"stops": {
+        "A": [1, 2, 3, 4, 5, 6, 7],
+        "B": [1, 2, 3, 4, 5, 6],          # only 6 — must be 7
+        "C": [1, 2, 3, 4, 5, 6, 7],
+    }}
+    with pytest.raises(ValueError, match="7"):
+        axis_stops(axis, GEOMETRIES[15])
+
+
+def test_axis_stops_per_row_fails_loud_when_row_count_mismatches_geometry():
+    axis = {"stops": {"A": [1, 2, 3, 4, 5, 6, 7], "B": [1, 2, 3, 4, 5, 6, 7]}}  # 2 rows, need 3
+    with pytest.raises(ValueError, match="3"):
+        axis_stops(axis, GEOMETRIES[15])
+
+
+def test_axis_stops_per_row_fails_loud_when_a_row_label_is_missing():
+    axis = {"stops": {
+        "A": [1, 2, 3, 4, 5, 6, 7],
+        "B": [1, 2, 3, 4, 5, 6, 7],
+        "D": [1, 2, 3, 4, 5, 6, 7],       # D instead of C
+    }}
+    with pytest.raises(ValueError, match="'C'"):
+        axis_stops(axis, GEOMETRIES[15])
+
+
 def test_axis_stops_fails_loud_when_stop_count_mismatches_geometry():
     # 15-well geometry (needs cols+gap = 7) against a 6-stop 4-well config.
     axis = {"stops": FOUR_WELL_STOPS}

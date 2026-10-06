@@ -120,21 +120,21 @@ def test_optics_read_tasks_for_fifteen_well_interleaves_drawer_moves_per_row():
     captures = [t for t in tasks if "capture" in t]
     assert len(captures) == 21
     assert all(t["capture"] == "both" for t in captures)
-    # The axis moves only when its stop changes: the serpentine repeats the stop
-    # across each of the 2 row boundaries, so those re-gotos are skipped (#525).
-    # 21 stops - 2 boundary repeats = 19 gotos, + 1 close.
-    assert len([t for t in tasks if "goto_position" in t]) == 19 + 1
+    # A goto is emitted at every stop (#526 — per-row axis must re-goto at the
+    # boundary; shared stops no-op the 0-move): 21 stops + 1 close.
+    assert len([t for t in tasks if "goto_position" in t]) == 21 + 1
     assert tasks[-2:] == [{"home": 0}, {"goto_position": 0}]
 
 
-def test_optics_read_tasks_axis_skips_redundant_goto_at_serpentine_boundary():
-    # At the row0->row1 boundary the serpentine repeats axis stop 6, so only the
-    # drawer moves — the axis does NOT re-goto 6 (#525). The task right after
-    # drawer_to:1 is the capture at stop 6, not a goto_position.
+def test_optics_read_tasks_emits_goto_at_serpentine_boundary_for_per_row_axis():
+    # Per-row calibration (#526) makes the axis target depend on the row, so even
+    # though the stop index repeats across the boundary (6->6) the axis must
+    # re-goto. The generator always emits the goto; the motor no-ops a 0-step move
+    # for the shared case. (This replaces the #525 stop-only skip.)
     tasks = optics_read_tasks(cycle=1, geo=PlateGeometry(rows=3, cols=5))
     i = next(k for k, t in enumerate(tasks) if t.get("drawer_to") == 1)
-    assert "goto_position" not in tasks[i + 1]
-    assert tasks[i + 1] == {"capture": "both", "cycle": 1, "position": 6}
+    assert tasks[i + 1] == {"goto_position": 6}
+    assert tasks[i + 2] == {"capture": "both", "cycle": 1, "position": 6}
 
 
 def test_optics_read_tasks_single_row_emits_no_drawer_moves():

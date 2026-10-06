@@ -118,11 +118,15 @@ class AssayInterface():
 
                 elif type(item) is dict and "goto_position" in item:
                     position = item["goto_position"]
-                    ret = self.axis.goto_position( position )
+                    # Pass the current drawer row so the axis picks the right
+                    # row's stops under per-row calibration (#526); 0 for a
+                    # single-row 4-well plate (and shared stops ignore it).
+                    ret = self.axis.goto_position( position, getattr(self, "_current_row", 0) )
 
                 elif type(item) is dict and "drawer_to" in item:
                     # Multi-row plates (15-well) step the drawer between rows;
                     # read_plan emits one drawer_to per plate row.
+                    self._current_row = item["drawer_to"]
                     self.drawer.goto_row( item["drawer_to"] )
 
                 elif type(item) is str and item == "quit":

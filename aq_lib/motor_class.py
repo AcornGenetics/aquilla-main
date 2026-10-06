@@ -571,9 +571,13 @@ class Axis ( Motor ):
         self.positions = axis_stops( config.axis, geometry() )
         logger.info("Loaded axis stops from config: %s", self.positions)
 
-    def goto_position( self, N ):
-        logger.info( "Go to position: %d", N )
-        self.move_abs_wo_home_flag( self.positions[N], 0.000, 0.0001 )
+    def goto_position( self, N, row = 0 ):
+        # positions is either a flat list (shared X across rows) or a list-of-lists
+        # (per-row calibration, #526). Select the current row's stops when per-row;
+        # the shared form ignores `row` (byte-identical to before).
+        stops = self.positions[row] if self.positions and isinstance(self.positions[0], list) else self.positions
+        logger.info( "Go to row %d stop %d", row, N )
+        self.move_abs_wo_home_flag( stops[N], 0.000, 0.0001 )
 
 def main():
 
