@@ -56,7 +56,7 @@ def read_plan(geo):
                 # Dual-ADC: ROX and FAM are read simultaneously, so one 'both'
                 # capture fires at every stop. Overhang stops (where one sensor
                 # sees no tube) still fire and are discarded downstream (§21c).
-                plan.append((row, stop, ("both",)))
+                plan.append(((stop, row), ("both",)))
                 continue
             dyes = []
             if 0 <= stop < geo.cols:
@@ -64,7 +64,7 @@ def read_plan(geo):
             if geo.sensor_gap <= stop < geo.sensor_gap + geo.cols:
                 dyes.append("fam")
             if dyes:
-                plan.append((row, stop, tuple(dyes)))
+                plan.append(((stop, row), tuple(dyes)))
     return plan
 
 # Blinks fired per read pass = number of captures in the plan.
@@ -75,33 +75,37 @@ def reads_per_cycle(geo):
     """Captures fired per read pass for a plate geometry, derived from the
     generated plan so the optics-completeness math can't drift from the real
     read pass (ADR-023, #514). The 4-well case equals ``READS_PER_CYCLE``."""
-    return sum(len(dyes) for _row, _stop, dyes in read_plan(geo))
+    return sum(len(channels) for _coord, channels in read_plan(geo))
 
 
 def optics_read_tasks(cycle, geo=None):
     """Executor tasks for one optical read pass, generated from plate geometry.
 
-    For each ``(row, stop, dyes)`` in ``read_plan(geo)``: emit a ``drawer_to`` when
-    the plate row changes (multi-row plates only — a 1-row 4-well plate emits
-    none, staying byte-identical to the legacy sequence), a ``goto_position`` for
-    the axis stop, then a ``capture`` per dye. The pass closes by re-homing the
-    axis. ``geo`` defaults to the device's provisioned geometry.
+    For each ``((axis_stop, drawer_row), channels)`` in ``read_plan(geo)``: move a
+    motor only when its coordinate changes — a ``drawer_to`` when the drawer row
+    changes (multi-row plates only; a 1-row 4-well emits none), a
+    ``goto_position`` when the axis stop changes — then a ``capture`` per channel.
+    The serpentine repeats the axis stop across a row boundary, so the axis
+    skips the redundant re-goto there (only the drawer moves). The pass closes by
+    re-homing the axis. ``geo`` defaults to the device's provisioned geometry.
 
-    Capture-mode is derived from the plate (ADR-023): 4-well is single-ADC phased
-    (separate rox/fam blinks). The 15-well dual-ADC ``both`` capture-mode is a
-    deferred Risk-B follow-up; 15-well emits the phased plan for now."""
+    Capture-mode is derived from the plate (ADR-023): 4-well single-ADC phased,
+    15-well dual-ADC ``both``. 4-well is byte-identical to the legacy sequence."""
     if geo is None:
         geo = geometry()
 
     tasks = []
+    prev_stop = None
     prev_row = None
-    for row, stop, dyes in read_plan(geo):
+    for (stop, row), channels in read_plan(geo):
         if geo.rows > 1 and row != prev_row:
             tasks.append({"drawer_to": row})
             prev_row = row
-        tasks.append({"goto_position": stop})
-        for dye in dyes:
-            tasks.append({"capture": dye, "cycle": cycle, "position": stop})
+        if stop != prev_stop:
+            tasks.append({"goto_position": stop})
+            prev_stop = stop
+        for channel in channels:
+            tasks.append({"capture": channel, "cycle": cycle, "position": stop})
     # in future iterations the following two tasks will be moved to after thermal tasks or in parallel with them
     # extra task can be checking and logging ambient temperature (w14)
     tasks.append({"home": 0})

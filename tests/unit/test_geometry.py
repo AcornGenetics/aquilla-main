@@ -116,7 +116,7 @@ def test_read_plan_reads_every_fifteen_well_tube_in_both_dyes_exactly_once():
 
     geo = PlateGeometry(rows=3, cols=5)
     seen: dict[str, list[str]] = {}
-    for row, stop, dyes in read_plan(geo):
+    for (stop, row), dyes in read_plan(geo):
         # 15-well is dual-ADC 'both': one capture reads ROX+FAM simultaneously.
         # Expand it to the real tubes each sensor sees at this stop (overhang
         # stops see only one; the other read is discarded) — ROX at stops

@@ -31,20 +31,31 @@ def test_reads_per_cycle_derives_per_geometry():
     assert reads_per_cycle(PlateGeometry(rows=3, cols=5)) == 21
 
 
+def test_read_plan_emits_uniform_axis_drawer_coordinates():
+    # Uniform structured coordinate ((axis_stop, drawer_row), channels), 0-origin
+    # on both axes (#525). 4-well is the degenerate drawer_row==0 case.
+    four = read_plan(PlateGeometry(rows=1, cols=4))
+    assert four[0] == ((0, 0), ("rox",))
+    assert all(coord[1] == 0 for coord, _ch in four)  # single row -> drawer 0
+    fifteen = read_plan(PlateGeometry(rows=3, cols=5))
+    assert fifteen[0] == ((0, 0), ("both",))
+    assert fifteen[7] == ((6, 1), ("both",))  # row 1 serpentines back, starts at stop 6
+
+
 def test_read_plan_single_row_reproduces_the_legacy_four_well_pattern():
     # The 4-well device is the degenerate 1-row case. Dropping the (constant)
     # row index from the generated plan must yield the legacy hardcoded pattern
     # byte-for-byte: rox in columns 0-3, fam offset by the 2-stop sensor gap
     # into 2-5, both captured at the overlap (stops 2-3).
     plan = read_plan(PlateGeometry(rows=1, cols=4))
-    assert [(stop, dyes) for _row, stop, dyes in plan] == OPTICS_READ_PLAN
+    assert [(axis_stop, channels) for (axis_stop, _row), channels in plan] == OPTICS_READ_PLAN
 
 
 def test_read_plan_capture_count_stays_in_sync_with_reads_per_cycle():
     # The generated 4-well plan fires exactly READS_PER_CYCLE (8) captures —
     # the completeness math can't drift from what the generator emits.
     plan = read_plan(PlateGeometry(rows=1, cols=4))
-    captures = sum(len(dyes) for _row, _stop, dyes in plan)
+    captures = sum(len(channels) for _coord, channels in plan)
     assert captures == READS_PER_CYCLE == 8
 
 
@@ -53,10 +64,10 @@ def test_read_plan_fifteen_well_sweeps_three_serpentine_rows_of_seven_stops():
     # captures at least one dye (gap <= cols), so 7 entries/row x 3 rows.
     geo = PlateGeometry(rows=3, cols=5)
     plan = read_plan(geo)
-    assert [r for r, _s, _d in plan] == [0] * 7 + [1] * 7 + [2] * 7
-    assert [s for r, s, _d in plan if r == 0] == [0, 1, 2, 3, 4, 5, 6]
+    assert [row for (_s, row), _ch in plan] == [0] * 7 + [1] * 7 + [2] * 7
+    assert [s for (s, row), _ch in plan if row == 0] == [0, 1, 2, 3, 4, 5, 6]
     # Row B serpentines back so the axis never doubles back to the row start.
-    assert [s for r, s, _d in plan if r == 1] == [6, 5, 4, 3, 2, 1, 0]
+    assert [s for (s, row), _ch in plan if row == 1] == [6, 5, 4, 3, 2, 1, 0]
 
 
 def test_read_plan_fifteen_well_both_fires_one_both_per_stop():
@@ -65,10 +76,10 @@ def test_read_plan_fifteen_well_both_fires_one_both_per_stop():
     # downstream per §21c) — not the phased separate rox/fam blinks (#524).
     geo = PlateGeometry(rows=3, cols=5)
     plan = read_plan(geo)
-    assert all(dyes == ("both",) for _r, _s, dyes in plan)
+    assert all(channels == ("both",) for _coord, channels in plan)
     assert len(plan) == 21  # 7 stops x 3 rows
-    assert [s for r, s, _d in plan if r == 0] == [0, 1, 2, 3, 4, 5, 6]
-    assert [s for r, s, _d in plan if r == 1] == [6, 5, 4, 3, 2, 1, 0]  # serpentine
+    assert [s for (s, row), _ch in plan if row == 0] == [0, 1, 2, 3, 4, 5, 6]
+    assert [s for (s, row), _ch in plan if row == 1] == [6, 5, 4, 3, 2, 1, 0]  # serpentine
 
 
 def test_reads_per_cycle_derives_from_the_plan():
@@ -109,8 +120,21 @@ def test_optics_read_tasks_for_fifteen_well_interleaves_drawer_moves_per_row():
     captures = [t for t in tasks if "capture" in t]
     assert len(captures) == 21
     assert all(t["capture"] == "both" for t in captures)
-    assert len([t for t in tasks if "goto_position" in t]) == 21 + 1  # 3x7 + close
+    # The axis moves only when its stop changes: the serpentine repeats the stop
+    # across each of the 2 row boundaries, so those re-gotos are skipped (#525).
+    # 21 stops - 2 boundary repeats = 19 gotos, + 1 close.
+    assert len([t for t in tasks if "goto_position" in t]) == 19 + 1
     assert tasks[-2:] == [{"home": 0}, {"goto_position": 0}]
+
+
+def test_optics_read_tasks_axis_skips_redundant_goto_at_serpentine_boundary():
+    # At the row0->row1 boundary the serpentine repeats axis stop 6, so only the
+    # drawer moves — the axis does NOT re-goto 6 (#525). The task right after
+    # drawer_to:1 is the capture at stop 6, not a goto_position.
+    tasks = optics_read_tasks(cycle=1, geo=PlateGeometry(rows=3, cols=5))
+    i = next(k for k, t in enumerate(tasks) if t.get("drawer_to") == 1)
+    assert "goto_position" not in tasks[i + 1]
+    assert tasks[i + 1] == {"capture": "both", "cycle": 1, "position": 6}
 
 
 def test_optics_read_tasks_single_row_emits_no_drawer_moves():
