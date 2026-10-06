@@ -5,6 +5,7 @@ from aquila_web.optics_readings import build_optics_readings, count_data_lines
 from aq_curve.curve import ALGO_VERSION
 from aquila_web.profile_assembly import assemble_steps, validate_stages
 from aq_lib.profile_hash import canonical_profile_hash
+from aq_lib.geometry import geometry
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -335,8 +336,13 @@ drawer_state_open = False
 drawer_state_closed = False
 sim_exit_pending = False
 force_exit = False
-DEFAULT_TUBE_NAMES = ["Tube 1", "Tube 2", "Tube 3", "Tube 4"]
-current_tube_names = DEFAULT_TUBE_NAMES[:]
+def _default_tube_names(geo=None):
+    """Default tube names ("Tube 1".."Tube N") sized to the provisioned plate
+    geometry (#522 / ADR-023). 4-well resolves to Tube 1..Tube 4."""
+    n = (geo or geometry()).well_count
+    return [f"Tube {i}" for i in range(1, n + 1)]
+
+current_tube_names = _default_tube_names()
 
 class Item(BaseModel):
     title: str = "Arete Biosciences"
@@ -447,11 +453,12 @@ current_item = Item( title = "title_bm", text = "text_bm", screen="init" )
 def _sanitize_name(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "run"
 
-def _normalize_tube_names(names: list | None) -> list[str]:
+def _normalize_tube_names(names: list | None, geo=None) -> list[str]:
+    defaults = _default_tube_names(geo)
     if not isinstance(names, list):
-        return DEFAULT_TUBE_NAMES[:]
+        return defaults[:]
     resolved = []
-    for index, fallback in enumerate(DEFAULT_TUBE_NAMES):
+    for index, fallback in enumerate(defaults):
         value = names[index] if index < len(names) else None
         if isinstance(value, str) and value.strip():
             resolved.append(value.strip())
@@ -601,12 +608,13 @@ def _next_run_index(profile_name: str) -> int:
             existing.append(int(match.group(1)))
     return max(existing, default=0) + 1
 
-def _build_results(detected_tubes: list[int]) -> dict:
+def _build_results(detected_tubes: list[int], geo=None) -> dict:
     results = {}
+    n = (geo or geometry()).well_count
     for row in range(1, 3):
         row_key = str(row)
         results[row_key] = {}
-        for col in range(1, 5):
+        for col in range(1, n + 1):
             value = "Detected" if col in detected_tubes else "Not Detected"
             results[row_key][str(col)] = value
     return results
@@ -1092,7 +1100,7 @@ async def clear_results():
     global results_path, results_cleared, current_tube_names
     results_path = None
     results_cleared = True
-    current_tube_names = DEFAULT_TUBE_NAMES[:]
+    current_tube_names = _default_tube_names()
     return {"ok": True}
 
 @app.post("/run/complete/ack")
