@@ -432,10 +432,10 @@ Samples-per-half-flash + the padding-removal split (resolves §21a reshape + the
   - **Analysis — BOTH `aq_curve` (on-device Cq, `curve.py`/`results_to_json`) AND `acorn-analytics` (cloud):** augment both to parse the unpadded 7-sample 15-well layout and stamp/read an explicit 15-well **tube id** (§21d); regenerate the ADR-0007 golden fixture + expected hash for the new format.
 - **Completeness constant moves with it:** `SAMPLES_PER_BLINK = 60` (`aquila_web/optics_readings.py:15`) must derive per mode/geometry (like the new `reads_per_cycle(geo)`), feeding `expected_lines`/`complete`.
 
-Still OPEN (format specifics needed before authoring the full contract):
-- [ ] **Blinks per capture for 15-well:** keep a synthesized 3rd blink (3 blinks) or write the real 2? Sets rows-per-capture = `blinks × 2 × 7`.
-- [ ] **Tube-id label format (§21d):** `A1…C5` vs flat `1–15` on the optics line.
-- [ ] Resulting `SAMPLES_PER_BLINK`/rows-per-capture value for 15-well, from the two above.
+Format specifics:
+- [x] **Tube-id label format (§21d): `A1…C5`** (row letter + column; 2026-10-05).
+- [ ] **Blinks per capture for 15-well:** the `both` capture physically fires **2** blinks (`4×blink_num` samples = ROX-phase + FAM-phase, ×2); the legacy format is **3** blinks, so today a 3rd is synthesized by averaging the 2. Decide: write the real **2** (honest, consistent with removing the pad; analysis must accept 2-blink captures) or keep synthesizing **3** (matches legacy blink count; fabricates 1/3). → sets rows-per-capture = `blinks × 2 × 7`.
+- [ ] Resulting `SAMPLES_PER_BLINK`/rows-per-capture for 15-well derives from the blink decision above.
 
 **Summary:** capture works; **write-out (21a) is the blocker**, **calibration (21b) makes the current stops physically wrong**, and **overhang (21c) is implicit tech debt.** Ground truth is now in (§21f); the remaining work is the padding-removal split (device + both analysis tools) once the two open format specifics are set.
 
