@@ -418,7 +418,26 @@ The optics-file line is `<timestamp> <raw_hex> <value_mV> <led_on/off> <dye> <cy
 At each row's edge stops the "missing" sensor still flashes both LEDs and samples both ADCs; that data isn't aligned to a real tube and is dropped in reconstruction. It works but is wasteful and implicit.
 - [ ] **Make the overhang explicit in the plan/geometry** (mark which stops are ROX-valid / FAM-valid) so the writer selects real-tube samples by construction instead of index arithmetic — and so scan-time isn't spent on reads that are always thrown away. Fold into the §1a `read_plan(geo)` generation.
 
-**Summary:** capture works; **write-out (21a) is the blocker**, **calibration (21b) makes the current stops physically wrong**, and **overhang (21c) is implicit tech debt.** None are "done."
+### 21f. Decisions locked (2026-10-05) — dual-ADC `both` ground truth + padding-removal split
+
+Ground truth confirmed (resolves the Risk-B unknowns from ADR-023 for 15-well):
+- **15-well hardware is dual-ADC; the `both` capture is SIMULTANEOUS** (both ADCs sample the same instant).
+- **Tube mapping is verified:** sensor gap = **2 carriage stops** (= 1 tube physically between the ROX and FAM photodiodes); FAM column = ROX column − 2. This confirms the capture-side `sensor_gap = 2` and makes `aq_curve/curve.py`'s `dpos = ±1` (offset of 1) the **stale half** of the §4 latent inconsistency — fix it to gap = 2 on the analysis side.
+- **Overhang (§21c):** `read_plan(geo)` already marks ROX-/FAM-valid stops via its per-stop `dyes` tuple; the writer must select real-tube samples from that, not the `rox_well_one`/`fam_well_one` index math.
+
+Samples-per-half-flash + the padding-removal split (resolves §21a reshape + the §21d format question):
+- **15-well writes the honest 7 samples/half-flash** (fast-settling); **do NOT pad 7→10**. 4-well stays 10 (separate path, byte-identical).
+- **Split across the device↔analysis seam:**
+  - **Device — `aq_lib/adc_class.py` (remove padding):** drop the `10 − blink_num` pad, the `i%40`/`i+20` fake-3rd-blink, and the `%20`/`%10` FAM-swap literals; drive rows-per-capture from one samples-per-half-flash value instead of the hardcoded `10/20/40/60`. Write all N tubes (fixes §21a) selecting valid samples from the plan's per-stop dyes (fixes §21c).
+  - **Analysis — BOTH `aq_curve` (on-device Cq, `curve.py`/`results_to_json`) AND `acorn-analytics` (cloud):** augment both to parse the unpadded 7-sample 15-well layout and stamp/read an explicit 15-well **tube id** (§21d); regenerate the ADR-0007 golden fixture + expected hash for the new format.
+- **Completeness constant moves with it:** `SAMPLES_PER_BLINK = 60` (`aquila_web/optics_readings.py:15`) must derive per mode/geometry (like the new `reads_per_cycle(geo)`), feeding `expected_lines`/`complete`.
+
+Still OPEN (format specifics needed before authoring the full contract):
+- [ ] **Blinks per capture for 15-well:** keep a synthesized 3rd blink (3 blinks) or write the real 2? Sets rows-per-capture = `blinks × 2 × 7`.
+- [ ] **Tube-id label format (§21d):** `A1…C5` vs flat `1–15` on the optics line.
+- [ ] Resulting `SAMPLES_PER_BLINK`/rows-per-capture value for 15-well, from the two above.
+
+**Summary:** capture works; **write-out (21a) is the blocker**, **calibration (21b) makes the current stops physically wrong**, and **overhang (21c) is implicit tech debt.** Ground truth is now in (§21f); the remaining work is the padding-removal split (device + both analysis tools) once the two open format specifics are set.
 
 ---
 
