@@ -21,12 +21,12 @@ _ROX_UNAVAILABLE = "ROX Unavailable"
 
 
 def _dye_position(well, dye, sensor_gap):
-    """Carriage stop (0-origin) where ``dye`` reads tube ``well``'s column.
-
-    ROX reads the tube's column (``well - 1``, 0-origin); FAM sits ``sensor_gap``
-    carriage stops further along the sweep (ADR-023). For 4-well (gap=2) this is
-    the legacy ROX=well-1 / FAM=well+1 mapping, byte-identical. Single source for
-    the FAM/ROX offset, replacing the hardcoded dpos=+-1."""
+    """Carriage stop (0-origin) where ``dye`` reads tube ``well``'s column, for
+    any plate: ROX reads the tube's column (``well - 1``); FAM sits ``sensor_gap``
+    carriage stops further along the sweep (ADR-023). Both offsets come from the
+    one geometry value, so capture and analysis can never disagree — this is the
+    single source that replaces the hardcoded dpos=+-1. (At the current gap of 2
+    it happens to reproduce the legacy ROX=well-1 / FAM=well+1.)"""
     rox_position = well - 1
     return rox_position + sensor_gap if dye == "fam" else rox_position
 
