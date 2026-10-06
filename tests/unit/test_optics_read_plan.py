@@ -8,17 +8,27 @@ from aq_lib.geometry import PlateGeometry
 from aq_lib.optics_read_plan import (
     OPTICS_READ_PLAN,
     READS_PER_CYCLE,
+    capture_mode,
     optics_read_tasks,
     read_plan,
     reads_per_cycle,
 )
 
 
+def test_capture_mode_derives_from_geometry():
+    # Dual-ADC simultaneous 'both' for multi-row plates; single-ADC phased for
+    # the 1-row 4-well (ADR-023 / #524).
+    assert capture_mode(PlateGeometry(rows=3, cols=5)) == "both"
+    assert capture_mode(PlateGeometry(rows=1, cols=4)) == "phased"
+
+
 def test_reads_per_cycle_derives_per_geometry():
     # Derived from the generated plan (ADR-023 / #514), not a hardcoded 21:
     # 4-well fires 8 captures/pass; 15-well (phased) fires 15 tubes x 2 dyes = 30.
     assert reads_per_cycle(PlateGeometry(rows=1, cols=4)) == READS_PER_CYCLE == 8
-    assert reads_per_cycle(PlateGeometry(rows=3, cols=5)) == 30
+    # 15-well is dual-ADC 'both': one simultaneous capture per stop, 7 stops x
+    # 3 rows = 21 captures/pass (not the phased 30) (#524).
+    assert reads_per_cycle(PlateGeometry(rows=3, cols=5)) == 21
 
 
 def test_read_plan_single_row_reproduces_the_legacy_four_well_pattern():
@@ -47,6 +57,18 @@ def test_read_plan_fifteen_well_sweeps_three_serpentine_rows_of_seven_stops():
     assert [s for r, s, _d in plan if r == 0] == [0, 1, 2, 3, 4, 5, 6]
     # Row B serpentines back so the axis never doubles back to the row start.
     assert [s for r, s, _d in plan if r == 1] == [6, 5, 4, 3, 2, 1, 0]
+
+
+def test_read_plan_fifteen_well_both_fires_one_both_per_stop():
+    # Dual-ADC reads ROX+FAM simultaneously, so the 15-well plan fires ONE 'both'
+    # capture at every carriage stop (overhang stops included, discarded
+    # downstream per §21c) — not the phased separate rox/fam blinks (#524).
+    geo = PlateGeometry(rows=3, cols=5)
+    plan = read_plan(geo)
+    assert all(dyes == ("both",) for _r, _s, dyes in plan)
+    assert len(plan) == 21  # 7 stops x 3 rows
+    assert [s for r, s, _d in plan if r == 0] == [0, 1, 2, 3, 4, 5, 6]
+    assert [s for r, s, _d in plan if r == 1] == [6, 5, 4, 3, 2, 1, 0]  # serpentine
 
 
 def test_reads_per_cycle_derives_from_the_plan():
@@ -83,7 +105,10 @@ def test_optics_read_tasks_for_fifteen_well_interleaves_drawer_moves_per_row():
     # the axis across each row's stops; the pass still closes by re-homing.
     tasks = optics_read_tasks(cycle=1, geo=PlateGeometry(rows=3, cols=5))
     assert [t["drawer_to"] for t in tasks if "drawer_to" in t] == [0, 1, 2]
-    assert len([t for t in tasks if "capture" in t]) == 30  # 15 tubes x 2 dyes
+    # Dual-ADC 'both': one capture per stop (overhang included), 7x3 = 21 (#524).
+    captures = [t for t in tasks if "capture" in t]
+    assert len(captures) == 21
+    assert all(t["capture"] == "both" for t in captures)
     assert len([t for t in tasks if "goto_position" in t]) == 21 + 1  # 3x7 + close
     assert tasks[-2:] == [{"home": 0}, {"goto_position": 0}]
 

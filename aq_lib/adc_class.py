@@ -8,6 +8,8 @@ import RPi.GPIO as GPIO
 from RPi.GPIO import HIGH, LOW, IN, OUT
 import logging
 from aq_lib.config_module import Config
+from aq_lib.geometry import geometry
+from aq_lib.optics_read_plan import capture_mode
 
 logger = logging.getLogger( "aquila_logger" )
 
@@ -77,32 +79,15 @@ class OpticalRead():
         self.spi.max_speed_hz = SPI_SPEED_HZ
         self.spi.mode = 0b11
 
-        self.well_15 = False
-        value = config.info.get("well_15")
-        if (
-            value is not None
-            and value != 0
-            and not (
-                isinstance(value, str)
-                and value.strip().lower() in ("0", "false")
-            )
-        ):
-            self.well_15 = True
-
-        # assuming the new PCB:
-        self.adc_num = 1
-        self.two_adcs = False
+        # Capture configuration derives from the provisioned plate geometry
+        # (ADR-023 / #524), not host_config flags — so a device can never be
+        # mis-configured (e.g. a 15-well plate flagged single-ADC). Multi-row
+        # plates are the dual-ADC 'both' builds; 1-row 4-well is single-ADC.
+        geo = geometry()
+        self.well_15 = geo.well_count == 15
+        self.adc_num = 1  # becomes 2 below when two_adcs
+        self.two_adcs = capture_mode(geo) == "both"
         self.both_channel_was_used = False
-        value = config.info.get("two_adcs")
-        if (
-            value is not None
-            and value != 0
-            and not (
-                isinstance(value, str)
-                and value.strip().lower() in ("0", "false")
-            )
-        ):
-            self.two_adcs = True
         self.data_both = [] # calling "both" channel fills up this structure
         self._raw_log_fp = None # when set (run context), 'both' rows are also streamed to a raw safety log (ADR-024)
         self.FAM_enabled = False

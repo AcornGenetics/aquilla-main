@@ -19,6 +19,16 @@ OPTICS_READ_PLAN = [
     (5, ("fam",)),
 ]
 
+def capture_mode(geo):
+    """Optics capture mode for a plate, derived from geometry (ADR-023 / #524).
+
+    Multi-row plates are the dual-ADC builds that read ROX+FAM simultaneously
+    (``'both'``); the 1-row 4-well is single-ADC and captures phased (separate
+    rox/fam blinks). No flag — a 15-well device can never be mis-configured as
+    single-ADC, nor a 4-well as dual."""
+    return "both" if geo.rows > 1 else "phased"
+
+
 def read_plan(geo):
     """Generate the optical capture pattern for one read pass from plate geometry.
 
@@ -37,10 +47,17 @@ def read_plan(geo):
     capture (Risk B) will later swap the per-stop dye set, not this traversal.
     """
     stops = geo.cols + geo.sensor_gap
+    both = capture_mode(geo) == "both"
     plan = []
     for row in range(geo.rows):
         stop_order = range(stops) if row % 2 == 0 else reversed(range(stops))
         for stop in stop_order:
+            if both:
+                # Dual-ADC: ROX and FAM are read simultaneously, so one 'both'
+                # capture fires at every stop. Overhang stops (where one sensor
+                # sees no tube) still fire and are discarded downstream (§21c).
+                plan.append((row, stop, ("both",)))
+                continue
             dyes = []
             if 0 <= stop < geo.cols:
                 dyes.append("rox")

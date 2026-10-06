@@ -117,9 +117,22 @@ def test_read_plan_reads_every_fifteen_well_tube_in_both_dyes_exactly_once():
     geo = PlateGeometry(rows=3, cols=5)
     seen: dict[str, list[str]] = {}
     for row, stop, dyes in read_plan(geo):
-        for dye in dyes:
+        # 15-well is dual-ADC 'both': one capture reads ROX+FAM simultaneously.
+        # Expand it to the real tubes each sensor sees at this stop (overhang
+        # stops see only one; the other read is discarded) — ROX at stops
+        # [0,cols), FAM at [sensor_gap, sensor_gap+cols).
+        if dyes == ("both",):
+            channels = []
+            if 0 <= stop < geo.cols:
+                channels.append("rox")
+            if geo.sensor_gap <= stop < geo.sensor_gap + geo.cols:
+                channels.append("fam")
+        else:
+            channels = dyes
+        for dye in channels:
             seen.setdefault(geo.tube_at(row=row, stop=stop, dye=dye), []).append(dye)
 
+    # Every tube captured in BOTH dyes exactly once — no tube missed, none doubled.
     assert set(seen) == set(geo.tube_ids)
     assert all(sorted(d) == ["fam", "rox"] for d in seen.values())
 
