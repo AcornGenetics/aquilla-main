@@ -19,6 +19,17 @@ ALGO_VERSION = "0.0.0-dev"
 
 _ROX_UNAVAILABLE = "ROX Unavailable"
 
+
+def _dye_position(well, dye, sensor_gap):
+    """Carriage stop (0-origin) where ``dye`` reads tube ``well``'s column.
+
+    ROX reads the tube's column (``well - 1``, 0-origin); FAM sits ``sensor_gap``
+    carriage stops further along the sweep (ADR-023). For 4-well (gap=2) this is
+    the legacy ROX=well-1 / FAM=well+1 mapping, byte-identical. Single source for
+    the FAM/ROX offset, replacing the hardcoded dpos=+-1."""
+    rox_position = well - 1
+    return rox_position + sensor_gap if dye == "fam" else rox_position
+
 # ADR-017: the engine's internal verdicts ("detected"/"undetected"/
 # "inconclusive") must be mapped to the canonical Call vocabulary before they
 # leave the device. In particular "undetected" is NEVER emitted -> "Not Detected".
@@ -154,16 +165,15 @@ class Curve:
             data = [line.split() for line in fp]
             return data[:-1]
 
-    def extract_data(self, logfilename, dye, well):
+    def extract_data(self, logfilename, dye, well, geo=None):
+        if geo is None:
+            geo = geometry()
         data = self._load_data(logfilename)
         dye_subdata = [d for d in data if d[4] == dye]
 
-        if dye == "fam":
-            dpos = 1
-        elif dye == "rox":
-            dpos = -1
-
-        position = well + dpos
+        # FAM/ROX offset derives from the plate geometry's sensor gap (ADR-023),
+        # not a hardcoded +-1 — one source shared with the capture-side read plan.
+        position = _dye_position(well, dye, geo.sensor_gap)
 
         # Intentionally uses 4 readings per cycle (indices 6–9 of each group of 10).
         # The reference notebook uses 5; Aquila hardware outputs 4 valid LED-on readings.
