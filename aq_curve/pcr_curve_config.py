@@ -61,7 +61,6 @@ DEFAULTS = {
 }
 
 DEFAULT_CURVE_DYES = ["fam", "rox"]
-DEFAULT_CURVE_WELLS = [1, 2, 3, 4]
 
 
 def _get_value(name, default=None):

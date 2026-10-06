@@ -13,6 +13,7 @@ import pytest
 
 from aq_curve import curve as curve_module
 from aq_curve.curve import Curve
+from aq_lib.geometry import PlateGeometry
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -138,6 +139,17 @@ def test_each_row_contains_tube_column_keys(tmp_path, monkeypatch):
         row = data[row_key]
         for col_key in ("1", "2", "3", "4"):
             assert col_key in row, f"row {row_key} missing column '{col_key}'"
+
+
+@pytest.mark.unit
+def test_results_span_all_wells_for_fifteen_well_geometry(tmp_path, monkeypatch):
+    """A 15-well geometry must produce tube keys '1'..'15' in both dye rows,
+    derived from geometry rather than a hardcoded 4 (#521 / Phase B)."""
+    curve = _make_curve(tmp_path, monkeypatch)
+    curve.results_to_json("raw.dat", "results.json", geo=PlateGeometry(rows=3, cols=5))
+    data = json.loads((tmp_path / "results.json").read_text())
+    for row_key in ("1", "2"):
+        assert sorted(data[row_key], key=int) == [str(w) for w in range(1, 16)]
 
 
 @pytest.mark.unit

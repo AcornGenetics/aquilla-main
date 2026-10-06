@@ -44,7 +44,8 @@ def _resolve_wells():
     well = os.getenv("PCR_CURVE_WELL")
     if well:
         return [int(well)]
-    return list(config.DEFAULT_CURVE_WELLS)
+    # Default well set for the curve-math fixtures (the sample run has 4 wells).
+    return [1, 2, 3, 4]
 
 
 def _curve_cases():

@@ -7,6 +7,7 @@ from pathlib import Path
 from aq_curve.evaluator import evaluate_curve
 from aq_curve import pcr_curve_config as config
 from aq_curve.pcr_curve_helpers import compute_cq, get_curve_data, get_threshold
+from aq_lib.geometry import geometry
 from config import get_src_basedir
 
 logger = logging.getLogger("aquila")
@@ -294,9 +295,11 @@ class Curve:
             logging.error(e)
             raise e
 
-    def results_to_json(self, raw_logfile, results_logfile, rox_unavailable=False):
+    def results_to_json(self, raw_logfile, results_logfile, rox_unavailable=False, geo=None):
         self.test_run = False
         src = raw_logfile
+        if geo is None:
+            geo = geometry()
         # Previous endpoint-based detection (kept for reference):
         # detections = {well: self.is_detected(src, well) for well in range(1, 5)}
         #
@@ -338,7 +341,9 @@ class Curve:
                 return None
             return round(float(cq), 2)
 
-        _WELLS = [1, 2, 3, 4]
+        # Well numbers (1-indexed) derived from the provisioned plate geometry
+        # (#521 / ADR-023), not a hardcoded 4. 4-well resolves to [1,2,3,4].
+        _WELLS = list(range(1, geo.well_count + 1))
 
         fam_status = {w: resolve_status(0, "fam", w) for w in _WELLS}
         fam_cq = {w: resolve_cq("fam", w) for w in _WELLS}

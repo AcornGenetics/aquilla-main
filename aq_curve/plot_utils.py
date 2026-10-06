@@ -7,6 +7,7 @@ import numpy as np
 
 from aq_curve.curve import Curve
 from aq_curve.pcr_curve_helpers import get_curve_data
+from aq_lib.geometry import geometry
 
 
 def _max_cycle_from_log(optics_path: str) -> float | None:
@@ -53,7 +54,9 @@ def _trim_edges(values: np.ndarray, window: int) -> tuple[np.ndarray, int]:
     return values[pad:-pad], pad
 
 
-def generate_optics_plot(optics_path: str, output_path: str, labels: dict | None = None) -> None:
+def generate_optics_plot(optics_path: str, output_path: str, labels: dict | None = None, geo=None) -> None:
+    if geo is None:
+        geo = geometry()
     curve = Curve()
     fig, ax = plt.subplots(figsize=(6, 3))
     labels = labels or {}
@@ -63,7 +66,7 @@ def generate_optics_plot(optics_path: str, output_path: str, labels: dict | None
     max_cycle = _max_cycle_from_log(optics_path)
     max_plotted_cycle = None
 
-    for index in range(4):
+    for index in range(geo.well_count):
         x_fam, fam_curve, _ = get_curve_data(curve, optics_path, "fam", index + 1)
         x_rox, rox_curve, _ = get_curve_data(curve, optics_path, "rox", index + 1)
         if len(x_fam):
