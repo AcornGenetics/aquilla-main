@@ -51,18 +51,6 @@ class AssayInterface():
 
     def __init__( self ):
 
-        self.updated4 = False # this flag indicates whether legacy or new optics should be used
-        value = config.info.get("updated4")
-        if (
-            value is not None
-            and value != 0
-            and not (
-                isinstance(value, str)
-                and value.strip().lower() in ("0", "false")
-            )
-        ):
-            self.updated4 = True
-
         self.well_15 = False # this flag whether 4well or 15well arrangement should be used
         value = config.info.get("well_15")
         if (
@@ -175,7 +163,7 @@ class AssayInterface():
         # Capture pattern is driven by the device's provisioned plate geometry
         # (device_identity.json via aq_lib.geometry), not the host_config well_15
         # flag. 4-well resolves to the byte-identical legacy sequence.
-        for task in optics_read_tasks(cycle, updated4=self.updated4):
+        for task in optics_read_tasks(cycle):
             self.queue_task( task )
 
     def callback( self, args ):

@@ -19,15 +19,6 @@ OPTICS_READ_PLAN = [
     (5, ("fam",)),
 ]
 
-OPTICS_READ_PLAN_2ADC = [
-    (0, ("both",)),
-    (1, ("both",)),
-    (2, ("both",)),
-    (3, ("both",)),
-    (4, ("both",)),
-    (5, ("both",)),
-]
-
 def read_plan(geo):
     """Generate the optical capture pattern for one read pass from plate geometry.
 
@@ -63,7 +54,7 @@ def read_plan(geo):
 READS_PER_CYCLE = sum(len(dyes) for _, dyes in OPTICS_READ_PLAN)
 
 
-def optics_read_tasks(cycle, geo=None, updated4=False):
+def optics_read_tasks(cycle, geo=None):
     """Executor tasks for one optical read pass, generated from plate geometry.
 
     For each ``(row, stop, dyes)`` in ``read_plan(geo)``: emit a ``drawer_to`` when
@@ -72,11 +63,9 @@ def optics_read_tasks(cycle, geo=None, updated4=False):
     the axis stop, then a ``capture`` per dye. The pass closes by re-homing the
     axis. ``geo`` defaults to the device's provisioned geometry.
 
-    ``updated4`` keeps the single-row dual-ADC ``'both'`` path unchanged (Risk B,
-    out of #510)."""
-    if updated4:
-        return _sequential_tasks(cycle, OPTICS_READ_PLAN_2ADC)
-
+    Capture-mode is derived from the plate (ADR-023): 4-well is single-ADC phased
+    (separate rox/fam blinks). The 15-well dual-ADC ``both`` capture-mode is a
+    deferred Risk-B follow-up; 15-well emits the phased plan for now."""
     if geo is None:
         geo = geometry()
 
@@ -91,18 +80,6 @@ def optics_read_tasks(cycle, geo=None, updated4=False):
             tasks.append({"capture": dye, "cycle": cycle, "position": stop})
     # in future iterations the following two tasks will be moved to after thermal tasks or in parallel with them
     # extra task can be checking and logging ambient temperature (w14)
-    tasks.append({"home": 0})
-    tasks.append({"goto_position": 0})
-    return tasks
-
-
-def _sequential_tasks(cycle, plan):
-    """Legacy flat-position task builder for the dual-ADC ``'both'`` path."""
-    tasks = []
-    for position, dyes in plan:
-        tasks.append({"goto_position": position})
-        for dye in dyes:
-            tasks.append({"capture": dye, "cycle": cycle, "position": position})
     tasks.append({"home": 0})
     tasks.append({"goto_position": 0})
     return tasks
