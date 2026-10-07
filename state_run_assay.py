@@ -60,6 +60,10 @@ class AssayInterface():
         self.message_queue = Queue()
         self.lid_heater_stop_event = Event()
         self.lid_heater_quiet_event = Event()
+        # Second lid-heater quiet source: held by thermal_engine while the TEC is
+        # ramping so the device stays within its power budget (#527). The lid
+        # heater is quiet when EITHER this or the optics-path event is set.
+        self.ramp_quiet_event = Event()
 
 
         self.optics = OpticalRead()
@@ -254,7 +258,7 @@ class AssayInterface():
 
         self.lid_thread = Thread ( 
              target = lid_heater_worker, 
-             args = ( self.lid_heater_stop_event, self.lid_heater_quiet_event, ),
+             args = ( self.lid_heater_stop_event, [self.lid_heater_quiet_event, self.ramp_quiet_event], ),
              # Lid Heater Samples are Run-scoped (ADR-022): the worker cannot
              # exist outside a Run, so it carries the Run's canonical stamp and
              # the cloud derives run_id = uuid5(device_id : run_timestamp).
@@ -275,7 +279,7 @@ class AssayInterface():
                 print ( "# Starting log t0 = %f"% t0_sync, file = pcr_fp )
                 actions = thermal_parser( steps )
                 try:
-                    thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
+                    thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event, self.ramp_quiet_event )
                 finally:
                     # Drain the executor while files are still open so capture
                     # threads cannot write to a closed file handle.
