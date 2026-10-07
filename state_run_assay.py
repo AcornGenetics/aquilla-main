@@ -45,6 +45,10 @@ from aq_lib.homing_log import configure_homing_logger
 configure_homing_logger()
 from aq_lib.lid_heater_log import configure_lid_sample_logger
 configure_lid_sample_logger()
+# Dedicated ADC-health log (RDY/stale telemetry, kept out of logger.log) for
+# correlation against homing-position errors (#528).
+from aq_lib.adc_health_log import configure_adc_health_logger
+configure_adc_health_logger()
 logger = logging.getLogger( "aquila" )
 config = Config()
 
@@ -60,6 +64,10 @@ class AssayInterface():
         self.message_queue = Queue()
         self.lid_heater_stop_event = Event()
         self.lid_heater_quiet_event = Event()
+        # Second lid-heater quiet source: held by thermal_engine while the TEC is
+        # ramping so the device stays within its power budget (#527). The lid
+        # heater is quiet when EITHER this or the optics-path event is set.
+        self.ramp_quiet_event = Event()
 
 
         self.optics = OpticalRead()
@@ -118,11 +126,15 @@ class AssayInterface():
 
                 elif type(item) is dict and "goto_position" in item:
                     position = item["goto_position"]
-                    ret = self.axis.goto_position( position )
+                    # Pass the current drawer row so the axis picks the right
+                    # row's stops under per-row calibration (#526); 0 for a
+                    # single-row 4-well plate (and shared stops ignore it).
+                    ret = self.axis.goto_position( position, getattr(self, "_current_row", 0) )
 
                 elif type(item) is dict and "drawer_to" in item:
                     # Multi-row plates (15-well) step the drawer between rows;
                     # read_plan emits one drawer_to per plate row.
+                    self._current_row = item["drawer_to"]
                     self.drawer.goto_row( item["drawer_to"] )
 
                 elif type(item) is str and item == "quit":
@@ -250,7 +262,7 @@ class AssayInterface():
 
         self.lid_thread = Thread ( 
              target = lid_heater_worker, 
-             args = ( self.lid_heater_stop_event, self.lid_heater_quiet_event, ),
+             args = ( self.lid_heater_stop_event, [self.lid_heater_quiet_event, self.ramp_quiet_event], ),
              # Lid Heater Samples are Run-scoped (ADR-022): the worker cannot
              # exist outside a Run, so it carries the Run's canonical stamp and
              # the cloud derives run_id = uuid5(device_id : run_timestamp).
@@ -271,7 +283,7 @@ class AssayInterface():
                 print ( "# Starting log t0 = %f"% t0_sync, file = pcr_fp )
                 actions = thermal_parser( steps )
                 try:
-                    thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event )
+                    thermal_engine( actions, self.meer, self.callback, pcr_fp, stop_event, self.ramp_quiet_event )
                 finally:
                     # Drain the executor while files are still open so capture
                     # threads cannot write to a closed file handle.

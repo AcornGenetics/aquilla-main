@@ -66,12 +66,30 @@ def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bo
         logger.info("Starting lid heater worker")
         adc.start_continuous(channel=0, pga_fs_v=4.096, sps=64)
 
-        if quiet_event is None or not hasattr(quiet_event, "is_set"):
-            from threading import Event
-            if setpoint is None and quiet_event is not None:
+        # Quiet sources: accept a single Event, a list/tuple of Events (quiet if
+        # ANY is set — #527 power budget: the optics path AND the TEC ramp each
+        # request quiet independently), or the legacy case where a setpoint was
+        # passed positionally in this slot. The heater energizes only when EVERY
+        # source is clear, so one source releasing can't un-quiet while another
+        # still needs it off.
+        from threading import Event
+        if quiet_event is None:
+            quiet_events = []
+        elif hasattr(quiet_event, "is_set"):
+            quiet_events = [quiet_event]
+        elif isinstance(quiet_event, (list, tuple)) and all(hasattr(e, "is_set") for e in quiet_event):
+            quiet_events = list(quiet_event)
+        else:
+            if setpoint is None:          # legacy: a setpoint in the quiet slot
                 setpoint = quiet_event
-            quiet_event = Event()
-            quiet_event.clear()
+            quiet_events = []
+        if not quiet_events:
+            _e = Event()
+            _e.clear()
+            quiet_events = [_e]
+
+        def _is_quiet():
+            return any(e.is_set() for e in quiet_events)
 
         config = _load_lid_heater_config()
         if lower_bound is None:
@@ -113,11 +131,11 @@ def lid_heater_worker( stop_event, quiet_event = None, setpoint = None, lower_bo
                         raise e
                 time.sleep ( 0.4 )
 
-            quiet = quiet_event.is_set()
+            quiet = _is_quiet()
             _record_sample(sampler, v, time.monotonic() - worker_started,
                            quiet=quiet, read_seconds=dt, retries=retries)
 
-            if not quiet_event.is_set():
+            if not _is_quiet():
                 if lower_bound < v < setpoint:
                     GPIO.output( pin_number, GPIO.HIGH )
                     logger.debug("GPIO21 HIGH tid=%s v=%.4f", tid, v)

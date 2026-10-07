@@ -10,6 +10,7 @@ import logging
 from aq_lib.config_module import Config
 from aq_lib.geometry import geometry
 from aq_lib.optics_read_plan import capture_mode
+from aq_lib.adc_health_log import emit_adc_health_sample
 
 logger = logging.getLogger( "aquila_logger" )
 
@@ -444,6 +445,20 @@ class OpticalRead():
             prev = window[base:]   # repaired, un-swapped cur = next pass's look-back
             processed += len(cur)
         return out
+
+    def emit_health(self, run_timestamp, position):
+        """Write a structured ADC-health Sample from the live read-quality
+        counters (#528), stamped with the run + position correlation key so it
+        can be joined downstream against the Homing Samples to flag reads taken
+        after a motor stall. Returns the Sample dict."""
+        return emit_adc_health_sample(
+            run_timestamp=run_timestamp,
+            position=position,
+            n_stale_frames=self.n_stale_frames,
+            n_retries=self.n_retries,
+            n_failed_reads=self.n_failed_reads,
+            n_unrepairable=self.n_unrepairable,
+        )
 
     def out_data ( self ): # outputs new optics data in the legacy format
         logger.info("Checking out_data conds")

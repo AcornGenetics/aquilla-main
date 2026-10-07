@@ -10,13 +10,39 @@ config dicts, so it unit-tests without GPIO.
 from aq_lib.geometry import PlateGeometry, assert_axis_positions_match
 
 
-def axis_stops(axis_config: dict, geo: PlateGeometry) -> list[int]:
-    """Ordered axis carriage steps for ``geo``. A row sweeps ``cols + sensor_gap``
-    stops (columns + the FAM/ROX offset), so that many measured steps must be
-    present. Delegates the shape check to ``assert_axis_positions_match`` (#505),
-    the single source of truth for the axis-count consistency assert, then returns
-    the validated list. Raises ``ValueError`` on a count mismatch."""
-    stops = list(axis_config["stops"])
+def axis_stops(axis_config: dict, geo: PlateGeometry):
+    """Measured axis carriage steps for ``geo``, accepting either calibration form
+    (#526). A row sweeps ``cols + sensor_gap`` stops (columns + the FAM/ROX
+    offset), so each list must be that many steps.
+
+    - **Shared** (flat list): the same X-stops at every row — returned as the flat
+      list (4-well and 15-well-separable; byte-identical to before).
+    - **Per-row** (dict ``{"A":[…],"B":[…],…}``): the X-stops measured per row when
+      the carriage drifts between rows — returned as a list-of-lists ordered by
+      plate row.
+
+    Delegates the per-list count check to ``assert_axis_positions_match`` (#505).
+    Raises ``ValueError`` on a count mismatch, a wrong row count, or a missing
+    row label."""
+    stops = axis_config["stops"]
+    if isinstance(stops, dict):
+        labels = [chr(ord("A") + i) for i in range(geo.rows)]
+        if len(stops) != geo.rows:
+            raise ValueError(
+                f"host_config axis.stops has {len(stops)} rows but geometry "
+                f"needs {geo.rows}"
+            )
+        try:
+            per_row = [list(stops[label]) for label in labels]
+        except KeyError as exc:
+            raise ValueError(
+                f"host_config axis.stops missing row {exc.args[0]!r}; "
+                f"expected labels {labels}"
+            ) from exc
+        for row_stops in per_row:
+            assert_axis_positions_match(geo, row_stops)
+        return per_row
+    stops = list(stops)
     assert_axis_positions_match(geo, stops)
     return stops
 

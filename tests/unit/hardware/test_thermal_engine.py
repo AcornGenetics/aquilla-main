@@ -274,3 +274,55 @@ def test_no_stop_event_unset_runs_to_completion(dummy_meer, stop_event, logfile)
     ]
     thermal_engine(actions, dummy_meer, _noop_callback, logfile, stop_event)
     assert len(dummy_meer.log_calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# ramp_quiet_event — lid-heater power-budget gate (#527)
+# ---------------------------------------------------------------------------
+
+class _SpyMeer:
+    """Records the ramp_quiet_event state at change_setpoint / log, optionally
+    raising from log to exercise the abort path."""
+    def __init__(self, ramp_event, raise_from_log=None):
+        self._e = ramp_event
+        self._raise = raise_from_log
+        self.seen = {}
+    def change_setpoint(self, sp):
+        self.seen["at_change_setpoint"] = self._e.is_set()
+    def log(self, **kwargs):
+        self.seen["at_log"] = self._e.is_set()
+        if self._raise is not None:
+            raise self._raise
+    def output_stage_enable(self, state):
+        self.seen["at_log"] = self._e.is_set()
+
+
+@pytest.mark.unit
+def test_ramp_holds_the_ramp_quiet_event_for_its_duration(stop_event, logfile):
+    ramp_quiet = Event()
+    meer = _SpyMeer(ramp_quiet)
+    thermal_engine([("ramp", 1, 25.0, 95.0, 7.0, 7.0)], meer,
+                   _noop_callback, logfile, stop_event, ramp_quiet)
+    assert meer.seen["at_change_setpoint"] is True   # quiet at the peak-current moment
+    assert meer.seen["at_log"] is True               # held through the ramp
+    assert ramp_quiet.is_set() is False              # released after the ramp
+
+
+@pytest.mark.unit
+def test_hold_does_not_assert_the_ramp_quiet_event(stop_event, logfile):
+    ramp_quiet = Event()
+    meer = _SpyMeer(ramp_quiet)
+    thermal_engine([("hold", 1, 25.0, 95.0, 10.0, 10.0)], meer,
+                   _noop_callback, logfile, stop_event, ramp_quiet)
+    assert meer.seen["at_log"] is False
+    assert ramp_quiet.is_set() is False
+
+
+@pytest.mark.unit
+def test_raise_mid_ramp_releases_the_ramp_quiet_event(stop_event, logfile):
+    ramp_quiet = Event()
+    meer = _SpyMeer(ramp_quiet, raise_from_log=RuntimeError("TEC fault mid-ramp"))
+    with pytest.raises(RuntimeError):
+        thermal_engine([("ramp", 1, 25.0, 95.0, 7.0, 7.0)], meer,
+                       _noop_callback, logfile, stop_event, ramp_quiet)
+    assert ramp_quiet.is_set() is False              # released despite the fault

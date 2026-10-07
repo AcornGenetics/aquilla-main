@@ -311,6 +311,56 @@ def test_quiet_event_suppresses_gpio_high_output():
 
 
 # ---------------------------------------------------------------------------
+# lid_heater_worker — quiet if ANY source asks (combinator, #527)
+# ---------------------------------------------------------------------------
+
+
+def _run_worker_one_pass(mod, gpio_inst, quiet_sources):
+    output_calls = []
+    original_output = gpio_inst.output
+
+    def tracking_output(pin, value):
+        output_calls.append((pin, value))
+        original_output(pin, value)
+
+    mod.GPIO.output = tracking_output
+    stop_event = Event()
+    thread = Thread(
+        target=mod.lid_heater_worker,
+        kwargs={"stop_event": stop_event, "quiet_event": quiet_sources,
+                "setpoint": 0.34, "lower_bound": 0.20},
+        daemon=True,
+    )
+    thread.start()
+    time.sleep(0.05)
+    stop_event.set()
+    thread.join(timeout=2.0)
+    return [(p, v) for (p, v) in output_calls if v == MockGPIO.HIGH]
+
+
+@pytest.mark.unit
+def test_quiet_from_any_source_suppresses_gpio_high():
+    """With two quiet sources, HIGH is suppressed if EITHER is set — e.g. the TEC
+    ramp wants quiet even though the optics path is clear (#527)."""
+    mod, gpio_inst, mock_adc = _import_regulate()
+    mock_adc.read_continuous.return_value = 0.25  # heating band — would fire
+    optics_quiet = Event()           # clear
+    ramp_quiet = Event()
+    ramp_quiet.set()                 # TEC ramping
+    high = _run_worker_one_pass(mod, gpio_inst, [optics_quiet, ramp_quiet])
+    assert high == [], f"HIGH despite a quiet source set: {high}"
+
+
+@pytest.mark.unit
+def test_heats_only_when_all_quiet_sources_are_clear():
+    """With both sources clear and the reading in band, the heater fires."""
+    mod, gpio_inst, mock_adc = _import_regulate()
+    mock_adc.read_continuous.return_value = 0.25
+    high = _run_worker_one_pass(mod, gpio_inst, [Event(), Event()])  # both clear
+    assert high, "heater should fire when all quiet sources are clear"
+
+
+# ---------------------------------------------------------------------------
 # lid_heater_worker — pin is LOW on exit
 # ---------------------------------------------------------------------------
 

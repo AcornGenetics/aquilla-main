@@ -6,7 +6,7 @@ logger = logging.getLogger( "aquila" )
 class RunStopped(Exception):
     pass
 
-def thermal_engine( actions, meer, callback, logfile, stop_event ):
+def thermal_engine( actions, meer, callback, logfile, stop_event, ramp_quiet_event = None ):
 
     for args in actions:
         logger.info ( "Args %s", args.__str__() )
@@ -41,8 +41,17 @@ def thermal_engine( actions, meer, callback, logfile, stop_event ):
 
         elif name == "ramp":
             logger.info( f"{n:2} Ramp from {last_temp} to {setpoint} for {duration:6.2f} seconds until {last_time:.2f}")
-            meer.change_setpoint ( setpoint )
-            meer.log ( endtime = last_time, logfile = logfile, stop_event = stop_event )
+            # Power budget (#527): hold the lid heater quiet while the TEC draws
+            # peak current ramping to the new setpoint; release when the ramp ends
+            # (or faults). Covers both heating and the 40->25 cooldown.
+            if ramp_quiet_event is not None:
+                ramp_quiet_event.set()
+            try:
+                meer.change_setpoint ( setpoint )
+                meer.log ( endtime = last_time, logfile = logfile, stop_event = stop_event )
+            finally:
+                if ramp_quiet_event is not None:
+                    ramp_quiet_event.clear()
 
         elif name == "disable":
             logger.info( f"{n:2} disable for {duration:6.2f} seconds until {last_time:.2f}")
