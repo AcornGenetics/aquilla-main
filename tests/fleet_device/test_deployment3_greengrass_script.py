@@ -80,7 +80,16 @@ def test_grants_ggc_user_docker_and_config_access():
     # The Greengrass component runs as ggc_user; without Docker-socket access +
     # readable device.env the component goes BROKEN ("permission denied").
     assert "usermod -aG docker ggc_user" in SCRIPT
-    assert "chgrp ggc_group /opt/aquila/config/device.env" in SCRIPT
+    # device.env is made 0640 root:ggc_group so ggc_user (in ggc_group) can read
+    # the compose env_file. The chgrp targets the DEVICE_ENV variable, so match
+    # the behaviour, not a hardcoded path literal.
+    assert "DEVICE_ENV=/opt/aquila/config/device.env" in SCRIPT
+    assert "chgrp ggc_group" in SCRIPT
+    assert "chmod 640" in SCRIPT
+    # ...and a tmpfiles.d rule re-asserts 0640 root:ggc_group on every boot, so a
+    # re-enrol/renewal that resets it to 0600 self-heals instead of bricking the
+    # component (the recurring "device.env perms break Greengrass" gotcha).
+    assert "/opt/aquila/config/device.env 0640 root ggc_group" in SCRIPT
 
 
 def test_no_meerstetter_tuning_in_provisioning():
