@@ -50,7 +50,10 @@ class Motor():
         return self.move_pulse_delay if pulse_delay is None else pulse_delay
 
     def __init__( self ):
-        self.pi = pigpio.pi("172.18.0.1", 8888) # this ip can be found via running "docker network inspect fleet_default"
+        # pigpiod runs in-container, so connect to localhost (#529) — removes the
+        # hardcoded fleet-bridge IP network hop. pigpio.pi() with no args uses
+        # localhost:8888 by default, honouring PIGPIO_ADDR/PIGPIO_PORT if set.
+        self.pi = pigpio.pi()
         self.pi.set_mode(self.EN_PIN,   pigpio.OUTPUT)
         self.pi.set_mode(self.STEP_PIN, pigpio.OUTPUT)
         self.pi.set_mode(self.DIR_PIN,  pigpio.OUTPUT)
