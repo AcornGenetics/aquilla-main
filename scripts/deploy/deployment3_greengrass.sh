@@ -217,16 +217,25 @@ if ! command -v pigpiod >/dev/null 2>&1; then
     # tolerate that failure — the service unit is ensured separately below.
     make -C /tmp/pigpio-build install || true
 fi
-# Ensure the systemd unit exists even when make install skipped it (re-fetch the
-# source if the build dir was already cleaned), then enable the always-on daemon
-# so it starts on every boot — no manual `sudo pigpiod`. Kept OUTSIDE the build
-# guard so a re-run of a half-installed device (daemon present, unit missing) also
-# heals.
-if [[ ! -f /etc/systemd/system/pigpiod.service ]]; then
-    [[ -f /tmp/pigpio-build/util/pigpiod.service ]] || \
-        git clone --depth 1 https://github.com/joan2937/pigpio.git /tmp/pigpio-build
-    cp /tmp/pigpio-build/util/pigpiod.service /etc/systemd/system/pigpiod.service
-fi
+# Write our own systemd unit pointing at the ACTUAL binary. The repo's
+# util/pigpiod.service hardcodes ExecStart=/usr/bin/pigpiod, but `make install`
+# (prefix /usr/local) puts it at /usr/local/bin/pigpiod -> the service dies with
+# 203/EXEC. Resolve the real path and write the unit ourselves. Done
+# unconditionally (outside the build guard) so a re-run of a half-installed device
+# -- daemon present, unit missing/wrong -- self-heals. Then enable the always-on
+# daemon so it starts on every boot -- no manual `sudo pigpiod`.
+PIGPIOD_BIN="$(command -v pigpiod || echo /usr/local/bin/pigpiod)"
+cat > /etc/systemd/system/pigpiod.service <<EOF
+[Unit]
+Description=Pigpio daemon (GPIO access for the motor backend, #529)
+
+[Service]
+Type=forking
+ExecStart=${PIGPIOD_BIN}
+
+[Install]
+WantedBy=multi-user.target
+EOF
 systemctl daemon-reload
 systemctl enable --now pigpiod
 

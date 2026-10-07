@@ -152,3 +152,10 @@ def test_installs_and_enables_pigpiod_for_motor_control():
     # so the daemon is built from source (joan2937/pigpio); Pi 4/CM4 is supported.
     assert "github.com/joan2937/pigpio" in SCRIPT
     assert "systemctl enable --now pigpiod" in SCRIPT
+    # The unit must point at the ACTUAL binary. make install (prefix /usr/local)
+    # lands pigpiod in /usr/local/bin, but the repo's util/pigpiod.service hardcodes
+    # /usr/bin -> 203/EXEC. Resolve the path and write our own unit; don't copy the
+    # repo's.
+    assert "command -v pigpiod" in SCRIPT
+    assert "ExecStart=${PIGPIOD_BIN}" in SCRIPT
+    assert "cp /tmp/pigpio-build/util/pigpiod.service" not in SCRIPT
