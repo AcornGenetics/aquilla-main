@@ -45,6 +45,10 @@ from aq_lib.homing_log import configure_homing_logger
 configure_homing_logger()
 from aq_lib.lid_heater_log import configure_lid_sample_logger
 configure_lid_sample_logger()
+# Dedicated ADC-health log (RDY/stale telemetry, kept out of logger.log) for
+# correlation against homing-position errors (#528).
+from aq_lib.adc_health_log import configure_adc_health_logger
+configure_adc_health_logger()
 logger = logging.getLogger( "aquila" )
 config = Config()
 

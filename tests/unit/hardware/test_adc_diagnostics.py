@@ -47,6 +47,27 @@ def _stub_reader(module):
 # --- RDY constants ---------------------------------------------------------
 
 @pytest.mark.unit
+def test_emit_health_snapshots_the_counters_with_the_correlation_key(adc_module, monkeypatch):
+    # OpticalRead.emit_health writes an ADC-health sample from its live RDY/stale
+    # counters, stamped with the run + position key for homing correlation (#528).
+    reader = object.__new__(adc_module.OpticalRead)
+    reader.n_stale_frames = 4
+    reader.n_retries = 7
+    reader.n_failed_reads = 2
+    reader.n_unrepairable = 1
+    captured = {}
+    monkeypatch.setattr(adc_module, "emit_adc_health_sample",
+                        lambda **k: captured.update(k) or k)
+    reader.emit_health(run_timestamp="2026-10-06T00:00:00Z", position=5)
+    assert captured["run_timestamp"] == "2026-10-06T00:00:00Z"
+    assert captured["position"] == 5
+    assert captured["n_stale_frames"] == 4
+    assert captured["n_retries"] == 7
+    assert captured["n_failed_reads"] == 2
+    assert captured["n_unrepairable"] == 1
+
+
+@pytest.mark.unit
 def test_rdy_constants(adc_module):
     assert adc_module.ADC_RDY_ATTEMPTS_CAPTURE == 7
     assert adc_module.ADC_RDY_ATTEMPTS_AMBIENT == 20
