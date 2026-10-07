@@ -147,7 +147,8 @@ def test_verify_checks_drawer_rows_shape_not_read_steps():
 
 def test_installs_and_enables_pigpiod_for_motor_control():
     # Slice 4 (#529): the motor backend connects to pigpiod on localhost:8888, so
-    # the daemon must be installed and running as an enabled systemd service —
-    # started on every boot, no manual `sudo pigpiod`.
-    assert "install -y pigpio" in SCRIPT
+    # the daemon must run as an enabled systemd service — started on every boot,
+    # no manual `sudo pigpiod`. Debian 13 (trixie) dropped the pigpio apt package,
+    # so the daemon is built from source (joan2937/pigpio); Pi 4/CM4 is supported.
+    assert "github.com/joan2937/pigpio" in SCRIPT
     assert "systemctl enable --now pigpiod" in SCRIPT

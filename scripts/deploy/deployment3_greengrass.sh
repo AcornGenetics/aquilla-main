@@ -200,15 +200,37 @@ fi
 
 run_test "/dev/spidev0.0 exists"      "test -e /dev/spidev0.0"
 
-# pigpiod — GPIO daemon the motor backend connects to (Phase C / #529). The motor
-# code calls pigpio.pi() -> localhost:8888, so the daemon must already be running
-# or the motor can't drive the pins. Install it and enable the systemd service so
-# it starts on every boot and auto-restarts — no manual `sudo pigpiod`. Idempotent:
-# enable --now is a no-op when it's already enabled/running.
-DEBIAN_FRONTEND=noninteractive apt-get install -y pigpio
+# pigpiod — the GPIO daemon the motor backend connects to on localhost:8888
+# (Phase C / #529). The motor calls pigpio.pi(), so the daemon must already be
+# running or it can't drive the pins. Debian 13 (trixie) DROPPED the pigpio apt
+# package, so build the daemon from source. Pi 4/CM4 (the fleet board) is fully
+# supported; pigpio does NOT support the Pi 5 RP1 GPIO. Idempotent: skip the build
+# when pigpiod is already present.
+if ! command -v pigpiod >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y git make gcc
+    rm -rf /tmp/pigpio-build
+    git clone --depth 1 https://github.com/joan2937/pigpio.git /tmp/pigpio-build
+    make -C /tmp/pigpio-build
+    # `make install` also installs the Python module, which can fail on trixie's
+    # setuptools and abort the recipe BEFORE it copies pigpiod.service. The host
+    # needs only the daemon (the Python client lib ships in the app container), so
+    # tolerate that failure — the service unit is ensured separately below.
+    make -C /tmp/pigpio-build install || true
+fi
+# Ensure the systemd unit exists even when make install skipped it (re-fetch the
+# source if the build dir was already cleaned), then enable the always-on daemon
+# so it starts on every boot — no manual `sudo pigpiod`. Kept OUTSIDE the build
+# guard so a re-run of a half-installed device (daemon present, unit missing) also
+# heals.
+if [[ ! -f /etc/systemd/system/pigpiod.service ]]; then
+    [[ -f /tmp/pigpio-build/util/pigpiod.service ]] || \
+        git clone --depth 1 https://github.com/joan2937/pigpio.git /tmp/pigpio-build
+    cp /tmp/pigpio-build/util/pigpiod.service /etc/systemd/system/pigpiod.service
+fi
+systemctl daemon-reload
 systemctl enable --now pigpiod
 
-run_test "pigpiod installed"       "which pigpiod"
+run_test "pigpiod installed"       "command -v pigpiod"
 run_test "pigpiod service enabled" "systemctl is-enabled pigpiod | grep -q enabled"
 run_test "pigpiod service active"  "systemctl is-active pigpiod | grep -q active"
 
