@@ -20,3 +20,8 @@ awsiotsdk
 # bodies from S3 via the Token Exchange Role. The app process itself never calls S3;
 # it only reads profiles/managed/. boto3 lives here so there's no second image.
 boto3
+# pigpio — the Python client aq_lib.motor_class imports to drive the steppers via
+# the pigpiod daemon (Phase C / #529). Pure-python socket client; the daemon runs
+# on the host (see PIGPIO_ADDR in the app service). Without this the app container
+# crashes at import ('No module named pigpio') and nothing homes.
+pigpio

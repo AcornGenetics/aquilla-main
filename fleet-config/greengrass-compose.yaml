@@ -102,6 +102,12 @@ services:
       - PROFILE_DIR=/opt/aquila/profiles
       - RESULTS_PATH=/opt/aquila/results/results.json
       - CONFIG_DIR=/opt/aquila/config
+      # The motor backend (aq_lib.motor_class) calls pigpio.pi(), which honours
+      # PIGPIO_ADDR. pigpiod runs on the HOST (deployment3 systemd service, #529);
+      # this bridge container reaches it via host.docker.internal (host pigpiod
+      # listens on *:8888). Without this the motor connects to the container's own
+      # localhost, finds no daemon, and never homes.
+      - PIGPIO_ADDR=host.docker.internal
       # How application.py reaches the web backend (run_requested, events, screens).
       - BACKEND_URL=http://aquila-backend:8090
       - KIOSK_CONTROL_URL=http://host.docker.internal:9191
