@@ -200,7 +200,19 @@ fi
 
 run_test "/dev/spidev0.0 exists"      "test -e /dev/spidev0.0"
 
-phase_pass "I2C and SPI enabled, /dev/i2c-1 and /dev/spidev0.0 present"
+# pigpiod — GPIO daemon the motor backend connects to (Phase C / #529). The motor
+# code calls pigpio.pi() -> localhost:8888, so the daemon must already be running
+# or the motor can't drive the pins. Install it and enable the systemd service so
+# it starts on every boot and auto-restarts — no manual `sudo pigpiod`. Idempotent:
+# enable --now is a no-op when it's already enabled/running.
+DEBIAN_FRONTEND=noninteractive apt-get install -y pigpio
+systemctl enable --now pigpiod
+
+run_test "pigpiod installed"       "which pigpiod"
+run_test "pigpiod service enabled" "systemctl is-enabled pigpiod | grep -q enabled"
+run_test "pigpiod service active"  "systemctl is-active pigpiod | grep -q active"
+
+phase_pass "I2C and SPI enabled, /dev/i2c-1 and /dev/spidev0.0 present; pigpiod running"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 3 — Docker

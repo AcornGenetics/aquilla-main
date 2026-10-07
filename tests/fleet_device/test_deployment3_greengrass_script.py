@@ -143,3 +143,11 @@ def test_host_config_15well_has_seven_stops_and_three_rows():
 def test_verify_checks_drawer_rows_shape_not_read_steps():
     assert "['drawer']['read_steps']" not in SCRIPT
     assert "['drawer']['rows']" in SCRIPT
+
+
+def test_installs_and_enables_pigpiod_for_motor_control():
+    # Slice 4 (#529): the motor backend connects to pigpiod on localhost:8888, so
+    # the daemon must be installed and running as an enabled systemd service —
+    # started on every boot, no manual `sudo pigpiod`.
+    assert "install -y pigpio" in SCRIPT
+    assert "systemctl enable --now pigpiod" in SCRIPT
