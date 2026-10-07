@@ -92,9 +92,13 @@ class AssayInterface():
         logger.debug ( "Temperature controller port: %s", device )
         self.meer = MeerStetter( device, baudrate = 57600, timeout = 1 )
 
-        self.meer.setKp(80)
-        self.meer.setTi(5)
-        self.meer.setTd(4)
+        # Tuning (Kp/Ti/Td, ramp, current limits, ...) is sourced per-channel
+        # from the Meerstetter config XML staged on the device (expected at
+        # $CONFIG_DIR/meerstetter/, i.e. /opt/aquila/config/meerstetter/), not
+        # hardcoded. find_config_xml() fails loudly if it is missing.
+        xml_path = MeerStetter.find_config_xml()
+        logger.info( "Applying Meerstetter tuning from config XML: %s", xml_path )
+        self.meer.apply_config_xml( path=xml_path )
 
         self.thermal_profile = ""
         self._profile_sha256 = None

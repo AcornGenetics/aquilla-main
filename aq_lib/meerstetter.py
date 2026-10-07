@@ -2,7 +2,10 @@ import time
 import struct
 import re
 import os
+import glob
+import math
 import logging
+import xml.etree.ElementTree as ET
 
 from serial import Serial
 from serial import SerialException
@@ -168,6 +171,22 @@ class MeerStetter( Serial ):
        (107 ,"Error Param"),
     ]
 
+    # Tuning par-ids whose values are sourced from the Meerstetter config XML and
+    # written to the controller. This is a deliberate allowlist: the XML also
+    # holds read-only measurements and string-typed entries (sensor type, PGA
+    # gain, etc.) that must never be written back. All of these are float params.
+    WRITABLE_TUNING_PARIDS = (
+        3002,  # ProximityWidth
+        3003,  # CoarseTempRamp
+        3010,  # Kp
+        3011,  # Ti
+        3012,  # Td
+        3013,  # DPartDampPT1
+        3030,  # PeltierMaxCurrent
+        3033,  # PeltierDeltaTemperature
+        3040,  # ResistorResistance
+    )
+
     def get_common_params( self ):
         for par_id, name in self.common_params:
             yield par_id, name, self.get_parid_long( par_id, 1 ),
@@ -241,10 +260,8 @@ class MeerStetter( Serial ):
         time.sleep ( 2 )
 
         try:
-            tec_ramprate = 4
-            self.change_ramprate( tec_ramprate )
-            self.change_max_current( 2 )
-            #self.logfile.debug( "Set ramp rate to %d" % tec_ramprate )
+            # Tuning is sourced per-channel from the config XML, not hardcoded.
+            self.meer.apply_config_xml()
 
         except Exception as e:
             #self.logfile.error( "Caught exception: ", e)
@@ -411,6 +428,106 @@ class MeerStetter( Serial ):
                     commands[ int(parid) ] = [ name, v_type ]
 
         return commands
+
+    @staticmethod
+    def find_config_xml( config_dir=None ):
+        """Locate the single Meerstetter config XML staged on the device.
+
+        The deployment scripts download it to $CONFIG_DIR/meerstetter/<name>.xml,
+        where the filename varies per device (MEERSTETTER_XMLS), so we glob for it
+        rather than hardcode a name. Raises if zero or more than one XML is
+        present — either case is ambiguous and should fail loudly rather than
+        tune the controller from the wrong (or no) file.
+        """
+        if config_dir is None:
+            config_dir = os.environ.get( "CONFIG_DIR", "config_files" )
+        pattern = os.path.join( config_dir, "meerstetter", "*.xml" )
+        matches = sorted( glob.glob( pattern ) )
+        if not matches:
+            raise FileNotFoundError( f"No Meerstetter config XML found matching {pattern}" )
+        if len( matches ) > 1:
+            raise ValueError(
+                f"Multiple Meerstetter config XMLs found in "
+                f"{os.path.dirname( pattern )}: {matches}"
+            )
+        return matches[0]
+
+    @staticmethod
+    def parse_config_xml( path ):
+        """Parse a Meerstetter export XML into {(parid, inst): float_value}.
+
+        Only numeric parameters are returned; string-valued entries (e.g.
+        "PT1000", "Gain 2") and NaN values are skipped so callers can write the
+        result back to the device safely.
+        """
+        tree = ET.parse( path )
+        params = {}
+        for el in tree.iter( "Parameter" ):
+            parid_s = el.get( "MeParID" )
+            inst_s = el.get( "MeParInst" )
+            if parid_s is None or inst_s is None:
+                continue
+            try:
+                value = float( ( el.text or "" ).strip() )
+            except ValueError:
+                continue
+            if math.isnan( value ):
+                continue
+            params[ ( int( parid_s ), int( inst_s ) ) ] = value
+        return params
+
+    def writable_tuning_parids( self ):
+        """Par-ids to source from the config XML, derived from self.registers.
+
+        No separate list is maintained: we reuse the register map defined in
+        __init__ and keep only the Temperature Controller block (3xxx). The 1xxx
+        registers are read-only live measurements and the 2xxx registers are
+        operation/limit values — neither are thermal-tuning knobs, and writing a
+        read-only register back would error.
+        """
+        return [ parid for _name, parid in self.registers if 3000 <= parid < 4000 ]
+
+    def apply_config_xml( self, path=None, parids=None, flash_gate=False ):
+        """Write tuning parameters from the Meerstetter config XML to the device.
+
+        Values are applied per-instance (per channel) exactly as the XML defines
+        them, replacing the previous hardcoded literals (which wrote channel 1's
+        values onto channel 2 and ignored the other channels entirely). Only the
+        par-ids in `parids` (default: writable_tuning_parids()) are written.
+
+        flash_gate=True brackets the writes with par-id 108 (Save-to-Flash) so
+        they survive a power cycle, as the provisioning path did. The default
+        (False) applies to RAM only, matching the previous runtime behaviour and
+        avoiding flash wear on every app start.
+
+        Returns the {(parid, inst): value} map that was written.
+        """
+        if path is None:
+            path = MeerStetter.find_config_xml()
+        if parids is None:
+            parids = self.writable_tuning_parids()
+        allow = set( parids )
+
+        to_write = {
+            k: v for k, v in self.parse_config_xml( path ).items()
+            if k[0] in allow
+        }
+
+        if flash_gate:
+            self.set_parid_long( 108, 1, 0 )   # disable auto-save to flash
+            self.read( 100 )
+
+        for ( parid, inst ), value in sorted( to_write.items() ):
+            logging.info(
+                "Meerstetter parid %d inst %d <- %s (from %s)",
+                parid, inst, value, os.path.basename( path )
+            )
+            self.set_parid_float( parid, value, inst )
+
+        if flash_gate:
+            self.set_parid_long( 108, 1, 1 )   # re-enable auto-save to flash
+
+        return to_write
 
     def change_setpoint( self, temperature ):       return self.setTargetObjectTemp( temperature )
     def change_ramprate( self, ramprate ):          return self.setCoarseTempRamp( ramprate )
