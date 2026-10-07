@@ -58,7 +58,7 @@ fi
 
 # Load drawer read_steps if present
 if [[ -f /opt/aquila/config/host_config.json && -n "${DEVICE_HOSTNAME:-}" ]]; then
-    DRAWER_READ_STEPS="${DRAWER_READ_STEPS:-$(python3 -c "import json; c=json.load(open('/opt/aquila/config/host_config.json')); print(c.get('${DEVICE_HOSTNAME}',{}).get('drawer',{}).get('read_steps',''))" 2>/dev/null || true)}"
+    DRAWER_READ_STEPS="${DRAWER_READ_STEPS:-$(python3 -c "import json; c=json.load(open('/opt/aquila/config/host_config.json')); print(c.get('${DEVICE_HOSTNAME}',{}).get('drawer',{}).get('rows',{}).get('A',''))" 2>/dev/null || true)}"
 fi
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -465,6 +465,20 @@ GHCR_REPO=${GHCR_REPO}
 DEVICE_ENV_FILE=/opt/aquila/config/device.env
 EOF
 
+# Plate-geometry calibration shape (#526): the app reads axis.stops and
+# drawer.rows (per-row), validated against the provisioned geometry at motor
+# load (aq_lib.plate_positions). Pick the shape from the well count. 15-well
+# values are PLACEHOLDERS — bench-calibrate (#530) before a real run; only the
+# COUNT is load-validated (7 axis stops/row = cols 5 + sensor_gap 2; one drawer
+# read position per plate row A/B/C).
+if [[ "${DEVICE_WELLS}" == "15" ]]; then
+    AXIS_STOPS_JSON='{"A": [320, 675, 1030, 1385, 1740, 2095, 2450], "B": [320, 675, 1030, 1385, 1740, 2095, 2450], "C": [320, 675, 1030, 1385, 1740, 2095, 2450]}'
+    DRAWER_ROWS_JSON="{\"A\": ${DRAWER_READ_STEPS}, \"B\": ${DRAWER_READ_STEPS}, \"C\": ${DRAWER_READ_STEPS}}"
+else
+    AXIS_STOPS_JSON='[320, 675, 1030, 1380, 1740, 2080]'
+    DRAWER_ROWS_JSON="{\"A\": ${DRAWER_READ_STEPS}}"
+fi
+
 # host_config.json — keyed by device hostname to match repo structure
 cat > /opt/aquila/config/host_config.json <<EOF
 {
@@ -489,14 +503,14 @@ cat > /opt/aquila/config/host_config.json <<EOF
         "drawer": {
             "open_steps": 4500,
             "close_steps": 0,
-            "read_steps": ${DRAWER_READ_STEPS},
+            "rows": ${DRAWER_ROWS_JSON},
             "home_steps": 5000,
             "step_multiplier": 32
         },
         "axis": {
             "home_steps": 2500,
             "step_multiplier": 8,
-            "positions": [320, 675, 1030, 1380, 1740, 2080]
+            "stops": ${AXIS_STOPS_JSON}
         },
         "adc": {
             "famP": 0,
@@ -626,8 +640,12 @@ run_test "state_config.json valid JSON" \
     "python3 -m json.tool /opt/aquila/config/state_config.json"
 run_test "lid_heater_config.json valid JSON" \
     "python3 -m json.tool /opt/aquila/config/lid_heater_config.json"
-run_test "drawer read_steps is numeric" \
-    "python3 -c \"import json; c=json.load(open('/opt/aquila/config/host_config.json')); assert isinstance(c['${DEVICE_HOSTNAME}']['drawer']['read_steps'], int)\""
+run_test "drawer.rows is a per-row mapping of ints" \
+    "python3 -c \"import json; r=json.load(open('/opt/aquila/config/host_config.json'))['${DEVICE_HOSTNAME}']['drawer']['rows']; assert isinstance(r, dict) and r and all(isinstance(v, int) for v in r.values()), r\""
+run_test "axis.stops count matches well count" \
+    "python3 -c \"import json; s=json.load(open('/opt/aquila/config/host_config.json'))['${DEVICE_HOSTNAME}']['axis']['stops']; n=7 if ${DEVICE_WELLS}==15 else 6; lists=list(s.values()) if isinstance(s,dict) else [s]; assert all(len(x)==n for x in lists), s\""
+run_test "drawer.rows count matches well count" \
+    "python3 -c \"import json; r=json.load(open('/opt/aquila/config/host_config.json'))['${DEVICE_HOSTNAME}']['drawer']['rows']; assert len(r)==(3 if ${DEVICE_WELLS}==15 else 1), r\""
 
 phase_pass "device.env, fleet .env, host_config.json, and state_config.json written"
 

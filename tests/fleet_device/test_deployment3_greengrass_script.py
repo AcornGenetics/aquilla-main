@@ -96,3 +96,41 @@ def test_retains_deployment2_device_build():
     # Everything else from deployment2 is kept (spot-check across phases).
     for marker in ("I2C", "Tailscale", "aquila-cert-renew", "security.sh", "Plymouth"):
         assert marker in SCRIPT, f"deployment3 dropped a shared step: {marker}"
+
+
+# --- host_config matches the merged plate-geometry shape (#526) --------------
+#
+# The app reads axis.stops (list or per-row dict) and drawer.rows (per-row map)
+# via aq_lib.plate_positions; the stale axis.positions / drawer.read_steps keys
+# are no longer consumed, so a template that still writes them produces a
+# host_config that fails loud at motor load. The template must also be
+# well-count aware: 4-well = 6 shared axis stops + 1 drawer row; 15-well (3x5) =
+# 7 axis stops per row + 3 drawer rows (A/B/C).
+
+def test_host_config_axis_uses_stops_key_not_stale_positions():
+    assert '"stops":' in SCRIPT
+    assert '"positions": [320' not in SCRIPT  # stale 4-well axis literal removed
+
+
+def test_host_config_drawer_uses_rows_mapping_not_read_steps_key():
+    assert '"rows":' in SCRIPT
+    assert '"read_steps":' not in SCRIPT      # stale drawer JSON key removed
+
+
+def test_host_config_is_well_count_aware():
+    # Template branches on DEVICE_WELLS to pick the shape.
+    assert re.search(r'DEVICE_WELLS.*==.*"?15"?', SCRIPT)
+    # 4-well shared 6-stop list retained byte-for-byte.
+    assert "[320, 675, 1030, 1380, 1740, 2080]" in SCRIPT
+
+
+def test_host_config_15well_has_seven_stops_and_three_rows():
+    # 15-well placeholders (bench-calibrated via #530) but the COUNT must be
+    # right: a 7th axis stop and a row C exist only in the 15-well form.
+    assert "2450" in SCRIPT     # 7th axis stop (cols 5 + sensor_gap 2)
+    assert '"C":' in SCRIPT     # per-row axis + 3rd drawer row
+
+
+def test_verify_checks_drawer_rows_shape_not_read_steps():
+    assert "['drawer']['read_steps']" not in SCRIPT
+    assert "['drawer']['rows']" in SCRIPT
